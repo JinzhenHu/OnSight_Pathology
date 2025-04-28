@@ -1,0 +1,13 @@
+{
+    "name": "Bio-Medical LLaMA-3-8B-V1",
+    "repo": "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1",
+    "tokenizer_repo": "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1",
+    "dtype": "float16",
+    "bitsandbytes": {
+      "load_in_4bit": true,
+      "bnb_4bit_quant_type": "nf4",
+      "bnb_4bit_use_double_quant": true,
+      "bnb_4bit_compute_dtype": "float16"
+    }
+  }
+  

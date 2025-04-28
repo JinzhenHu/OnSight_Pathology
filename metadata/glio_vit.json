@@ -1,0 +1,13 @@
+{
+  "repo": "diamandislabii/ViT-Glial-Tumor-Classification",
+  "repo_src": "HuggingFace",
+  "info": "TODO",
+  "mpp": 0.504,
+  "model": "VIT",
+  "tile_size": 512,
+  "classes": [
+    "Glioblastoma",
+    "Astrocytoma",
+    "Oligodendroglioma"
+  ]
+}

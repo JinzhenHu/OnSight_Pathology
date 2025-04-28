@@ -1,0 +1,10 @@
+{
+  "repo": "diamandislabii/Mitosis-detection",
+  "repo_src": "HuggingFace",
+  "info": "TODO",
+  "mpp": 0.25,
+  "model": "Retinanet",
+  "tile_size": 512,
+  "classes": ["Mitosis Detection with Confidence Score"
+  ]
+}

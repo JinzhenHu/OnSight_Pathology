@@ -1,0 +1,27 @@
+{
+  "repo": "diamandislabii/tumor16-vit",
+  "repo_src": "HuggingFace",
+  "info": "TODO",
+  "mpp": 0.504,
+  "model": "VITtumor",
+  "tile_size": 1024,
+  "classes": [
+    "Acute hemorrhage",
+    "Blank space",
+    "Cerebellar cortex",
+    "Chronic hemorrhage",
+    "Crush Artifact",
+    "Fibrocollagenous tissue",
+    "Glial histology",
+    "Gray matter",
+    "Normal hematolymphoid tissue",
+    "Meningothelial Histology",
+    "Epithelial pattern",
+    "Skeletal muscle",
+    "Necrosis",
+    "Radiation Necrosis",
+    "Schwannian/spindled Histology",
+    "White matter"
+  ],
+  "additional_configs": {"min_conf":  "0.5"}
+}

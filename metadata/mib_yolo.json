@@ -1,0 +1,14 @@
+{
+  "repo": "diamandislabii/MIB",
+  "repo_src": "Local",
+  "info": "TODO",
+  "mpp": 0.504,
+  "model": "YOLO",
+  "tile_size": 128,
+  "classes": [
+    "Positive",
+    "Negative",
+    "Misc"
+  ],
+  "additional_configs": {}
+}
