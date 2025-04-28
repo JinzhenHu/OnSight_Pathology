@@ -4,9 +4,6 @@
 
 - **`Retinanet/`** — model architecture **and** post‑processing for mitosis detection.
 - **`llm_manager.py`** — loads and chats with five Vision‑Language Models (see table below).
-- **Tumor compactness models** — VGG‑19 and ViT.
-- **Glioma classification model** — ViT.
-- **MIB‑1 hotspot segmentation** — YOLO.
 
 ## Vision‑Language Models handled by `llm_manager.py`
 
