@@ -4,7 +4,7 @@
 
 - **`Retinanet/`** — model architecture **and** post‑processing for mitosis detection.
 - **`llm_manager.py`** — loads and chats with five Vision‑Language Models (see table below).
-
+- **`app.spec.py`** - File used for pyinstaller.
 ## Vision‑Language Models handled by `llm_manager.py`
 
 | Model | Hugging Face link | Note |
