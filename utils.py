@@ -109,7 +109,7 @@ def load_model(model_info):
     ##############################################################################
         if model_info['model'] == 'VITtumor':
             from huggingface_hub import hf_hub_download
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best.pth")
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_kaikuo.pth")
             import timm
             import torch
             import torch.nn as nn
@@ -123,12 +123,15 @@ def load_model(model_info):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             num_features = model.num_features
             num_classes = 16
+            # model.head = nn.Sequential(
+            #     nn.LayerNorm(num_features),  
+            #     nn.Linear(num_features, 256),  
+            #     nn.GELU(),                  
+            #     nn.Dropout(0.5),              
+            #     nn.Linear(256, num_classes)    
+            # )
             model.head = nn.Sequential(
-                nn.LayerNorm(num_features),  
-                nn.Linear(num_features, 256),  
-                nn.GELU(),                  
-                nn.Dropout(0.5),              
-                nn.Linear(256, num_classes)    
+                nn.Linear(num_features, num_classes),               
             )
             state_dict = torch.load(model_path, map_location=device)
             model.load_state_dict(state_dict)
@@ -143,7 +146,6 @@ def load_model(model_info):
             import torch
             import yaml
             from retinanet.Model import MyMitosisDetection
-            from process_region_mitosis import process_region
             from huggingface_hub import hf_hub_download
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -155,17 +157,27 @@ def load_model(model_info):
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
 
+
+            def _safe_float(value, default=0.2):
+                """
+                Return float(value) if it's a valid numeric string/number,
+                otherwise return the default.
+                """
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return default
+                
             thred = 0.1
-            Cl = 0.2
+            Cl = _safe_float(model_info['additional_configs'].get('confidence_level', 0))
 
             detector = MyMitosisDetection(model_path, config, Cl, thred)
             model = detector.load_model()
-
+            from process_region_mitosis import process_region
             res['model'] = detector
             res['process_region_func'] = process_region
             res['using_gpu'] = torch.cuda.is_available()
 
-            from process_region_mitosis import process_region
             return res
 
     ##############################################################################
