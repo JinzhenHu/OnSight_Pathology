@@ -9,20 +9,40 @@ from retinanet.utlis.nms_WSI import nms, nms_patch
 from ultralytics.utils.plotting import Annotator
 import itertools
 import math
+def _safe_float(value, default=0.2):
+    """
+    Return float(value) if it is a valid numeric string/number,
+    otherwise return the default.
+    """
+    try:
+        # Accept None, empty string, non-numeric strings, etc.
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+    
+def fix_region(region, tile_size):
+    reg = region.copy()
+    reg['width']  = max(reg['width'],  tile_size)
+    reg['height'] = max(reg['height'], tile_size)
+    return reg
 
 def process_region(region, **kwargs):
 
     device = torch.device("cuda")
 
     thred = 0.1
-    Cl = 0.2
+    
+    raw_cl = kwargs['additional_configs'].get('confidence_level', 0)
+    Cl = _safe_float(raw_cl)
 
     metadata = kwargs['metadata']
     model = kwargs['model']
+    
 
     tile_size = metadata['tile_size']
 
     with mss.mss() as sct:
+        region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
@@ -109,6 +129,7 @@ def process_region(region, **kwargs):
     annotated_frame = annotated_result.astype(np.uint8)
 
     annotated_frame=   cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR)
-    txt = ""
+    prediction = [row for row in prediction if row[5] >= Cl]
+    txt = f"Number of mitosis detected in this frame: {len(prediction)}"
 
     return annotated_frame, txt

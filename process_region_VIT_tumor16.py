@@ -7,13 +7,19 @@ import torch.nn as nn
 import timm
 import torch.nn.functional as F
 from PIL import Image
+def fix_region(region, tile_size):
+    reg = region.copy()
+    reg['width']  = max(reg['width'],  tile_size)
+    reg['height'] = max(reg['height'], tile_size)
+    return reg
 
 def process_region(region, **kwargs):
     preprocessing = transforms.Compose(
         [
             transforms.Resize(224),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         ]
     )
 
@@ -22,6 +28,7 @@ def process_region(region, **kwargs):
     tile_size = metadata['tile_size']
 
     with mss.mss() as sct:
+        region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
 
@@ -61,7 +68,7 @@ def process_region(region, **kwargs):
     final_prob= torch.mean(result_tensor, dim=0)
     final_prob_numpy = torch.mean(result_tensor, dim=0).cpu().detach().numpy()
     top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
-    top_3_idx = top_3_idx[:3]
+    top_3_idx = top_3_idx[:1]
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 

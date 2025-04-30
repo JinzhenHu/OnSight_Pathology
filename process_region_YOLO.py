@@ -3,6 +3,11 @@ import numpy as np
 import cv2
 
 from utils import extract_tiles
+def fix_region(region, tile_size):
+    reg = region.copy()
+    reg['width']  = max(reg['width'],  tile_size)
+    reg['height'] = max(reg['height'], tile_size)
+    return reg
 
 def process_region(region, **kwargs):
 
@@ -14,6 +19,7 @@ def process_region(region, **kwargs):
     tile_size = metadata['tile_size']
 
     with mss.mss() as sct:
+        region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
     frame = np.array(screenshot, dtype=np.uint8)
