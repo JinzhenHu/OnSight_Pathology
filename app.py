@@ -29,7 +29,7 @@ LLM_CATALOG = {
     "Internvl2-4b":    "metadata/llm_internvl2_4b.json",   
     "Internvl2-8b":    "metadata/llm_internvl2_8b.json",  
     "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
-    "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
+   # "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
 }
 
 ##############################################################################################################################################
@@ -408,6 +408,11 @@ class ImageClassificationApp(QWidget):
         if self.selected_region is None:
             QMessageBox.warning(self, "No region", "Please select a screen region first.")
             return
+        if self.thread and self.thread.isRunning():
+            self.thread.stop()       
+            self.thread.wait()        
+            self.thread = None
+
         model_name = self.cmb_model.currentText()
         self.thread = ClassificationThread(self, model_name)
         self.thread.update_image.connect(self._update_display)
@@ -465,13 +470,15 @@ class ImageClassificationApp(QWidget):
         reply = QMessageBox.question(
             self, "Load LLM?",
             "Loading the LLM for the first time can take a long time.\n"
-            "Do you want to continue(Ignore this for the second time loading)?\n"
-            "Note: Please only load one model at a time. Otherwise you will run out of the space",
+            "Do you want to continue? (This message can be ignored on subsequent loads.)?\n"
+            "Note: Please load only one model at a time to avoid running out of disk space",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.No:
             return
         if self.thread:
-            self.thread.pause()
+           # self.thread.pause()
+            self.thread.stop()     # frees GPU memory
+            self.thread = None
         dlg = LLMChatDialog(self.latest_frame, self)
         dlg.exec()
         if self.thread:
@@ -498,7 +505,7 @@ class ImageClassificationApp(QWidget):
         self.lbl_cap_hint.setText(
             "Recommended Capture Size:\n" +
             f"This model was trained on {tile}×{tile}px tiles at {mag}×.\n" +
-            "Smaller regions may hurt accuracy(especially for mitosis detection); larger ones will be sliced."
+            "Smaller regions will be upscaled to match the training tile size; larger ones will be sliced."
         )
 
         # ------------------------------------Dynamic additional configs -------------------------------------
