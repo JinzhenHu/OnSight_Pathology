@@ -1,7 +1,7 @@
 {
   "repo": "diamandislabii/MIB",
   "repo_src": "Local",
-  "info": "TODO",
+  "info": "YOLO model used for segmentation",
   "mpp": 0.504,
   "model": "YOLO",
   "tile_size": 128,
