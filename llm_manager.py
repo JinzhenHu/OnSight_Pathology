@@ -11,7 +11,7 @@ from utils import resource_path
 from timm.models.layers import DropPath
 from pathlib import Path
 from transformers.generation import GenerationConfig
-import tempfile
+import tempfile,atexit
 from contextlib import contextmanager
 #########################################################################################################
 #Loading LLM 
@@ -29,7 +29,6 @@ def load_llm(config_path: str):
         tokenizer = AutoTokenizer.from_pretrained(cfg["repo"], trust_remote_code=True)
         model = AutoModelForCausalLM.from_pretrained(cfg["repo"], device_map="cuda", trust_remote_code=True).eval()
         return model, tokenizer, cfg 
-
 
     # ---------- Intern VL 2-8B ---------------------------
     if cfg["repo"].lower().endswith("internvl2-8b"):
@@ -50,9 +49,28 @@ def load_llm(config_path: str):
         )
         return model, tokenizer, cfg  
     
+    # ---------- Intern VL 3-8B ---------------------------
+    if cfg["repo"].lower().endswith("internvl3-8b"):
+        model = AutoModel.from_pretrained(
+            cfg["repo"],
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            load_in_8bit=True,
+            low_cpu_mem_usage=True,
+            use_flash_attn=True,
+            trust_remote_code=True,
+        ).eval()
 
-    # ---------- Intern VL 2-4B ---------------------------
-    if cfg["repo"].lower().endswith("internvl2-4b"):
+        tokenizer = AutoTokenizer.from_pretrained(
+            cfg.get("tokenizer_repo", cfg["repo"]),
+            trust_remote_code=True,
+            use_fast=False,
+        )
+        return model, tokenizer, cfg  
+    
+
+    # ---------- Intern VL 3-2B ---------------------------
+    if cfg["repo"].lower().endswith("internvl3-2b"):
         model = AutoModel.from_pretrained(
             cfg["repo"],
             torch_dtype=torch.bfloat16,
@@ -213,18 +231,19 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
                     os.remove(tmp_path)
                 except FileNotFoundError:
                     pass
-        
+
         with pil_to_qwen_path(pil_img) as path:
             query = tokenizer.from_list_format([
                 {"image": path},
                 {"text": prompt}
             ])
-            reponse, history = model.chat(tokenizer, query=query, history=history)
+            reponse, history = model.chat(tokenizer, query=query, history=[])
   
 
         txt =reponse
         history.append({"role": "user", "content": [pil_img, prompt]})
         history.append({"role": "assistant", "content": reponse})
+
 
 
     # ----------  Bio-Med Llama-3 -------------
@@ -241,7 +260,6 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
             txt += chunk
         history.append({"role": "assistant", "content": txt})
 
-        
     # ----------  InternVL2-8b -------------
     if llm_config["repo"].lower().endswith("internvl2-8b"):
         generation_cfg = dict(max_new_tokens=1024, do_sample=True)
@@ -257,8 +275,24 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
         history.append({"role": "user", "content": [pil_img, prompt]})
         history.append({"role": "assistant", "content": raw_reply})
 
-    # ----------  InternVL2-4b -------------
-    if llm_config["repo"].lower().endswith("internvl2-4b"):
+        
+    # ----------  InternVL3-8b -------------
+    if llm_config["repo"].lower().endswith("internvl3-8b"):
+        generation_cfg = dict(max_new_tokens=1024, do_sample=True)
+        pixel_values = load_image(pil_img, max_num=12).to(torch.bfloat16).cuda()
+        question = "<image>\n" + prompt       
+
+        raw_reply = model.chat(tokenizer, pixel_values, question, generation_cfg)
+
+        clean_txt = f"\n {raw_reply}"  
+        txt = clean_txt.replace("\n", "<br>")                 
+
+
+        history.append({"role": "user", "content": [pil_img, prompt]})
+        history.append({"role": "assistant", "content": raw_reply})
+
+    # ----------  InternVL3-2b -------------
+    if llm_config["repo"].lower().endswith("internvl3-2b"):
 
         generation_cfg = dict(max_new_tokens=1024, do_sample=True)
         pixel_values = load_image(pil_img, max_num=12).to(torch.bfloat16).cuda()
@@ -273,7 +307,7 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
         history.append({"role": "user", "content": [pil_img, prompt]})
         history.append({"role": "assistant", "content": raw_reply})
 
-    # ----------  InternVL2-4b -------------
+    # ----------  InternVL2-2b -------------
     if llm_config["repo"].lower().endswith("internvl2-2b"):
 
         generation_cfg = dict(max_new_tokens=1024, do_sample=True)
@@ -289,6 +323,12 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
 
         history.append({"role": "user", "content": [pil_img, prompt]})
         history.append({"role": "assistant", "content": raw_reply})
+    
+    MAX_PAIRS = 2                     
+    MAX_MSGS  = MAX_PAIRS * 2   
+
+    if len(history) > MAX_MSGS:
+        del history[:-MAX_MSGS] 
 
     return txt , history
 
