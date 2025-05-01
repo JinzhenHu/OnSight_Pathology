@@ -1,4 +1,6 @@
 # README
+## Updates
+The updated file for region process is able to automatically upscale the inference windows to the training size.
 
 ## Folders and Scripts
 
