@@ -93,10 +93,8 @@ def load_llm(config_path: str):
     # ----------  Bio-Med Llama-3 -------------
     if cfg["repo"].lower().endswith("bio-medical-multimodal-llama-3-8b-v1"):
         qcfg = BitsAndBytesConfig(**cfg["bitsandbytes"]) if cfg.get("bitsandbytes") else None
-        token="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"
         model = AutoModel.from_pretrained(
             cfg["repo"],
-            token = token,
             torch_dtype=getattr(torch, cfg.get("dtype", "float16")),
             device_map="auto",
             quantization_config=qcfg,
@@ -105,7 +103,6 @@ def load_llm(config_path: str):
 
         tokenizer = AutoTokenizer.from_pretrained(
             cfg.get("tokenizer_repo", cfg["repo"]),
-            token = token,
             trust_remote_code=True,
         )
 
