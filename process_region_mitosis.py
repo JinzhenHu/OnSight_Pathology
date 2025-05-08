@@ -91,12 +91,14 @@ def process_region(region, **kwargs):
 
     # Apply Non-Maximum Suppression on all detections
     prediction = nms(list(itertools.chain(*all_detections)))
+    BIG_FONT   = 32   # pixels
+    THICK_LINE = 4    # pixels
 
     # Set up the annotator for drawing boxes
     annotator = Annotator(
         frame,
-        line_width=2,
-        font_size=14,
+        line_width=THICK_LINE,
+        font_size=BIG_FONT,
         font="Arial_Bold.ttf",
         pil=False,
         example="abc",

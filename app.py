@@ -25,9 +25,10 @@ print("Torch version:", torch.__version__)
 ##############################################################################################################################################
 
 LLM_CATALOG = {    
-    "Internvl2-2b":    "metadata/llm_internvl2_2b.json",  
-    "Internvl2-4b":    "metadata/llm_internvl2_4b.json",   
-    "Internvl2-8b":    "metadata/llm_internvl2_8b.json",  
+    "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
+    "Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
+    "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
+    "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
     "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
    # "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
 }
