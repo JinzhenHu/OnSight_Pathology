@@ -22,7 +22,7 @@ The updated file for region process is able to automatically upscale the inferen
 - **RetinaNet** — mitosis detection.
 - **VGG‑19 & ViT** — tumor compactness classification.
 - **ViT** — glioma classification.
-- **YOLO** — MIB segmentation.
+- **Mask-RCNN & YOLO** — MIB segmentation.
 
 
 
