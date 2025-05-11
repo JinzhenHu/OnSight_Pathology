@@ -45,7 +45,8 @@ dropdown_categories = [
         {'name': "Gliomas(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
-        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'}
+        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
+        {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [
         {'name': "Mitosis Detection (Retinanet)", 'info_file': 'metadata/mib_mitosis.json'}

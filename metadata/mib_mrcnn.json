@@ -1,9 +1,9 @@
 {
-  "repo": "diamandislabii/MIB",
+  "repo": "diamandislabii/MIB-Mask-RCNN",
   "repo_src": "HuggingFace",
-  "info": "YOLO model used for segmentation",
+  "info": "Mask RCNN model used for segmentation",
   "mpp": 0.504,
-  "model": "YOLO",
+  "model": "MaskRCNN",
   "tile_size": 128,
   "classes": [
     "Positive",
