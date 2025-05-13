@@ -66,9 +66,9 @@ def process_region(region, **kwargs):
 
             if len(instances.get('pred_classes')):
 
-                for k in range(len(instances)):
-                    out = v.draw_binary_mask(np.array(instances.get('pred_masks')[k].detach()),
-                                             color=colormaps[instances.get('pred_classes')[k]])
+                for kk in range(len(instances)):
+                    out = v.draw_binary_mask(np.array(instances.get('pred_masks')[kk].detach()),
+                                             color=colormaps[instances.get('pred_classes')[kk]])
                 curr_mask = out.get_image()  # it is RGB uint8 0~255
                 curr_mask = curr_mask[:, :, ::-1]
 
