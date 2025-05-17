@@ -10,8 +10,8 @@ def fix_region(region, tile_size):
     return reg
 
 # Log-based correction (more forgiving for small # of tiles)
-def correction_factor(n_tiles):
-    return max(1.0 - 0.15 * np.log1p(n_tiles), 0.5)
+def correction_factor(n_tiles, corr_fac):
+    return max(1.0 - corr_fac * np.log1p(n_tiles), 0.5)
 
 def process_region(region, **kwargs):
 
@@ -109,7 +109,7 @@ def process_region(region, **kwargs):
         _correction_factor = 0.15
 
     num_neg = num_pos_and_neg - num_pos
-    num_neg = int(num_neg * correction_factor(len(slices)))
+    num_neg = int(num_neg * correction_factor(len(slices), _correction_factor))
     positivity = num_pos / (num_pos + num_neg) * 100 if (num_pos + num_neg) > 0 else 0
 
     text = '(+) {:.2f} %\n'.format(positivity)
