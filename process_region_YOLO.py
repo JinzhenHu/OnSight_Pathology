@@ -9,6 +9,10 @@ def fix_region(region, tile_size):
     reg['height'] = max(reg['height'], tile_size)
     return reg
 
+# Log-based correction (more forgiving for small # of tiles)
+def correction_factor(n_tiles):
+    return max(1.0 - 0.15 * np.log1p(n_tiles), 0.5)
+
 def process_region(region, **kwargs):
 
     metadata = kwargs['metadata']
@@ -29,7 +33,13 @@ def process_region(region, **kwargs):
     slices = extract_tiles(frame, tile_size)
 
     # Detect and render
-    results = model(slices)
+
+    try:
+        _conf = float(kwargs['additional_configs'].get('confidence_level', 0.6))
+    except:
+        _conf = 0.6
+
+    results = model(slices, conf=_conf)
 
     from ultralytics.utils.plotting import Annotator
     from ultralytics.data.augment import LetterBox
@@ -101,8 +111,17 @@ def process_region(region, **kwargs):
         num_pos += num_pos_curr
         num_pos_neg += num_pos_curr + torch.sum(r.boxes.cls == 1).cpu().numpy()
 
-    text = '(+) {:.2f} %\n'.format(num_pos / num_pos_neg * 100 if num_pos_neg > 0 else 0)
+
+    try:
+        _correction_factor = float(kwargs['additional_configs'].get('correction_factor', 0.15))
+    except:
+        _correction_factor = 0.15
+    num_neg = num_pos_neg - num_pos
+    num_neg *= correction_factor(len(slices))
+    positivity = num_pos / (num_pos + num_neg) * 100 if (num_pos + num_neg) > 0 else 0
+
+    text = '(+) {:.2f} %\n'.format(positivity)
     text += '(+) cells: {}\n'.format(num_pos)
-    text += '(-) cells: {}\n'.format(num_pos_neg - num_pos)
+    text += '(-) cells: {}\n'.format(num_neg)
 
     return seg_mask.astype(np.uint8), text

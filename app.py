@@ -511,10 +511,20 @@ class ImageClassificationApp(QWidget):
         )
 
         # ------------------------------------Dynamic additional configs -------------------------------------
-        for i in reversed(range(self.v_cfg.count())):
-            item = self.v_cfg.takeAt(i)
-            if (w := item.widget()) is not None:
-                w.deleteLater()
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                child_layout = item.layout()
+
+                if widget is not None:
+                    widget.deleteLater()
+                elif child_layout is not None:
+                    clear_layout(child_layout)  # Recursively delete children
+
+        # Clear existing widgets
+        clear_layout(self.v_cfg)
+
         self.additional_config_inputs.clear()
         add_cfg = meta.get("additional_configs", {})
         self.grp_cfg.setVisible(bool(add_cfg))

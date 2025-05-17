@@ -10,5 +10,5 @@
     "Negative",
     "Misc"
   ],
-  "additional_configs": {}
+  "additional_configs": {"confidence_level":  0.6, "correction_factor": 0.15}
 }

@@ -10,5 +10,5 @@
     "Negative",
     "Misc"
   ],
-  "additional_configs": {}
+  "additional_configs": {"correction_factor": 0.15}
 }
