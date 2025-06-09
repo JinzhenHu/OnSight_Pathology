@@ -33,8 +33,9 @@ def process_region(region, **kwargs):
 
 
     frame = np.array(screenshot, dtype=np.uint8)
+    print(frame.shape)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
     frame = frame[:max((frame.shape[0] // tile_size) * tile_size, tile_size),
               :max((frame.shape[1] // tile_size) * tile_size, tile_size), :]
     h, w = frame.shape[:2]
