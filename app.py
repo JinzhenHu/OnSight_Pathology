@@ -18,7 +18,7 @@ from PIL import Image
 from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 from utils import load_model, resource_path
 from llm_manager import load_llm   
-from llm_manager import stream_reply 
+from llm_manager import stream_reply
 print("Torch version:", torch.__version__)
 ##############################################################################################################################################
 # VLM Model List
@@ -41,8 +41,10 @@ dropdown_categories = [
     ("▶️ Classification Models", [
          #{'name': "Tumor Compact (VGG19)", 'info_file': 'metadata/tumor_compact_vgg.json'},
          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
-        {'name': "Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
-        {'name': "Gliomas(VIT)", 'info_file': 'metadata/glio_vit.json'}
+        #{'name': "Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
+        {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
+        {'name': "Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
+        #{'name': "Gliomas(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
