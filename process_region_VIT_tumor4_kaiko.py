@@ -61,7 +61,7 @@ def process_region(region, **kwargs):
     h, w = frame.shape[:2]
 
     tile_size = metadata['tile_size']         # 1024
-    stride     = tile_size // 2               # 可调：无重叠 = tile_size
+    stride     = tile_size               # 可调：无重叠 = tile_size
     tile_slices = generate_tiles_nopad(h, w, tile_size, stride)
 
     result = []
