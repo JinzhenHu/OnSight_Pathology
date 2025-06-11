@@ -72,38 +72,38 @@ def load_model(model_info):
             res['using_gpu'] = 'CUDAExecutionProvider' in available_providers
 
             return res
-    ##############################################################################
-    #VIT
-    ##############################################################################
-        if model_info['model'] == 'VIT':
-            from huggingface_hub import hf_hub_download
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="my_model_state.pth")
-            import timm
-            import torch
-            import torch.nn as nn
-            from process_region_VIT import process_region
-            #Create Model
-            model = timm.create_model(
-            model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
-            dynamic_img_size=True,
-            pretrained=True,)
+    # ##############################################################################
+    # #VIT
+    # ##############################################################################
+    #     if model_info['model'] == 'VIT':
+    #         from huggingface_hub import hf_hub_download
+    #         model_path = hf_hub_download(repo_id=model_info['repo'], filename="my_model_state.pth")
+    #         import timm
+    #         import torch
+    #         import torch.nn as nn
+    #         from process_region_VIT import process_region
+    #         #Create Model
+    #         model = timm.create_model(
+    #         model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+    #         dynamic_img_size=True,
+    #         pretrained=True,)
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            num_features = model.num_features
-            num_classes = 3 
-            model.head = nn.Sequential(
-                nn.LayerNorm(num_features),  
-                nn.Linear(num_features, 256),  
-                nn.GELU(),                  
-                nn.Dropout(0.5),              
-                nn.Linear(256, num_classes)    
-            )
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model.to(device)
-            res['model'] = model
-            res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+    #         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #         num_features = model.num_features
+    #         num_classes = 3 
+    #         model.head = nn.Sequential(
+    #             nn.LayerNorm(num_features),  
+    #             nn.Linear(num_features, 256),  
+    #             nn.GELU(),                  
+    #             nn.Dropout(0.5),              
+    #             nn.Linear(256, num_classes)    
+    #         )
+    #         state_dict = torch.load(model_path, map_location=device)
+    #         model.load_state_dict(state_dict)
+    #         model.to(device)
+    #         res['model'] = model
+    #         res['process_region_func'] = process_region
+    #         res['using_gpu'] = torch.cuda.is_available()
     ##############################################################################
     #VIT-Tumor-16
     ##############################################################################
@@ -132,6 +132,108 @@ def load_model(model_info):
             # )
             model.head = nn.Sequential(
                 nn.Linear(num_features, num_classes),               
+            )
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            res['model'] = model
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()
+    ##############################################################################
+    #VIT-Tumor-4-kaiko
+    ##############################################################################
+        if model_info['model'] == 'VITtumor_kaiko':
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_kaikuo_20000image.pth")
+            import timm
+            import torch
+            import torch.nn as nn
+            from process_region_VIT_tumor4_kaiko import process_region
+            #Create Model
+            model = timm.create_model(
+            model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            dynamic_img_size=True,
+            pretrained=True,)
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            num_features = model.num_features
+            num_classes = 4
+            # model.head = nn.Sequential(
+            #     nn.LayerNorm(num_features),  
+            #     nn.Linear(num_features, 256),  
+            #     nn.GELU(),                  
+            #     nn.Dropout(0.5),              
+            #     nn.Linear(256, num_classes)    
+            # )
+            model.head = nn.Sequential(
+                nn.Linear(num_features, num_classes),               
+            )
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            res['model'] = model
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()
+    ##############################################################################
+    #VIT-Tumor-4-optimus
+    ##############################################################################
+        if model_info['model'] == 'VITtumor_Optimus':
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_optimus_image6000.pth")
+            import timm
+            import torch
+            import torch.nn as nn
+            from process_region_VIT_tumor4_optimus  import process_region
+            #Create Model
+            model = timm.create_model(
+                "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False
+            )
+            model.eval()
+
+            # Add a classification head
+            num_features = model.num_features
+            num_classes = 4
+            model.head = nn.Sequential(
+                nn.Linear(num_features, num_classes),  
+            )
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            res['model'] = model
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()
+    ##############################################################################
+    #Resnet-Tumor-4
+    ##############################################################################
+        if model_info['model'] == 'Resnet_Tumor':
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="resnet20000.pth")
+            import timm
+            import torch
+            import torch.nn as nn
+            from process_region_Resnet_tumor4 import process_region
+            #Create Model
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = timm.create_model(
+                'resnet101.a1h_in1k',
+                pretrained=True,
+                features_only=False,
+            )
+            # model = model.eval()
+
+            # get model specific transforms (normalization, resize)
+            # data_config = timm.data.resolve_model_data_config(model)
+            # transforms = timm.data.create_transform(**data_config, is_training=True)
+            # num_features = model.num_features
+            # num_classes = 4 ### Three classes
+            model.fc = nn.Sequential(
+                nn.Linear(2048, 256),
+                nn.ReLU(),
+                # nn.Dropout(0.3),
+                nn.Linear(256, 4),
             )
             state_dict = torch.load(model_path, map_location=device)
             model.load_state_dict(state_dict)
@@ -213,7 +315,7 @@ def load_model(model_info):
             weights_path = hf_hub_download(repo_id=model_info['repo'], filename="model.pth")
 
             cfg = get_cfg()
-            cfg.merge_from_file(resource_path("detectron2/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
+            cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
             cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
             cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7
             cfg.MODEL.WEIGHTS = weights_path
