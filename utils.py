@@ -73,37 +73,33 @@ def load_model(model_info):
 
             return res
     # ##############################################################################
-    # #VIT
+    # #VIT glio
     # ##############################################################################
-    #     if model_info['model'] == 'VIT':
-    #         from huggingface_hub import hf_hub_download
-    #         model_path = hf_hub_download(repo_id=model_info['repo'], filename="my_model_state.pth")
-    #         import timm
-    #         import torch
-    #         import torch.nn as nn
-    #         from process_region_VIT import process_region
-    #         #Create Model
-    #         model = timm.create_model(
-    #         model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
-    #         dynamic_img_size=True,
-    #         pretrained=True,)
+        if model_info['model'] == 'VIT':
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_glio.pth")
+            import timm
+            import torch
+            import torch.nn as nn
+            from process_region_VIT import process_region
+            #Create Model
+            model = timm.create_model(
+            model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            dynamic_img_size=True,
+            pretrained=True,)
 
-    #         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #         num_features = model.num_features
-    #         num_classes = 3 
-    #         model.head = nn.Sequential(
-    #             nn.LayerNorm(num_features),  
-    #             nn.Linear(num_features, 256),  
-    #             nn.GELU(),                  
-    #             nn.Dropout(0.5),              
-    #             nn.Linear(256, num_classes)    
-    #         )
-    #         state_dict = torch.load(model_path, map_location=device)
-    #         model.load_state_dict(state_dict)
-    #         model.to(device)
-    #         res['model'] = model
-    #         res['process_region_func'] = process_region
-    #         res['using_gpu'] = torch.cuda.is_available()
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            num_features = model.num_features
+            num_classes = 3 
+            model.head = nn.Sequential(
+                nn.Linear(num_features, num_classes),               
+            )
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            res['model'] = model
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()
     ##############################################################################
     #VIT-Tumor-16
     ##############################################################################
