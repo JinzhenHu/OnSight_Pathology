@@ -48,6 +48,7 @@ dropdown_categories = [
     ]),
     ("▶️ Segmentation Models", [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
+        {'name': "New MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
         {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [

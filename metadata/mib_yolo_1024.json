@@ -1,0 +1,13 @@
+{
+  "repo": "diamandislabii/MIB_1024",
+  "repo_src": "HuggingFace",
+  "info": "YOLO model used for segmentation",
+  "mpp": 0.504,
+  "model": "YOLO",
+  "tile_size": 1024,
+  "classes": [
+    "Positive",
+    "Negative"
+  ],
+  "additional_configs": {"confidence_level":  0.6, "mask_transparency": 0.75}
+}

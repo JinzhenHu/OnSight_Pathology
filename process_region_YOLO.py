@@ -45,6 +45,12 @@ def process_region(region, **kwargs):
     from ultralytics.data.augment import LetterBox
     import torch
 
+    try:
+        _mask_alpha = 1-float(kwargs['additional_configs'].get('mask_transparency', 0.5))
+    except:
+        _mask_alpha = 0.5
+    
+
 
 
     tile_size_y = tile_size_x = tile_size
@@ -81,7 +87,8 @@ def process_region(region, **kwargs):
                     2: (0, 255, 0),  # misc. green
                 }
                 annotator.masks(results[k].masks.data,
-                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu)
+                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu,
+                                alpha=_mask_alpha)
 
                 seg_mask[
                 (i * tile_size):((i * tile_size) + tile_size),
@@ -113,9 +120,9 @@ def process_region(region, **kwargs):
 
 
     try:
-        _correction_factor = float(kwargs['additional_configs'].get('correction_factor', 0.15))
+        _correction_factor = float(kwargs['additional_configs'].get('correction_factor', 0))
     except:
-        _correction_factor = 0.15
+        _correction_factor = 0
     num_neg = num_pos_neg - num_pos
     num_neg = int(num_neg * correction_factor(len(slices), _correction_factor))
     positivity = num_pos / (num_pos + num_neg) * 100 if (num_pos + num_neg) > 0 else 0
