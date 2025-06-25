@@ -5,6 +5,7 @@
   "mpp": 0.25,
   "model": "Retinanet",
   "tile_size": 512,
+  "aggregate_type": "mitosis",
   "classes": ["Mitosis Detection with Confidence Score"
   ],
   "additional_configs": {"confidence_level":  0.2}

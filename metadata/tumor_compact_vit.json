@@ -4,6 +4,7 @@
   "info": "This H&E brain tumor classifier was developed using transfer learning on a Vision Transformer petrained on WSIs",
   "mpp": 0.504,
   "model": "VITtumor",
+  "aggregate_type": "classification",
   "tile_size": 1024,
   "classes": [
     "Acute hemorrhage",

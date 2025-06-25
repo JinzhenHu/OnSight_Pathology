@@ -5,6 +5,7 @@
   "mpp": 0.504,
   "model": "VITtumor_kaiko",
   "tile_size": 1024,
+  "aggregate_type": "classification",
   "classes": [
      "Epithelial pattern", 
       "Glial histology",

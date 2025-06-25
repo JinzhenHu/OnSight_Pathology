@@ -5,6 +5,7 @@
   "mpp": 0.504,
   "model": "VIT",
   "tile_size": 512,
+  "aggregate_type": "classification",
   "classes": [
     "Glioblastoma",
     "Astrocytoma",

@@ -5,10 +5,11 @@
   "mpp": 0.504,
   "model": "YOLO",
   "tile_size": 128,
+  "aggregate_type": "mib", 
   "classes": [
     "Positive",
     "Negative",
     "Misc"
   ],
-  "additional_configs": {"confidence_level":  0.6, "correction_factor": 0.15}
+  "additional_configs": {}
 }

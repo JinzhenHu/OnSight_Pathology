@@ -1,0 +1,14 @@
+{
+  "repo": "diamandislabii/OptimusVIT_Tumor4Class",
+  "repo_src": "HuggingFace",
+  "info": "This H&E brain tumor classifier was developed using transfer learning on a Vision Transformer(Optimus) petrained on WSIs",
+  "mpp": 0.504,
+  "model": "VITtumor_Optimus",
+  "tile_size": 1024,
+  "classes": [
+     "Epithelial pattern", 
+      "Glial histology",
+       "Meningothelial Histology",
+         "Schwannian histology"
+  ]
+}
