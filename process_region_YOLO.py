@@ -9,10 +9,6 @@ def fix_region(region, tile_size):
     reg['height'] = max(reg['height'], tile_size)
     return reg
 
-# Log-based correction (more forgiving for small # of tiles)
-def correction_factor(n_tiles, corr_fac):
-    return max(1.0 - corr_fac * np.log1p(n_tiles), 0.5)
-
 def process_region(region, **kwargs):
 
     metadata = kwargs['metadata']
@@ -26,30 +22,18 @@ def process_region(region, **kwargs):
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
-    frame = np.array(screenshot, dtype=np.uint8)
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    frame_orig = np.array(screenshot, dtype=np.uint8)
+    frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2BGR)
     frame = frame[:max((frame.shape[0]//tile_size)*tile_size, tile_size), :max((frame.shape[1]//tile_size)*tile_size, tile_size), :]
 
     slices = extract_tiles(frame, tile_size)
 
     # Detect and render
-
-    try:
-        _conf = float(kwargs['additional_configs'].get('confidence_level', 0.6))
-    except:
-        _conf = 0.6
-
-    results = model(slices, conf=_conf)
+    results = model(slices)
 
     from ultralytics.utils.plotting import Annotator
     from ultralytics.data.augment import LetterBox
     import torch
-
-    try:
-        _mask_alpha = 1-float(kwargs['additional_configs'].get('mask_transparency', 0.5))
-    except:
-        _mask_alpha = 0.5
-    
 
 
 
@@ -87,8 +71,7 @@ def process_region(region, **kwargs):
                     2: (0, 255, 0),  # misc. green
                 }
                 annotator.masks(results[k].masks.data,
-                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu,
-                                alpha=_mask_alpha)
+                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu)
 
                 seg_mask[
                 (i * tile_size):((i * tile_size) + tile_size),
@@ -118,17 +101,14 @@ def process_region(region, **kwargs):
         num_pos += num_pos_curr
         num_pos_neg += num_pos_curr + torch.sum(r.boxes.cls == 1).cpu().numpy()
 
-
-    try:
-        _correction_factor = float(kwargs['additional_configs'].get('correction_factor', 0))
-    except:
-        _correction_factor = 0
-    num_neg = num_pos_neg - num_pos
-    num_neg = int(num_neg * correction_factor(len(slices), _correction_factor))
-    positivity = num_pos / (num_pos + num_neg) * 100 if (num_pos + num_neg) > 0 else 0
-
-    text = '(+) {:.2f} %\n'.format(positivity)
+    text = '(+) {:.2f} %\n'.format(num_pos / num_pos_neg * 100 if num_pos_neg > 0 else 0)
     text += '(+) cells: {}\n'.format(num_pos)
-    text += '(-) cells: {}\n'.format(num_neg)
-
-    return seg_mask.astype(np.uint8), text
+    text += '(-) cells: {}\n'.format(num_pos_neg - num_pos)
+    metrics = {
+        "mib_pos":   int(num_pos),
+        "mib_total": int(num_pos_neg),
+        "area_px":   frame.shape[0] * frame.shape[1],
+        "mpp":       metadata.get("mpp", 0.25),
+        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+    }
+    return seg_mask.astype(np.uint8), text, metrics

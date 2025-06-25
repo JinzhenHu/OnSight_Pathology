@@ -1,0 +1,14 @@
+{
+  "repo": "diamandislabii/ViT-Glial-Tumor-Classification",
+  "repo_src": "HuggingFace",
+  "info": "This Vision Transformer is used to classify Glioblastoma, Astrocytoma and Oligodendroglioma",
+  "mpp": 0.504,
+  "model": "VIT",
+  "tile_size": 512,
+  "aggregate_type": "classification",
+  "classes": [
+    "Glioblastoma",
+    "Astrocytoma",
+    "Oligodendroglioma"
+  ]
+}

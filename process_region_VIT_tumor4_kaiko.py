@@ -54,10 +54,10 @@ def process_region(region, **kwargs):
         screenshot = sct.grab(region)
 
 
-    frame = np.array(screenshot, dtype=np.uint8)
+    frame_orig = np.array(screenshot, dtype=np.uint8)
     #print(frame.shape)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+    frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
     h, w = frame.shape[:2]
 
     tile_size = metadata['tile_size']         # 1024
@@ -106,11 +106,23 @@ def process_region(region, **kwargs):
     top_3_idx = top_3_idx[:1]
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
+    ###Max
+    # result_tensor = torch.vstack(result)
+    # final_prob, _ = torch.max(result_tensor, dim=0)
+    # final_prob_numpy = final_prob.cpu().detach().numpy()
+    # top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
+    # top_3_idx = top_3_idx[:1]
+    # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
     res = ''
     for idx in top_3_idx:
         res += '{}: {:.4f}\n'.format(metadata['classes'][idx], final_prob_numpy[idx])
-
-
-    return frame, res
+    final_conf = float(final_prob_numpy[top_3_idx[0]])
+    metrics = {
+        "conf": final_conf,
+        "area_px": frame.shape[0] * frame.shape[1],
+        "mpp": metadata.get("mpp", 0.25),
+        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+    }
+    return frame, res, metrics
 

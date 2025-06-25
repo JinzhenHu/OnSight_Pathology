@@ -136,5 +136,10 @@ def process_region(region, **kwargs):
     annotated_frame=   cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR)
     prediction = [row for row in prediction if row[5] >= Cl]
     txt = f"Number of mitosis detected in this frame: {len(prediction)}"
-
-    return annotated_frame, txt
+    metrics = {
+        "mitosis": len(prediction),
+        "area_px": frame.shape[0] * frame.shape[1],
+        "mpp": metadata.get("mpp", 0.25),
+        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+    }
+    return annotated_frame, txt, metrics

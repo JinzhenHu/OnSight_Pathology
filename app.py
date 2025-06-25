@@ -9,9 +9,12 @@ import torch
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox,
     QLineEdit, QGroupBox, QHBoxLayout, QFrame, QMessageBox, QStyledItemDelegate,
-    QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog
+    QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog,QInputDialog
 )
 from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel
+
+from PyQt6.QtGui import QShortcut, QKeySequence,QIcon
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer
 from pynput import mouse
 from PIL import Image
@@ -19,7 +22,10 @@ from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 from utils import load_model, resource_path
 from llm_manager import load_llm   
 from llm_manager import stream_reply
+from dataclasses import dataclass
 print("Torch version:", torch.__version__)
+
+
 ##############################################################################################################################################
 # VLM Model List
 ##############################################################################################################################################
@@ -43,12 +49,11 @@ dropdown_categories = [
          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
         {'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
         {'name': "New Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
-        {'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
-        {'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
+       {'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
+       #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
-        {'name': "New MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
         {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [
@@ -61,6 +66,22 @@ for _, _v in dropdown_categories:
     for __v in _v:
         with open(resource_path(__v['info_file'])) as f:
             model_to_info[__v['name']] = json.load(f)
+
+###############################################################################################################################################
+#Data Class for aggregator function
+###############################################################################################################################################
+@dataclass
+class AggregateStats:
+    total_area_mm2: float = 0.0
+    conf_sum: float       = 0.0
+    n_tiles: int          = 0
+    mitosis: int          = 0
+    mib_pos: int          = 0        
+    mib_total: int        = 0      
+
+    def reset(self):
+        self.total_area_mm2 = self.conf_sum = self.mitosis = 0
+        self.n_tiles = self.mib_pos = self.mib_total = 0
 
 
 ##############################################################################################################################################
@@ -167,7 +188,8 @@ class LLMChatDialog(QDialog):
 ##############################################################################################################################################
 
 class ClassificationThread(QThread):
-    update_image = pyqtSignal(np.ndarray, str)  
+    #update_image = pyqtSignal(np.ndarray, str)  
+    update_image = pyqtSignal(np.ndarray, str, dict)
 
     def __init__(self, ui_instance, model_name):
         super().__init__()
@@ -190,14 +212,20 @@ class ClassificationThread(QThread):
             extra_cfg = {
                 k: w.text() for k, w in self.ui.additional_config_inputs.items()
             }
-            frame, res_txt = self.process_region(
+            frame, res_txt, metrics  = self.process_region(
                 self.ui.selected_region,
                 model=self.model,
                 metadata=self.metadata,
                 additional_configs=extra_cfg,
             )
             res_txt += f"\n({time.time()-t0:.2f}s)"
-            self.update_image.emit(frame, res_txt)
+            # self.update_image.emit(frame, res_txt)
+#######################################################################
+#Aggregate Function update image new version
+#######################################################################
+            self.update_image.emit(frame, res_txt, metrics)
+#######################################################################
+#######################################################################
             time.sleep(0.1)
 
     def stop(self):
@@ -232,9 +260,211 @@ class ImageClassificationApp(QWidget):
         self.last_result = ""
 
         self._build_ui()
+##############################################################################################################################################
+#Aggregate Function new functions
+##############################################################################################################################################
+        self.agg = AggregateStats()      
+        self.latest_metrics = None  
+        self.agg_active = False
+        self.lbl_help.setVisible(False) 
+        self.inference_ready = False
+        self.agg_records: list[dict] = [] 
+        self.setWindowIcon(QIcon(resource_path("sample_icon")))
 
+    def _agg_start(self):
+        if not self.inference_ready:
+            QMessageBox.information(
+                self, "Not ready",
+                "Run inference first, then press Start to begin aggregating.")
+        self.agg_active = True
+        self.lbl_agg.setText(self._agg_text() or "Collecting …")
+        self.btn_agg_start.setEnabled(False)
+        self.btn_agg_stop.setEnabled(True)
+        self.lbl_help.setVisible(True)
+        self.btn_reset.setEnabled(True) 
+        self.btn_agg_stop.setFocus() 
+
+    def _agg_stop(self):
+        self.agg_active = False
+        self.btn_agg_start.setEnabled(True)
+        self.btn_agg_stop.setEnabled(False)
+        self.lbl_help.setVisible(False)
+
+    def _on_reset(self):
+        self.agg.reset()
+        self.lbl_agg.setText("Analysis pending...")
+        self.agg_active = False
+        self.btn_agg_start.setEnabled(True)
+        self.btn_agg_stop.setEnabled(False)
+        self.btn_reset.setEnabled(False)      # disable until next Start
+        self.btn_agg_stop.setFocus() 
+        self.agg_records.clear()
+        self.btn_agg_export.setEnabled(False)
+
+    def _agg_export(self):
+        if not self.agg_records:
+            QMessageBox.information(self, "Nothing to export", "No tiles added yet.")
+            return
+
+        # choose folder
+        out_dir = QFileDialog.getExistingDirectory(
+            self, "Select export folder", "")
+        if not out_dir:
+            return
+
+        # save images & gather rows
+        rows = []
+        for idx, rec in enumerate(self.agg_records, start=1):
+            base = f"{out_dir}/{idx}"
+            orig_path  = base + ".jpg"
+            anno_path  = base + "_annotated.jpg"
+
+            cv2.imwrite(orig_path,  cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
+            cv2.imwrite(anno_path,  cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
+
+            row = rec["metrics"].copy()
+            row["file_orig"]      = orig_path
+            row["file_annotated"] = anno_path
+            rows.append(row)
+
+        # write CSV 
+        csv_path = f"{out_dir}/aggregate_metrics.csv"
+        import csv
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        QMessageBox.information(
+            self, "Export complete",
+            f"Saved {len(rows)} images and metrics to:\n{out_dir}")
+
+    # ======================================================================== 
+    # Aggregate helpers 
+    # ========================================================================
+    
+    def _on_add(self):
+        if not self.agg_active or not self.latest_metrics:
+            return
+        meta = model_to_info[self.cmb_model.currentText()]
+        agg_type = meta.get("aggregate_type", "classification")
+        m  = self.latest_metrics
+        mm2 = m["area_px"] * (m["mpp"]/1000)**2
+
+        # ---------- Mitosis Task----------
+        if agg_type == "mitosis":
+            count, ok = QInputDialog.getInt(
+                self, "Confirm mitosis count",
+                "Detected mitoses (edit if needed):",
+                m["mitosis"], 0, 999)
+            if not ok:
+                return
+            add_conf   = 0
+            add_pos = add_tot = 0
+            add_mitos  = count
+            new_metrics = {
+                "Mitosis number": count,
+                "Tissue area": mm2,
+                "Mpp": m["mpp"]
+            }
+        # ---------- Mib Task -------------
+        elif agg_type == "mib":
+            pct = (m["mib_pos"] / m["mib_total"] * 100
+                if m["mib_total"] else 0)
+            reply = QMessageBox.question(
+                self, "Add this tile?",
+                (f"(+) cells: {m['mib_pos']}\n"
+                f"(-) cells: {m['mib_total']-m['mib_pos']}\n"
+                f"Ki-67%: {pct:.1f}\n"
+                f"Tile area: {mm2:.3f} mm²\n\n"
+                "Add to aggregate?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            add_conf   = 0
+            add_mitos  = 0
+            add_pos    = m["mib_pos"]
+            add_tot    = m["mib_total"]
+            new_metrics = {
+                "Ki-67%": pct,
+                "Positive cell number": m['mib_pos'],
+                "Total cell number": m['mib_total'],
+                "Tissue area": mm2,
+                "Mpp": m["mpp"]
+            }
+        # ---------- Classification Task ----------
+        elif agg_type == "classification":
+            reply = QMessageBox.question(
+                self, "Add this tile?",
+                (f"Confidence = {m['conf']:.3f}\n"
+                f"Tile area   = {mm2:.3f} mm²\n\n"
+                "Add to aggregate?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            add_conf  = m["conf"]
+            add_mitos = 0
+            add_pos = add_tot = 0
+            new_metrics = {
+                "Confidence score": m["conf"],
+                "Tissue area": mm2,
+                "Mpp": m["mpp"]
+            }
+
+        # ---------- Accumulate Function ----------
+        self.agg_records.append({
+            "annot": self.latest_frame.copy(),
+            "orig":  self.latest_original.copy(),
+            "metrics": new_metrics,               
+        })
+        self.btn_agg_export.setEnabled(True) 
+        self.agg.total_area_mm2 += mm2 
+        self.agg.conf_sum       += add_conf
+        self.agg.n_tiles        += 1
+        self.agg.mitosis        += add_mitos
+        self.agg.mib_pos        += add_pos
+        self.agg.mib_total      += add_tot
+        self.lbl_agg.setText(self._agg_text())
+
+
+    def _agg_text(self):
+        if self.agg.n_tiles == 0:
+            return "Analysis pending..."
+
+        meta      = model_to_info[self.cmb_model.currentText()]
+        agg_type  = meta.get("aggregate_type", "classification")
+
+        lines = [
+            f"Total Tiles: {self.agg.n_tiles}",
+            f"Total Area:  {self.agg.total_area_mm2:.3f} mm²"
+        ]
+
+        if agg_type == "classification":
+            avg = self.agg.conf_sum / self.agg.n_tiles if self.agg.n_tiles else 0
+            lines.append(f"Average confidence: {avg:.3f}")
+
+        elif agg_type == "mitosis":
+            density = (self.agg.mitosis / self.agg.total_area_mm2
+                    if self.agg.total_area_mm2 else 0)
+            lines.append(f"Mitoses: {self.agg.mitosis}  "
+                        f"({density:.2f} / mm²)")
+        elif agg_type == "mib":
+            pct = (self.agg.mib_pos / self.agg.mib_total * 100
+                if self.agg.mib_total else 0)
+            lines += [
+                f"(+) cells: {self.agg.mib_pos}",
+                f"(-) cells: {self.agg.mib_total - self.agg.mib_pos}",
+                f"Average Ki-67%: {pct:.2f}"
+            ]
+
+        return "\n".join(lines)
+
+################################################################################################################################################
+################################################################################################################################################
     # --------------------- UI --------------------------------- 
     def _build_ui(self):
+        
         main_left = QVBoxLayout()  
         main_right = QVBoxLayout()  
         # -------------------- Model selection ------------------------------
@@ -269,6 +499,8 @@ class ImageClassificationApp(QWidget):
         self.cmb_model.setModel(mdl)
         self.cmb_model.currentIndexChanged.connect(self._on_model_changed)
         h_model.addWidget(self.cmb_model)
+
+
 
         # Info button
         btn_info = QPushButton("ℹ️")
@@ -357,7 +589,58 @@ class ImageClassificationApp(QWidget):
 
         grp_ctrl.setLayout(v_ctrl)
         main_right.addWidget(grp_ctrl)
+        ##############################################################################################################################################
+        #Aggregate Function UI
+        ##############################################################################################################################################
+        # -------------------- Aggregate Scorer --------------------
+        grp_agg = QGroupBox("Aggregate Function")
+        v_agg   = QVBoxLayout()
+        h_agg_btns = QHBoxLayout()
 
+        self.btn_agg_start = QPushButton("Start")
+        self.btn_agg_start.clicked.connect(self._agg_start)
+        h_agg_btns.addWidget(self.btn_agg_start)
+
+        self.btn_agg_stop = QPushButton("Stop")
+        self.btn_agg_stop.clicked.connect(self._agg_stop)
+        self.btn_agg_stop.setEnabled(False)       
+        h_agg_btns.addWidget(self.btn_agg_stop)
+
+        h_agg_btns.addStretch()
+        v_agg   = QVBoxLayout()
+
+        v_agg.addLayout(h_agg_btns)      
+        self.btn_agg_export = QPushButton("Export Aggregate")
+        self.btn_agg_export.setEnabled(False)        
+        self.btn_agg_export.clicked.connect(self._agg_export)
+        v_agg.addWidget(self.btn_agg_export)
+
+
+        self.lbl_agg = QLabel("Analysis pending...")
+        v_agg.addWidget(self.lbl_agg)
+
+        self.btn_reset = QPushButton("Reset")
+        self.btn_reset.clicked.connect(self._on_reset)
+        v_agg.addWidget(self.btn_reset)
+        self.lbl_help = QLabel(
+            "Tip ▶ Press <kbd>Spacebar</kbd> to add this view to the aggregate."
+        )
+        self.lbl_help.setStyleSheet(
+            "QLabel { color: grey; font-style: italic; margin-top: 4px; }"
+        )
+        v_agg.addWidget(self.lbl_help)
+
+        grp_agg.setLayout(v_agg)
+        main_right.addWidget(grp_agg)
+        sc_add = QShortcut(QKeySequence("Space"), self)  
+        sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        sc_add.activated.connect(self._on_add)
+        self.shortcut_add = sc_add          
+        self.btn_agg_start.setEnabled(False) 
+        self.btn_reset.setEnabled(False)
+
+        ################################################################################################################################################
+        ################################################################################################################################################
         # -------------------- Display output -----------------------------
         grp_out = QGroupBox("Inference Output")
         v_out = QVBoxLayout()
@@ -387,6 +670,7 @@ class ImageClassificationApp(QWidget):
 
         self._on_model_changed() 
 
+
     # ------------- UX ---------------
     def _select_region(self):
         def get_mouse_pos():
@@ -410,6 +694,17 @@ class ImageClassificationApp(QWidget):
 
     # ------------------------------------- Thread------------------------------------------------------
     def _start(self):
+        if not hasattr(self, '_disclaimer_shown'):
+            #Disclaimer
+            QMessageBox.warning(
+                self, "Disclaimer",
+                "This tool is intended for research and educational purposes only. "
+                "It is not a medical tool and should not be used for clinical diagnosis, "
+                "patient management, or any other medical purpose. The accuracy of the "
+                "models has not been validated for clinical use."
+            )
+            self._disclaimer_shown = True
+
         if self.selected_region is None:
             QMessageBox.warning(self, "No region", "Please select a screen region first.")
             return
@@ -440,7 +735,10 @@ class ImageClassificationApp(QWidget):
         self.using_gpu_icon.set_color("grey")
 
     # ---------------------------------- Display----------------------------------
-    def _update_display(self, frame, txt):
+    def _update_display(self, frame, txt, metrics):
+        self.latest_metrics = metrics   
+        self.latest_frame    = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()   # annotated
+        self.latest_original = metrics.get("orig_img", self.latest_frame).copy()
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
         h, w, c = frame_rgb.shape
         qimg = QImage(frame_rgb.data, w, h, c*w, QImage.Format.Format_RGB888)
@@ -450,7 +748,9 @@ class ImageClassificationApp(QWidget):
         self.latest_frame = frame_rgb.copy()
         self.last_result = txt
         self.btn_export.setEnabled(True)
-
+        if not self.inference_ready:
+            self.inference_ready = True
+            self.btn_agg_start.setEnabled(True)
     # --------------------------------- Export------------------------------------------
     def _export(self):
         if self.latest_frame is None:

@@ -1,0 +1,15 @@
+{
+  "repo": "diamandislabii/Resnet_Tumor4Class",
+  "repo_src": "HuggingFace",
+  "info": "This H&E brain tumor classifier was developed on a Resnet101",
+  "mpp": 0.504,
+  "model": "Resnet_Tumor",
+  "tile_size": 1024,
+  "aggregate_type": "classification",
+  "classes": [
+     "Epithelial pattern", 
+      "Glial histology",
+       "Meningothelial Histology",
+         "Schwannian histology"
+  ]
+}

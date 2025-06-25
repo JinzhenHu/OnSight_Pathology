@@ -9,10 +9,6 @@ def fix_region(region, tile_size):
     reg['height'] = max(reg['height'], tile_size)
     return reg
 
-# Log-based correction (more forgiving for small # of tiles)
-def correction_factor(n_tiles, corr_fac):
-    return max(1.0 - corr_fac * np.log1p(n_tiles), 0.5)
-
 def process_region(region, **kwargs):
 
     metadata = kwargs['metadata']
@@ -26,8 +22,8 @@ def process_region(region, **kwargs):
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
-    frame = np.array(screenshot, dtype=np.uint8)
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    frame_orig = np.array(screenshot, dtype=np.uint8)
+    frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2BGR)
     frame = frame[:max((frame.shape[0]//tile_size)*tile_size, tile_size), :max((frame.shape[1]//tile_size)*tile_size, tile_size), :]
 
     slices = extract_tiles(frame, tile_size)
@@ -70,9 +66,9 @@ def process_region(region, **kwargs):
 
             if len(instances.get('pred_classes')):
 
-                for kk in range(len(instances)):
-                    out = v.draw_binary_mask(np.array(instances.get('pred_masks')[kk].detach()),
-                                             color=colormaps[instances.get('pred_classes')[kk]])
+                for k in range(len(instances)):
+                    out = v.draw_binary_mask(np.array(instances.get('pred_masks')[k].detach()),
+                                             color=colormaps[instances.get('pred_classes')[k]])
                 curr_mask = out.get_image()  # it is RGB uint8 0~255
                 curr_mask = curr_mask[:, :, ::-1]
 
@@ -84,7 +80,7 @@ def process_region(region, **kwargs):
 
 
                 _num_pos = sum(instances.get('pred_classes') == positive_idx).item()
-                _num_pos_and_neg = _num_pos + sum(instances.get('pred_classes') == negative_idx).item()
+                _num_pos_and_neg = num_pos + sum(instances.get('pred_classes') == negative_idx).item()
 
 
             else:
@@ -103,17 +99,15 @@ def process_region(region, **kwargs):
             k += 1
 
 
-    try:
-        _correction_factor = float(kwargs['additional_configs'].get('correction_factor', 0.15))
-    except:
-        _correction_factor = 0.15
-
-    num_neg = num_pos_and_neg - num_pos
-    num_neg = int(num_neg * correction_factor(len(slices), _correction_factor))
-    positivity = num_pos / (num_pos + num_neg) * 100 if (num_pos + num_neg) > 0 else 0
-
-    text = '(+) {:.2f} %\n'.format(positivity)
+    text = '(+) {:.2f} %\n'.format(num_pos / num_pos_and_neg * 100 if num_pos_and_neg > 0 else 0)
     text += '(+) cells: {}\n'.format(num_pos)
-    text += '(-) cells: {}\n'.format(num_neg)
+    text += '(-) cells: {}\n'.format(num_pos_and_neg - num_pos)
 
-    return seg_mask.astype(np.uint8), text
+    metrics = {
+        "mib_pos":   int(num_pos),
+        "mib_total": int(num_pos_and_neg),
+        "area_px":   frame.shape[0] * frame.shape[1],
+        "mpp":       metadata.get("mpp", 0.25),
+        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+    }
+    return seg_mask.astype(np.uint8), text, metrics
