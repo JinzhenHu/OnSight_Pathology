@@ -287,7 +287,23 @@ def load_model(model_info):
             from process_region_YOLO import process_region
             from huggingface_hub import hf_hub_download
 
+            #weights_path = hf_hub_download(repo_id=model_info['repo'], filename="best (11x seg new).pt")
             weights_path = hf_hub_download(repo_id=model_info['repo'], filename="best.pt")
+
+
+            res['model'] = YOLO(weights_path)
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()
+
+            return res
+    
+        if model_info['model'] == 'YOLO_det':
+            from ultralytics import YOLO
+            import torch
+            from process_region_YOLO_det import process_region
+            from huggingface_hub import hf_hub_download
+
+            weights_path = hf_hub_download(repo_id=model_info['repo'], filename="best (12x det new).pt")
 
 
             res['model'] = YOLO(weights_path)
