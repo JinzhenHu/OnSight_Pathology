@@ -327,7 +327,7 @@ def load_model(model_info):
             weights_path = hf_hub_download(repo_id=model_info['repo'], filename="model.pth")
 
             cfg = get_cfg()
-            cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
+            cfg.merge_from_file(resource_path("detectron2/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
             cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
             cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7
             cfg.MODEL.WEIGHTS = weights_path
