@@ -5,6 +5,9 @@ import json
 import cv2
 import numpy as np
 import mss
+import os
+from datetime import datetime
+import csv
 import torch
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox,
@@ -12,9 +15,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog,QInputDialog
 )
 from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel
-
 from PyQt6.QtGui import QShortcut, QKeySequence,QIcon
-
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer
 from pynput import mouse
 from PIL import Image
@@ -47,14 +48,13 @@ dropdown_categories = [
     ("▶️ Classification Models", [
          #{'name': "Tumor Compact (VGG19)", 'info_file': 'metadata/tumor_compact_vgg.json'},
          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
-        {'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
+        #{'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
         {'name': "New Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
        {'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
        #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
-        {'name': "MIB (YOLO, Segmentation)", 'info_file': 'metadata/mib_yolo_1024.json'},
-         {'name': "MIB (YOLO, Bounding Boxes)", 'info_file': 'metadata/mib_yolo_1024_det.json'},
+        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
         {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [
@@ -264,6 +264,12 @@ class ImageClassificationApp(QWidget):
 ##############################################################################################################################################
 #Aggregate Function new functions
 ##############################################################################################################################################
+        self.show_calib_box = False   
+        self.box_mm2        = None    
+        self._calib_help_shown = False
+
+        self.cls_stats = {}   # {class: {'tiles':0, 'conf_sum':0, 'area':0}}
+
         self.agg = AggregateStats()      
         self.latest_metrics = None  
         self.agg_active = False
@@ -302,40 +308,96 @@ class ImageClassificationApp(QWidget):
         self.agg_records.clear()
         self.btn_agg_export.setEnabled(False)
 
+        # self.box_mm2 = None
+        self.show_calib_box = False
+        self.cls_stats.clear()
+
+
+    # def _agg_export(self):
+    #     if not self.agg_records:
+    #         QMessageBox.information(self, "Nothing to export", "No tiles added yet.")
+    #         return
+
+    #     # choose folder
+    #     out_dir = QFileDialog.getExistingDirectory(
+    #         self, "Select export folder", "")
+    #     if not out_dir:
+    #         return
+
+    #     # save images & gather rows
+    #     rows = []
+    #     for idx, rec in enumerate(self.agg_records, start=1):
+    #         base = f"{out_dir}/{idx}"
+    #         orig_path  = base + ".jpg"
+    #         anno_path  = base + "_annotated.jpg"
+
+    #         cv2.imwrite(orig_path,  cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
+    #         cv2.imwrite(anno_path,  cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
+
+    #         row = rec["metrics"].copy()
+    #         row["file_orig"]      = orig_path
+    #         row["file_annotated"] = anno_path
+    #         rows.append(row)
+
+    #     # write CSV 
+    #     csv_path = f"{out_dir}/aggregate_metrics.csv"
+    #     import csv
+    #     with open(csv_path, "w", newline="", encoding='utf-8') as fh:
+    #         writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
+    #         writer.writeheader()
+    #         writer.writerows(rows)
+
+    #     QMessageBox.information(
+    #         self, "Export complete",
+    #         f"Saved {len(rows)} images and metrics to:\n{out_dir}") 
+
+
     def _agg_export(self):
         if not self.agg_records:
-            QMessageBox.information(self, "Nothing to export", "No tiles added yet.")
+            QMessageBox.information(
+                self, "Nothing to export", "No tiles added yet.")
             return
 
-        # choose folder
-        out_dir = QFileDialog.getExistingDirectory(
+        # ── Choose main folder ────────────────────────────────────────────
+        parent_dir = QFileDialog.getExistingDirectory(
             self, "Select export folder", "")
-        if not out_dir:
+        if not parent_dir:
             return
 
-        # save images & gather rows
+        # ── Automatic generate subfolder ─────────────────────────────────
+        base_name = "Agregate_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir   = os.path.join(parent_dir, base_name)
+        counter   = 1
+        while os.path.exists(out_dir):         
+            out_dir = os.path.join(parent_dir, f"{base_name}_({counter})")
+            counter += 1
+        os.makedirs(out_dir, exist_ok=True)
+
+        # ── Save Images ───────────────────────────────────
         rows = []
         for idx, rec in enumerate(self.agg_records, start=1):
-            base = f"{out_dir}/{idx}"
-            orig_path  = base + ".jpg"
-            anno_path  = base + "_annotated.jpg"
+            base = os.path.join(out_dir, f"{idx:03d}")     # 000,001…
+            orig_path = base + ".jpg"
+            anno_path = base + "_annotated.jpg"
 
-            cv2.imwrite(orig_path,  cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
-            cv2.imwrite(anno_path,  cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
+            cv2.imwrite(orig_path,
+                        cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
+            cv2.imwrite(anno_path,
+                        cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
 
             row = rec["metrics"].copy()
             row["file_orig"]      = orig_path
             row["file_annotated"] = anno_path
             rows.append(row)
 
-        # write CSV 
-        csv_path = f"{out_dir}/aggregate_metrics.csv"
-        import csv
-        with open(csv_path, "w", newline="") as fh:
+        # ── wrte CSV ─────────────────────────────────────────────
+        csv_path = os.path.join(out_dir, "aggregate_metrics.csv")
+        with open(csv_path, "w", newline="",encoding='utf-8') as fh:
             writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
 
+        # ── Complete ───────────────────────────────────────────
         QMessageBox.information(
             self, "Export complete",
             f"Saved {len(rows)} images and metrics to:\n{out_dir}")
@@ -350,7 +412,13 @@ class ImageClassificationApp(QWidget):
         meta = model_to_info[self.cmb_model.currentText()]
         agg_type = meta.get("aggregate_type", "classification")
         m  = self.latest_metrics
-        mm2 = m["area_px"] * (m["mpp"]/1000)**2
+
+        if self.box_mm2 and not self.show_calib_box:      
+            mm2 = self.box_mm2 * 9
+        else:
+            mm2 = m["area_px"] * (m["mpp"]/1000)**2
+
+
 
         # ---------- Mitosis Task----------
         if agg_type == "mitosis":
@@ -365,8 +433,8 @@ class ImageClassificationApp(QWidget):
             add_mitos  = count
             new_metrics = {
                 "Mitosis number": count,
-                "Tissue area": mm2,
-                "Mpp": m["mpp"]
+                "Tissue area (mm2)": mm2,
+                #"Mpp": m["mpp"]
             }
         # ---------- Mib Task -------------
         elif agg_type == "mib":
@@ -390,8 +458,8 @@ class ImageClassificationApp(QWidget):
                 "Ki-67%": pct,
                 "Positive cell number": m['mib_pos'],
                 "Total cell number": m['mib_total'],
-                "Tissue area": mm2,
-                "Mpp": m["mpp"]
+                "Tissue area (mm2)": mm2,
+                #"Mpp": m["mpp"]
             }
         # ---------- Classification Task ----------
         elif agg_type == "classification":
@@ -408,11 +476,19 @@ class ImageClassificationApp(QWidget):
             add_mitos = 0
             add_pos = add_tot = 0
             new_metrics = {
+                "Class": m["pred_cls"],
                 "Confidence score": m["conf"],
-                "Tissue area": mm2,
-                "Mpp": m["mpp"]
+                "Tissue area (mm2)": mm2
+                #"Mpp": m["mpp"]
             }
-
+            # ── per-class stats ─────────────────────────────────────────
+            cls = m["pred_cls"]
+            st  = self.cls_stats.setdefault(cls,
+                {'tiles': 0, 'conf_sum': 0.0, 'area': 0.0})
+            st['tiles']    += 1
+            st['conf_sum'] += m["conf"]
+            st['area']     += mm2
+            # ────────────────────────────────────────────────────────────
         # ---------- Accumulate Function ----------
         self.agg_records.append({
             "annot": self.latest_frame.copy(),
@@ -442,8 +518,16 @@ class ImageClassificationApp(QWidget):
         ]
 
         if agg_type == "classification":
-            avg = self.agg.conf_sum / self.agg.n_tiles if self.agg.n_tiles else 0
-            lines.append(f"Average confidence: {avg:.3f}")
+            if not self.cls_stats:                   
+                avg = (self.agg.conf_sum / self.agg.n_tiles
+                    if self.agg.n_tiles else 0)
+                lines.append(f"Average confidence: {avg:.3f}")
+            else:
+                lines.append("Avg confidence per class:")
+                for cls, st in self.cls_stats.items():
+                    avg_c = st['conf_sum'] / st['tiles']
+                    lines.append(f"  • {cls}: {avg_c:.3f} "
+                                f"(n={st['tiles']})")
 
         elif agg_type == "mitosis":
             density = (self.agg.mitosis / self.agg.total_area_mm2
@@ -460,6 +544,119 @@ class ImageClassificationApp(QWidget):
             ]
 
         return "\n".join(lines)
+    
+
+    # ------------------------------------------------------------
+    # CALIBRATION DIALOG 
+    # ------------------------------------------------------------
+    def _calibrate_area(self):
+        # ───────── First Click ─────────
+        if not self.show_calib_box:
+            # First Time Instruction Pop-up
+            if not self._calib_help_shown:
+                QMessageBox.information(
+                    self, "How to calibrate",
+                    "Step 1: A translucent box will appear.\n"
+                    "Step 2: In your slide viewer draw a box that exactly overlaps it\n"
+                    "    and note the physical area (mm²).\n"
+                    "Step 3: Click the 'Enter Area' button and input the measured value.")
+                self._calib_help_shown = True
+
+            # Open Calibrate Box
+            self.show_calib_box = True
+            QApplication.processEvents()    
+
+            # Wait for Second Click
+            self.btn_calib.setText("Enter area")
+            return
+
+        # ───────── Second Click ─────────
+        val, ok = QInputDialog.getDouble(
+            self, "Calibrate Area",
+            "Enter the measured area of the highlighted box (mm²):",
+            decimals=4, min=0.0001
+        )
+
+        if ok and val > 0:
+            self.box_mm2 = val
+            QMessageBox.information(
+                self, "Calibration stored",
+                f"Calibration box = {self.box_mm2:.4f} mm²")
+        else:
+            QMessageBox.information(
+                self, "Calibration cancelled",
+                "No calibration value recorded.")
+
+        # Close and Reset
+        self.show_calib_box = False
+        self.btn_calib.setText("Calibrate")
+
+
+    # def _calibrate_area(self):
+    #     dlg = QDialog(self)
+    #     dlg.setWindowTitle("Calibrate Scale Bars")
+
+    #     form = QGridLayout(dlg)
+
+    #     # instruction 
+    #     instr = QLabel(
+    #         "Measure the length of the scale-bar in the inference window "
+    #         "directly in your slide viewer and input the value here."
+    #     )
+    #     instr.setWordWrap(True)
+    #     form.addWidget(instr, 0, 0, 1, 2)
+
+    #     # width entry
+    #     form.addWidget(QLabel("Horizontal bar (mm):"), 1, 0)
+    #     edt_w = QLineEdit()
+    #     edt_w.setPlaceholderText("e.g. 0.300")
+    #     form.addWidget(edt_w, 1, 1)
+
+    #     # height entry
+    #     form.addWidget(QLabel("Vertical bar (mm):"), 2, 0)
+    #     edt_h = QLineEdit()
+    #     edt_h.setPlaceholderText("e.g. 0.300")
+    #     form.addWidget(edt_h, 2, 1)
+
+    #     # OK / Cancel
+    #     btn_ok     = QPushButton("OK")
+    #     btn_cancel = QPushButton("Cancel")
+    #     btn_ok.clicked.connect(dlg.accept)
+    #     btn_cancel.clicked.connect(dlg.reject)
+    #     h_btn = QHBoxLayout()
+    #     h_btn.addStretch()
+    #     h_btn.addWidget(btn_ok)
+    #     h_btn.addWidget(btn_cancel)
+    #     form.addLayout(h_btn, 3, 0, 1, 2)
+
+
+    #     if dlg.exec() != QDialog.DialogCode.Accepted:
+    #         return
+
+    #     # --- parse numbers safely ---------------------------------
+    #     try:
+    #         w_mm = float(edt_w.text())
+    #         h_mm = float(edt_h.text() or "0")
+    #     except ValueError:
+    #         QMessageBox.warning(self, "Invalid input",
+    #                             "Please enter numeric values.")
+    #         return
+    #     if w_mm <= 0:
+    #         QMessageBox.warning(self, "Invalid width",
+    #                             "Width must be > 0.")
+    #         return
+
+    #     self.bar_mm_w = w_mm
+    #     self.bar_mm_h = h_mm if h_mm > 0 else None  
+
+    #     msg = f"Width bar  = {self.bar_mm_w:.3f} mm"
+    #     if self.bar_mm_h is not None:
+    #         msg += f"\nHeight bar = {self.bar_mm_h:.3f} mm"
+    #     else:
+    #         msg += "\nHeight bar = (not set)"
+    #     QMessageBox.information(self, "Calibration stored", msg)
+
+
 
 ################################################################################################################################################
 ################################################################################################################################################
@@ -595,50 +792,57 @@ class ImageClassificationApp(QWidget):
         ##############################################################################################################################################
         # -------------------- Aggregate Scorer --------------------
         grp_agg = QGroupBox("Aggregate Function")
-        v_agg   = QVBoxLayout()
-        h_agg_btns = QHBoxLayout()
+        grid    = QGridLayout()                  
 
+        # row 0 –– control buttons
         self.btn_agg_start = QPushButton("Start")
         self.btn_agg_start.clicked.connect(self._agg_start)
-        h_agg_btns.addWidget(self.btn_agg_start)
+        grid.addWidget(self.btn_agg_start, 0, 0)
 
         self.btn_agg_stop = QPushButton("Stop")
         self.btn_agg_stop.clicked.connect(self._agg_stop)
-        self.btn_agg_stop.setEnabled(False)       
-        h_agg_btns.addWidget(self.btn_agg_stop)
-
-        h_agg_btns.addStretch()
-        v_agg   = QVBoxLayout()
-
-        v_agg.addLayout(h_agg_btns)      
-        self.btn_agg_export = QPushButton("Export Aggregate")
-        self.btn_agg_export.setEnabled(False)        
-        self.btn_agg_export.clicked.connect(self._agg_export)
-        v_agg.addWidget(self.btn_agg_export)
-
-
-        self.lbl_agg = QLabel("Analysis pending...")
-        v_agg.addWidget(self.lbl_agg)
+        self.btn_agg_stop.setEnabled(False)
+        grid.addWidget(self.btn_agg_stop, 0, 1)
 
         self.btn_reset = QPushButton("Reset")
         self.btn_reset.clicked.connect(self._on_reset)
-        v_agg.addWidget(self.btn_reset)
-        self.lbl_help = QLabel(
-            "Tip ▶ Press <kbd>Spacebar</kbd> to add this view to the aggregate."
-        )
-        self.lbl_help.setStyleSheet(
-            "QLabel { color: grey; font-style: italic; margin-top: 4px; }"
-        )
-        v_agg.addWidget(self.lbl_help)
+        self.btn_reset.setEnabled(False)
+        grid.addWidget(self.btn_reset, 0, 2)
 
-        grp_agg.setLayout(v_agg)
+        self.btn_calib = QPushButton("Calibrate")
+        self.btn_calib.clicked.connect(self._calibrate_area)
+        self.btn_calib.setEnabled(False)
+        grid.addWidget(self.btn_calib, 0, 3)
+
+        self.btn_agg_export = QPushButton("Export")
+        self.btn_agg_export.setEnabled(False)
+        self.btn_agg_export.clicked.connect(self._agg_export)
+        grid.addWidget(self.btn_agg_export, 0, 4)
+
+        # row 1 –– results + tip
+        box = QFrame()
+        box.setFrameShape(QFrame.Shape.Box)
+        box.setLineWidth(1)
+        v_box = QVBoxLayout(box)
+        self.lbl_agg = QLabel("Analysis pending…")
+        self.lbl_agg.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        v_box.addWidget(self.lbl_agg)
+        self.lbl_help = QLabel("Tip ⌨ Press <kbd>Space</kbd> to add this tile")
+        self.lbl_help.setStyleSheet("color:grey; font-style:italic;")
+        v_box.addWidget(self.lbl_help)
+        grid.addWidget(box, 1, 0, 1, 5)      
+
+        grp_agg.setLayout(grid)
         main_right.addWidget(grp_agg)
-        sc_add = QShortcut(QKeySequence("Space"), self)  
+
+        # global space-bar shortcut
+        sc_add = QShortcut(QKeySequence("Space"), self)
         sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
         sc_add.activated.connect(self._on_add)
-        self.shortcut_add = sc_add          
-        self.btn_agg_start.setEnabled(False) 
-        self.btn_reset.setEnabled(False)
+        self.shortcut_add = sc_add
+
+        # disable initially
+        self.btn_agg_start.setEnabled(False)
 
         ################################################################################################################################################
         ################################################################################################################################################
@@ -740,8 +944,28 @@ class ImageClassificationApp(QWidget):
         self.latest_metrics = metrics   
         self.latest_frame    = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()   # annotated
         self.latest_original = metrics.get("orig_img", self.latest_frame).copy()
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-        h, w, c = frame_rgb.shape
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).copy()
+        h, w, c = frame_bgr.shape
+
+        # CENTRAL 1/3 × 1/3  CALIBRATION BOX
+        if self.show_calib_box:
+            bx = int(w / 3);  by = int(h / 3)          # Box Size
+            cx = (w - bx) // 2;  cy = (h - by) // 2    # Put it in the middle
+            p1, p2 = (cx, cy), (cx + bx, cy + by)
+            bar = min(2, max(1, h // 140))
+
+            # Transparent
+            overlay = frame_bgr.copy()
+            cv2.rectangle(overlay, p1, p2, (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.18, frame_bgr, 0.82, 0, frame_bgr)
+
+            #白描边 + 黑实线
+            # cv2.rectangle(frame_bgr, (p1[0]-1, p1[1]-1), (p2[0]+1, p2[1]+1),
+            #             (250, 250, 250), bar, lineType=cv2.LINE_AA)
+            cv2.rectangle(frame_bgr, p1, p2, (250, 250, 250), bar, lineType=cv2.LINE_AA)
+
+
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB) 
         qimg = QImage(frame_rgb.data, w, h, c*w, QImage.Format.Format_RGB888)
         self.lbl_img.setPixmap(QPixmap.fromImage(qimg).scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio))
         self.lbl_res.setText(f"Result: {txt}")
@@ -752,6 +976,7 @@ class ImageClassificationApp(QWidget):
         if not self.inference_ready:
             self.inference_ready = True
             self.btn_agg_start.setEnabled(True)
+            self.btn_calib.setEnabled(True)
     # --------------------------------- Export------------------------------------------
     def _export(self):
         if self.latest_frame is None:

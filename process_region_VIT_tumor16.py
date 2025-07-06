@@ -115,11 +115,13 @@ def process_region(region, **kwargs):
 
 
     final_conf = float(final_prob_numpy[top_3_idx[0]])
+    top_1 = top_3_idx[0] 
     metrics = {
-        "conf": final_conf,
-        "area_px": frame.shape[0] * frame.shape[1],
-        "mpp": metadata.get("mpp", 0.25),
-        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+        "conf":      final_conf,
+        "pred_cls":  metadata['classes'][top_1],   # ← NEW
+        "area_px":   frame.shape[0] * frame.shape[1],
+        "mpp":       metadata.get("mpp", 0.25),
+        "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
     }
     return frame, res, metrics
 
