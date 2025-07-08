@@ -29,13 +29,22 @@ def process_region(region, **kwargs):
     slices = extract_tiles(frame, tile_size)
 
     # Detect and render
-    results = model(slices)
+
+    try:
+        _conf = float(kwargs['additional_configs'].get('confidence_level', 0.6))
+    except:
+        _conf = 0.6
+
+    results = model(slices, conf=_conf)
 
     from ultralytics.utils.plotting import Annotator
     from ultralytics.data.augment import LetterBox
     import torch
 
-
+    try:
+        _mask_alpha = 1-float(kwargs['additional_configs'].get('mask_transparency', 0.5))
+    except:
+        _mask_alpha = 0.5
 
     tile_size_y = tile_size_x = tile_size
     if frame.shape[0] < tile_size:
@@ -71,7 +80,8 @@ def process_region(region, **kwargs):
                     2: (0, 255, 0),  # misc. green
                 }
                 annotator.masks(results[k].masks.data,
-                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu)
+                                colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu,
+                                alpha=_mask_alpha)
 
                 seg_mask[
                 (i * tile_size):((i * tile_size) + tile_size),
