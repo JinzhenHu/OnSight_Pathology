@@ -105,7 +105,8 @@ def process_region(region, **kwargs):
     top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
     top_3_idx = top_3_idx[:1]
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
+    probs_dict = {cls: float(p) for cls, p
+                in zip(metadata['classes'], final_prob_numpy)}
     ###Max
     # result_tensor = torch.vstack(result)
     # final_prob, _ = torch.max(result_tensor, dim=0)
@@ -122,6 +123,7 @@ def process_region(region, **kwargs):
     metrics = {
         "conf":      final_conf,
         "pred_cls":  metadata['classes'][top_1],  
+        "probs":      probs_dict,
         "area_px":   frame.shape[0] * frame.shape[1],
         "mpp":       metadata.get("mpp", 0.25),
         "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)

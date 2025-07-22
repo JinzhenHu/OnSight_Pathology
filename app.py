@@ -32,11 +32,11 @@ print("Torch version:", torch.__version__)
 ##############################################################################################################################################
 
 LLM_CATALOG = {    
-    "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
+    # "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
     "Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
-    "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
-    "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
-    "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
+    # "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
+    # "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
+    # "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
    # "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
 }
 
@@ -50,12 +50,11 @@ dropdown_categories = [
          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
         #{'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
         {'name': "New Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
-       {'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
+       #{'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
        #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
-        {'name': "MIB (YOLO, Segmentation)", 'info_file': 'metadata/mib_yolo_1024.json'},
-        {'name': "MIB (YOLO, Bounding Boxes)", 'info_file': 'metadata/mib_yolo_1024_det.json'},
+        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
         {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [
@@ -313,46 +312,9 @@ class ImageClassificationApp(QWidget):
         self.show_calib_box = False
         self.cls_stats.clear()
 
-
-    # def _agg_export(self):
-    #     if not self.agg_records:
-    #         QMessageBox.information(self, "Nothing to export", "No tiles added yet.")
-    #         return
-
-    #     # choose folder
-    #     out_dir = QFileDialog.getExistingDirectory(
-    #         self, "Select export folder", "")
-    #     if not out_dir:
-    #         return
-
-    #     # save images & gather rows
-    #     rows = []
-    #     for idx, rec in enumerate(self.agg_records, start=1):
-    #         base = f"{out_dir}/{idx}"
-    #         orig_path  = base + ".jpg"
-    #         anno_path  = base + "_annotated.jpg"
-
-    #         cv2.imwrite(orig_path,  cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
-    #         cv2.imwrite(anno_path,  cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
-
-    #         row = rec["metrics"].copy()
-    #         row["file_orig"]      = orig_path
-    #         row["file_annotated"] = anno_path
-    #         rows.append(row)
-
-    #     # write CSV 
-    #     csv_path = f"{out_dir}/aggregate_metrics.csv"
-    #     import csv
-    #     with open(csv_path, "w", newline="", encoding='utf-8') as fh:
-    #         writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
-    #         writer.writeheader()
-    #         writer.writerows(rows)
-
-    #     QMessageBox.information(
-    #         self, "Export complete",
-    #         f"Saved {len(rows)} images and metrics to:\n{out_dir}") 
-
-
+    # ======================================================================== 
+    # Aggregate Export 
+    # ========================================================================
     def _agg_export(self):
         if not self.agg_records:
             QMessageBox.information(
@@ -376,6 +338,7 @@ class ImageClassificationApp(QWidget):
 
         # ── Save Images ───────────────────────────────────
         rows = []
+        all_clsset = set()
         for idx, rec in enumerate(self.agg_records, start=1):
             base = os.path.join(out_dir, f"{idx:03d}")     # 000,001…
             orig_path = base + ".jpg"
@@ -385,11 +348,30 @@ class ImageClassificationApp(QWidget):
                         cv2.cvtColor(rec["orig"],  cv2.COLOR_RGB2BGR))
             cv2.imwrite(anno_path,
                         cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
-
             row = rec["metrics"].copy()
+            if "Class" in row:                  # present only in classification
+                row.pop("Confidence score", None)
             row["file_orig"]      = orig_path
             row["file_annotated"] = anno_path
+            if "probs" in rec:                       # only classification
+                for cls, p in rec["probs"].items():
+                    row[cls] = p
+                    all_clsset.add(cls)
             rows.append(row)
+        
+        # Skip if not classification task    
+        if all_clsset:
+            for r in rows:
+                for cls in all_clsset:
+                    r.setdefault(cls, "")
+
+            # Add average row
+            avg_row = {k: "" for k in rows[0].keys()}
+            avg_row["Class"] = "AVERAGE"
+            for cls in all_clsset:
+                vals = [r[cls] for r in rows if r[cls] != ""]
+                avg_row[cls] = sum(vals)/len(vals) if vals else ""
+            rows.append(avg_row)
 
         # ── wrte CSV ─────────────────────────────────────────────
         csv_path = os.path.join(out_dir, "aggregate_metrics.csv")
@@ -413,6 +395,7 @@ class ImageClassificationApp(QWidget):
         meta = model_to_info[self.cmb_model.currentText()]
         agg_type = meta.get("aggregate_type", "classification")
         m  = self.latest_metrics
+        extra_payload = {}  
 
         if self.box_mm2 and not self.show_calib_box:      
             mm2 = self.box_mm2 * 9
@@ -439,6 +422,7 @@ class ImageClassificationApp(QWidget):
             }
         # ---------- Mib Task -------------
         elif agg_type == "mib":
+            
             pct = (m["mib_pos"] / m["mib_total"] * 100
                 if m["mib_total"] else 0)
             reply = QMessageBox.question(
@@ -464,6 +448,7 @@ class ImageClassificationApp(QWidget):
             }
         # ---------- Classification Task ----------
         elif agg_type == "classification":
+            
             reply = QMessageBox.question(
                 self, "Add this tile?",
                 (f"Confidence = {m['conf']:.3f}\n"
@@ -490,11 +475,13 @@ class ImageClassificationApp(QWidget):
             st['conf_sum'] += m["conf"]
             st['area']     += mm2
             # ────────────────────────────────────────────────────────────
+            extra_payload = {"probs": m["probs"]}
         # ---------- Accumulate Function ----------
         self.agg_records.append({
             "annot": self.latest_frame.copy(),
             "orig":  self.latest_original.copy(),
-            "metrics": new_metrics,               
+            "metrics": new_metrics, 
+            **extra_payload               
         })
         self.btn_agg_export.setEnabled(True) 
         self.agg.total_area_mm2 += mm2 

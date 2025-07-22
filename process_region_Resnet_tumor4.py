@@ -109,18 +109,17 @@ def process_region(region, **kwargs):
     # top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
     # top_3_idx = top_3_idx[:1]
     # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-
+    probs_dict = {cls: float(p) for cls, p
+                in zip(metadata['classes'], final_prob_numpy)}
     res = ''
     for idx in top_3_idx:
         res += '{}: {:.4f}\n'.format(metadata['classes'][idx], final_prob_numpy[idx])
-
-
     final_conf = float(final_prob_numpy[top_3_idx[0]])
     top_1 = top_3_idx[0] 
     metrics = {
         "conf":      final_conf,
-        "pred_cls":  metadata['classes'][top_1],   # ← NEW
+        "pred_cls":  metadata['classes'][top_1],  
+        "probs":      probs_dict,
         "area_px":   frame.shape[0] * frame.shape[1],
         "mpp":       metadata.get("mpp", 0.25),
         "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
