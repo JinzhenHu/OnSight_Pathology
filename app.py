@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import mss
 import os
+
 from datetime import datetime
 import csv
 import torch
@@ -33,7 +34,8 @@ print("Torch version:", torch.__version__)
 
 LLM_CATALOG = {    
     # "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
-    "Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
+    #"Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
+    "Huatuo-7b":    "metadata/huatuo.json",
     # "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
     # "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
     # "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
@@ -49,14 +51,13 @@ dropdown_categories = [
          #{'name': "Tumor Compact (VGG19)", 'info_file': 'metadata/tumor_compact_vgg.json'},
          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
         #{'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
-        {'name': "New Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
+        {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
        #{'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
        #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
-        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
-        #{'name': "MIB (YOLO, Bounding Boxes)", 'info_file': 'metadata/mib_yolo_1024_det.json'},
-        #{'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
+        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
+        {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
     ]),
     ("▶️ Object Detection Models", [
         {'name': "Mitosis Detection (Retinanet)", 'info_file': 'metadata/mib_mitosis.json'}
@@ -128,7 +129,7 @@ class LLMChatDialog(QDialog):
 
         cfg_path = LLM_CATALOG[parent.cmb_llm.currentText()]
         self.model, self.tokenizer, self.llm_cfg = load_llm(cfg_path)
-        self.msgs = []  # chat history
+        self.msgs = []  
 
 
         # ---------------------- GUI  -----------------------
@@ -186,7 +187,7 @@ class LLMChatDialog(QDialog):
         self.txt_history.append(f"<b>{who}:</b> {txt}")
 
 ##############################################################################################################################################
-# Worker thread 
+# Worker thread
 ##############################################################################################################################################
 
 class ClassificationThread(QThread):
@@ -220,7 +221,8 @@ class ClassificationThread(QThread):
                 metadata=self.metadata,
                 additional_configs=extra_cfg,
             )
-            res_txt += f"\n({time.time()-t0:.2f}s)"
+            res_txt += f"\n({time.time()-t0:.4f}s)"
+            # print(res_txt)
             # self.update_image.emit(frame, res_txt)
 #######################################################################
 #Aggregate Function update image new version
@@ -245,6 +247,98 @@ class ClassificationThread(QThread):
     def resume(self):
         self.paused = False
 
+###############################################################################################################    
+# Stylesh
+###############################################################################################################    
+PROFESSIONAL_STYLESHEET = """
+QWidget {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10pt;
+}
+QGroupBox {
+    background-color: #34495e;
+    border-radius: 6px;
+    border: 1px solid #4a627a;
+    margin-top: 20px;
+    padding: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 5px 10px;
+    background-color: #4a627a;
+    color: #1abc9c;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    font-weight: bold;
+}
+QPushButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #4ea8e1;
+}
+QPushButton:pressed {
+    background-color: #2980b9;
+}
+QPushButton:disabled {
+    background-color: #566573;
+    color: #95a5a6;
+}
+QLabel {
+    background-color: transparent;
+}
+QLineEdit, QTextEdit, QComboBox {
+    background-color: #2c3e50;
+    border: 1px solid #566573;
+    border-radius: 4px;
+    padding: 6px;
+    color: #ecf0f1;
+}
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
+    border: 1px solid #1abc9c;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 25px;
+    border-left-width: 1px;
+    border-left-color: #566573;
+    border-left-style: solid;
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+QComboBox::down-arrow {
+    image: url(./icons/chevron-down.svg); /* Assumes an icon file is available */
+    width: 16px;
+    height: 16px;
+}
+QComboBox QAbstractItemView {
+    border: 1px solid #1abc9c;
+    background-color: #34495e;
+    selection-background-color: #1abc9c;
+    selection-color: white;
+    color: #ecf0f1;
+}
+QFrame {
+    border: 1px solid #4a627a;
+    border-radius: 4px;
+    background-color: #2c3e50;
+}
+QMessageBox {
+    background-color: #34495e;
+}
+QDialog {
+    background-color: #2c3e50;
+}
+"""
 ##############################################################################################################################################
 # Main GUI 
 ##############################################################################################################################################

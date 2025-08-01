@@ -13,6 +13,7 @@ from pathlib import Path
 from transformers.generation import GenerationConfig
 import tempfile,atexit
 from contextlib import contextmanager
+from qwen_vl_utils import process_vision_info ###New
 #########################################################################################################
 #Loading LLM 
 #########################################################################################################
@@ -123,8 +124,20 @@ def load_llm(config_path: str):
             cfg.get("tokenizer_repo", cfg["repo"]),
             trust_remote_code=True,
         )
+        return model, tokenizer, cfg
+    # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL ---------------------------
+    if cfg["repo"].lower().endswith("huatuogpt-vision-7b-qwen2.5vl"):
+        from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            cfg["repo"],
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True,
+        ).eval()
+        tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
+        return model, tokenizer, cfg
 
-    return model, tokenizer, cfg
+
 
 #########################################################################################################
 #Chat with LLM
@@ -324,12 +337,50 @@ def stream_reply( model, tokenizer,llm_config, pil_img, prompt, history):
         history.append({"role": "user", "content": [pil_img, prompt]})
         history.append({"role": "assistant", "content": raw_reply})
     
+    # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL -------------
+    if llm_config["repo"].lower().endswith("huatuogpt-vision-7b-qwen2.5vl"):
+
+        # Build the message in the same format used by Qwen‑2.5‑VL
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": pil_img},
+                    {"type": "text",  "text": prompt},
+                ],
+            }
+        ]
+
+        prompt_text = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+
+        image_inputs, _ = process_vision_info(messages)   # helper from qwen_vl_utils.py
+
+        inputs = tokenizer(
+            text=[prompt_text],
+            images=image_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(model.device)          # works on single or multiple GPUs
+
+        with torch.inference_mode():
+            gen_ids = model.generate(**inputs, max_new_tokens=512)
+            reply = tokenizer.batch_decode(
+                gen_ids[:, inputs.input_ids.shape[1]:],
+                skip_special_tokens=True
+            )[0]
+
+        txt = reply
+        history.append({"role": "user", "content": [pil_img, prompt]})
+        history.append({"role": "assistant", "content": reply})
+        
     MAX_PAIRS = 2                     
     MAX_MSGS  = MAX_PAIRS * 2   
 
     if len(history) > MAX_MSGS:
         del history[:-MAX_MSGS] 
-
+        
     return txt , history
 
 
