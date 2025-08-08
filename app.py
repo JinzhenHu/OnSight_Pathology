@@ -1,3 +1,4 @@
+import crash_logging
 import sys
 import math
 import time
