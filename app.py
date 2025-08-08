@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import mss
 import os
+import gc
 
 from datetime import datetime
 import csv
@@ -17,14 +18,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel
 from PyQt6.QtGui import QShortcut, QKeySequence,QIcon
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer, QProcess
 from pynput import mouse
 from PIL import Image
 from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 from utils import load_model, resource_path
-from llm_manager import load_llm   
-from llm_manager import stream_reply
 from dataclasses import dataclass
+import tempfile
 print("Torch version:", torch.__version__)
 
 
@@ -56,8 +56,7 @@ dropdown_categories = [
        #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
-        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo.json'},
-        {'name': "MIB (Mask R-CNN)", 'info_file': 'metadata/mib_mrcnn.json'}
+        {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
     ]),
     ("▶️ Object Detection Models", [
         {'name': "Mitosis Detection (Retinanet)", 'info_file': 'metadata/mib_mitosis.json'}
@@ -88,29 +87,6 @@ class AggregateStats:
 
 
 ##############################################################################################################################################
-#LLM Worker
-##############################################################################################################################################
-class _LLMWorker(QThread):
-    finished = pyqtSignal(str)        
-
-    def __init__(self, model, tokenizer,llm_cfg, pil_img, msgs, prompt):
-        super().__init__()
-        self.model = model
-        self.tokenizer = tokenizer
-        self.llm_cfg = llm_cfg 
-        self.pil_img = pil_img
-        self.msgs = msgs
-        self.prompt = prompt
-
-
-    def run(self):
-        reply, self.msgs = stream_reply(
-            self.model, self.tokenizer,self.llm_cfg,
-            self.pil_img, self.prompt,
-            self.msgs)
-        self.finished.emit(reply)
-
-##############################################################################################################################################
 #LLM chat Dialog
 ##############################################################################################################################################
 class LLMChatDialog(QDialog):
@@ -118,70 +94,119 @@ class LLMChatDialog(QDialog):
 
     def __init__(self, frame_rgb: np.ndarray, parent=None):
         super().__init__(parent)
-
-        # ----------------------- GUI  -----------------------
         self.setWindowTitle("Chat with LLM")
         self.resize(480, 600)
 
+        self.model_ready = False
+        self.frame_rgb = frame_rgb
+        self.parent = parent
+        self.msgs = []
 
-        pil_img = Image.fromarray(frame_rgb)     
-        self.pil_img = pil_img
-
-        cfg_path = LLM_CATALOG[parent.cmb_llm.currentText()]
-        self.model, self.tokenizer, self.llm_cfg = load_llm(cfg_path)
-        self.msgs = []  
-
+        # Save image as temporary PNG
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
+            self.temp_img_path = f.name
+            Image.fromarray(frame_rgb).save(self.temp_img_path)
 
         # ---------------------- GUI  -----------------------
-        vbox = QVBoxLayout(self)
 
-        lbl_img = QLabel()                    
+        # Preview image
+        vbox = QVBoxLayout(self)
+        lbl_img = QLabel()
         lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
         h, w, c = frame_rgb.shape
-        qimg = QImage(frame_rgb.data, w, h, c*w, QImage.Format.Format_RGB888)
-        lbl_img.setPixmap(QPixmap.fromImage(qimg).scaled(
-            300, 300, Qt.AspectRatioMode.KeepAspectRatio))
+        qimg = QImage(frame_rgb.data, w, h, c * w, QImage.Format.Format_RGB888)
+        lbl_img.setPixmap(QPixmap.fromImage(qimg).scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio))
         vbox.addWidget(lbl_img)
 
-        self.txt_history = QTextEdit()         
+        self.txt_history = QTextEdit()
         self.txt_history.setReadOnly(True)
         vbox.addWidget(self.txt_history)
 
-        self.inp = QLineEdit()                   
+        self.inp = QLineEdit()
         self.inp.setPlaceholderText("Ask something about the image …")
         vbox.addWidget(self.inp)
 
-        btn_send = QPushButton("Send")      
+        btn_send = QPushButton("Send")
         btn_send.clicked.connect(self.on_send)
         vbox.addWidget(btn_send)
 
+        self.txt_history.setText("<b>Note: Loading the LLM for the first time can take a long time</b>")
+        self.txt_history.append("<i>Please wait, loading model…</i>")
+        self.inp.setEnabled(False)
 
-    # ---------------------Send the Prompt to LLM------------------------
+        # Launch subprocess to handle model
+        self._start_process()
+
+    def _start_process(self):
+        self.process = QProcess(self)
+
+        if getattr(sys, 'frozen', False):
+            # PyInstaller bundled executable — use .exe
+            script_path = os.path.join(os.path.dirname(sys.executable), "llm_worker_process.exe")
+            self.process.setProgram(script_path)
+            self.process.setArguments([
+                "--cfg", LLM_CATALOG[self.parent.cmb_llm.currentText()],
+                "--image", self.temp_img_path,
+            ])
+        else:
+            # Running locally — use .py
+            script_path = os.path.join(os.path.dirname(__file__), "llm_worker_process.py")
+            self.process.setProgram(sys.executable)
+            self.process.setArguments([
+                script_path,
+                "--cfg", LLM_CATALOG[self.parent.cmb_llm.currentText()],
+                "--image", self.temp_img_path,
+            ])
+        
+        self.process.readyReadStandardOutput.connect(self._handle_stdout)
+        self.process.start()
+
+    def _handle_stdout(self):
+        output = bytes(self.process.readAllStandardOutput()).decode("utf-8")
+        for line in output.strip().splitlines():
+            try:
+                msg = json.loads(line)
+                if msg["type"] == "ready":
+                    self.model_ready = True
+                    self.txt_history.append("<i>Model loaded. You can start chatting.</i>")
+                elif msg["type"] == "reply":
+                    self._append("Assistant", msg["text"])
+                elif msg["type"] == "error":
+                    self._append("Error", msg["text"])
+                
+                self.inp.setEnabled(True)
+                self.inp.setFocus()
+            except Exception as e:
+                print("Malformed JSON:", line)
+
+    def closeEvent(self, event):
+        if self.process and self.process.state() == QProcess.ProcessState.Running:
+            self.process.kill()
+            self.process.finished.connect(self._cleanup_temp_file)
+            self.process.waitForFinished()  # Ensure process exits
+        else:
+            self._cleanup_temp_file()
+
+        super().closeEvent(event)
+
+    def _cleanup_temp_file(self):
+        if os.path.exists(self.temp_img_path):
+            try:
+                os.remove(self.temp_img_path)
+            except Exception as e:
+                print(f"Could not delete temp image: {e}")
+
     def on_send(self):
         text = self.inp.text().strip()
         if not text:
             return
         self.inp.clear()
-
-        # 1) show the user’s question 
         self._append("User", text)
-
-        # 2) start background thread
-        self.worker = _LLMWorker(self.model, self.tokenizer,self.llm_cfg,
-                                self.pil_img, self.msgs, text)
-        self.worker.finished.connect(self._on_reply)
-        self.worker.start()
-
-        # disable the input 
         self.inp.setEnabled(False)
 
-
-    # -----------------------Recieve the Response from LLM-----------------------------------
-    def _on_reply(self, reply_text):
-        
-        self._append("Assistant", reply_text)
-        self.inp.setEnabled(True)
-        self.inp.setFocus()
+        if self.process:
+            msg = json.dumps({"type": "prompt", "text": text}) + "\n"
+            self.process.write(msg.encode("utf-8"))
 
     def _append(self, who, txt):
         self.txt_history.append(f"<b>{who}:</b> {txt}")
@@ -198,7 +223,6 @@ class ClassificationThread(QThread):
         super().__init__()
         self.ui = ui_instance 
         self.running = True
-        self.paused = False
 
         res = load_model(model_to_info[model_name])
         self.model = res["model"]
@@ -208,9 +232,6 @@ class ClassificationThread(QThread):
 
     def run(self):
         while self.running:
-            if self.paused:
-                time.sleep(0.1)
-                continue
             t0 = time.time()
             extra_cfg = {
                 k: w.text() for k, w in self.ui.additional_config_inputs.items()
@@ -234,18 +255,14 @@ class ClassificationThread(QThread):
 
     def stop(self):
         self.running = False
-        self.wait()             
+        self.wait()          
 
         # -------- free the model from GPU memory ---------
         if self.using_gpu:
             del self.model
+            gc.collect()
             torch.cuda.empty_cache()
 
-    def pause(self):
-        self.paused = True
-
-    def resume(self):
-        self.paused = False
 
 ###############################################################################################################    
 # Stylesh
@@ -796,6 +813,8 @@ class ImageClassificationApp(QWidget):
         h_llm   = QHBoxLayout()
         self.cmb_llm = QComboBox()
         self.cmb_llm.addItems(LLM_CATALOG.keys())
+        if self.cmb_llm.count() <= 1:
+            self.cmb_llm.setDisabled(True) # Disable if there's only one option
         h_llm.addWidget(self.cmb_llm)
         grp_llm.setLayout(h_llm)
         main_left.addWidget(grp_llm)
@@ -998,7 +1017,6 @@ class ImageClassificationApp(QWidget):
             return
         if self.thread and self.thread.isRunning():
             self.thread.stop()       
-            self.thread.wait()        
             self.thread = None
 
         model_name = self.cmb_model.currentText()
@@ -1016,7 +1034,7 @@ class ImageClassificationApp(QWidget):
 
     def _stop(self):
         if self.thread:
-            self.thread.stop(); self.thread.wait(); self.thread = None
+            self.thread.stop(); self.thread = None
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.btn_chat.setEnabled(False)
@@ -1079,24 +1097,13 @@ class ImageClassificationApp(QWidget):
     def _open_chat(self):
         if self.latest_frame is None:
             return
+        
+        self._stop() # frees GPU memory so that we can load LLM
+        self.btn_chat.setEnabled(True)
 
-        # ------------------------- Reminder for LLM-----------------------------
-        reply = QMessageBox.question(
-            self, "Load LLM?",
-            "Loading the LLM for the first time can take a long time.\n"
-            "Do you want to continue? (This message can be ignored on subsequent loads.)?\n"
-            "Note: Please load only one model at a time to avoid running out of disk space",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.No:
-            return
-        if self.thread:
-           # self.thread.pause()
-            self.thread.stop()     # frees GPU memory
-            self.thread = None
         dlg = LLMChatDialog(self.latest_frame, self)
         dlg.exec()
-        if self.thread:
-            self.thread.resume()
+ 
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
         info = model_to_info[self.cmb_model.currentText()].get("info", "No info.")

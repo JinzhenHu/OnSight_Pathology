@@ -312,35 +312,6 @@ def load_model(model_info):
 
             return res
 
-    ##############################################################################
-    # Mask-RCNN Detectron2
-    ##############################################################################
-
-        if model_info['model'] == 'MaskRCNN':
-            import torch
-            from detectron2.engine import DefaultPredictor
-            from detectron2.config import get_cfg
-            from detectron2 import model_zoo
-            from huggingface_hub import hf_hub_download
-            from process_region_MRCNN_MIB import process_region
-
-            weights_path = hf_hub_download(repo_id=model_info['repo'], filename="model.pth")
-
-            cfg = get_cfg()
-            cfg.merge_from_file(resource_path("detectron2/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
-            cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
-            cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7
-            cfg.MODEL.WEIGHTS = weights_path
-            cfg.MODEL.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-            model = DefaultPredictor(cfg)
-
-            res['model'] = model
-            res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
-
-            return res
-
     elif model_info['repo_src'] == 'Local':
         pass
     
