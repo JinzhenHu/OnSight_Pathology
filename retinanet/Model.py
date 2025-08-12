@@ -36,6 +36,12 @@ class MyMitosisDetection:
 		tumortypes = config["data"]["value"]["tumortypes"].split(",")
 		self.mean = np.array(np.mean(np.array([value for key, value in statistics['mean'].items() if tumortypes.__contains__(key)]),axis=(0, 1)), dtype=np.float32)
 		self.std = np.array(np.mean(np.array([value for key, value in statistics['std'].items() if tumortypes.__contains__(key)]),axis=(0, 1)), dtype=np.float32)
+		
+		# Torch downloading weights in exe/packaged app will result in a crash
+		if sys.stdout is None:
+			sys.stdout = open(os.devnull, 'w')
+		if sys.stderr is None:
+			sys.stderr = open(os.devnull, 'w')
 
 		# network parameters
 		self.detect_thresh = detect_threshold
