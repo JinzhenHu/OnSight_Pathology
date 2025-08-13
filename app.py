@@ -1,3 +1,6 @@
+import os
+os.environ["PYTHONUTF8"] = "1" # So that logging special characters doesn't cause a crash
+
 import crash_logging
 import sys
 import math
@@ -6,7 +9,6 @@ import json
 import cv2
 import numpy as np
 import mss
-import os
 import gc
 
 from datetime import datetime
