@@ -14,12 +14,12 @@ from transformers.generation import GenerationConfig
 import tempfile,atexit
 from threading import Thread
 from contextlib import contextmanager
-from qwen_vl_utils import process_vision_info ###New
+from qwen_vl_utils import process_vision_info 
 #########################################################################################################
 #Loading LLM 
 #########################################################################################################
 #@lru_cache(maxsize=None) This allows the model stays in cache but will makes the software stuck if the user didn't have a large ARM GPU
-def load_llm(config_path: str):
+def load_llm(config_path: str, precision: str = "8bit"):
     """
     Return (model, tokenizer, cfg) — cached by config_path.
     """
@@ -128,31 +128,66 @@ def load_llm(config_path: str):
         return model, tokenizer, cfg
     
 
-    # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL ---------------------------
-    if cfg["repo"].lower().endswith("huatuogpt-vision-7b-qwen2.5vl"):
-        from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            cfg["repo"],
-            #torch_dtype=torch.bfloat16,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-        ).eval()
-        tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
-        return model, tokenizer, cfg
+    # # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL ---------------------------
+    # if cfg["repo"].lower().endswith("huatuogpt-vision-7b-qwen2.5vl"):
+    #     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+    #     bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+    #     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    #         cfg["repo"],
+    #         #torch_dtype=torch.bfloat16,
+    #         #quantization_config=bnb_config,
+    #         torch_dtype = torch.bfloat16,
+    #         device_map="auto",
+    #         trust_remote_code=True,
+    #     ).eval()
+    #     tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
+    #     return model, tokenizer, cfg
     
 
-    # ---------- medical-mllm-Lingshu-7B ---------------------------
-    if cfg["repo"].lower().endswith("lingshu-7b"):
+    # # ---------- medical-mllm-Lingshu-7B ---------------------------
+    # if cfg["repo"].lower().endswith("lingshu-7b"):
+    #     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+    #     bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+    #     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    #         cfg["repo"],
+    #         quantization_config=bnb_config,
+    #         device_map="auto",
+    #         # trust_remote_code=True,
+    #     ).eval()
+    #     tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
+    #     return model, tokenizer, cfg
+
+    # ---------- HuatuoGPT-Vision & Lingshu-7B ----------------
+    repo_lower = cfg["repo"].lower()
+    # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL & Lingshu-7B ---------------------------
+    if repo_lower.endswith("huatuogpt-vision-7b-qwen2.5vl") or repo_lower.endswith("lingshu-7b"):
         from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+        
+        model_kwargs = {
+            "device_map": "auto",
+            "trust_remote_code": True,
+        }
+
+        if precision == "4bit":
+            # For 4-bit
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+        elif precision == "16bit":
+            # For 16-bit
+            model_kwargs["torch_dtype"] = torch.bfloat16
+        else: # Default to 8bit
+            # For 8-bit
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             cfg["repo"],
-            quantization_config=bnb_config,
-            device_map="auto",
-            # trust_remote_code=True,
+            **model_kwargs,
         ).eval()
+        
         tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
         return model, tokenizer, cfg
 

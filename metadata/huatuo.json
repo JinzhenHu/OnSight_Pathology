@@ -1,5 +1,6 @@
 {
   "name": "HuatuoGPT‑Vision‑7B‑Qwen2.5VL",
   "repo": "FreedomIntelligence/HuatuoGPT-Vision-7B-Qwen2.5VL",
-  "dtype": "bfloat16"
+  "precisions": ["8bit", "4bit", "16bit"],
+  "default_precision": "8bit"
 }

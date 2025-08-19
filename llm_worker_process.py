@@ -2,18 +2,24 @@ import argparse
 import json
 import sys
 from PIL import Image
-from llm_manager import load_llm   
+from llm_manager import load_llm
 from llm_manager import stream_reply
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--cfg", required=True)
 parser.add_argument("--image", required=True)
+parser.add_argument(
+    "--precision", 
+    choices=["4bit", "8bit", "16bit"], 
+    default="8bit",
+    help="Model loading precision."
+)
 args = parser.parse_args()
 
 with Image.open(args.image) as img:
     image_pil = img.convert("RGB")
 
-model, tokenizer, cfg = load_llm(args.cfg)
+model, tokenizer, cfg = load_llm(args.cfg, precision=args.precision)
 msgs = []
 print(json.dumps({"type": "ready"}), flush=True)
 

@@ -46,6 +46,16 @@ LLM_CATALOG = {
    # "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
 }
 
+LLM_METADATA = {}
+for name, path in LLM_CATALOG.items():
+    with open(resource_path(path), "r", encoding="utf-8") as f:
+        LLM_METADATA[name] = json.load(f)
+
+PRECISION_DISPLAY_MAP = {
+    "4bit": "Fastest Speed",
+    "8bit": "Balanced",
+    "16bit": "Highest Quality"
+}
 ##############################################################################################################################################
 # Dropdown model metadata
 ##############################################################################################################################################
@@ -141,8 +151,13 @@ class LLMChatDialog(QDialog):
         # Launch subprocess to handle model
         self._start_process()
 
+    # In LLMChatDialog._start_process
     def _start_process(self):
         self.process = QProcess(self)
+
+        precision = self.parent.cmb_llm_precision.currentData()
+        if not precision:
+            precision = "8bit"
 
         if getattr(sys, 'frozen', False):
             # PyInstaller bundled executable — use .exe
@@ -151,6 +166,7 @@ class LLMChatDialog(QDialog):
             self.process.setArguments([
                 "--cfg", LLM_CATALOG[self.parent.cmb_llm.currentText()],
                 "--image", self.temp_img_path,
+                "--precision", precision,
             ])
         else:
             # Running locally — use .py
@@ -160,6 +176,7 @@ class LLMChatDialog(QDialog):
                 script_path,
                 "--cfg", LLM_CATALOG[self.parent.cmb_llm.currentText()],
                 "--image", self.temp_img_path,
+                "--precision", precision,
             ])
         
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
@@ -776,8 +793,38 @@ class ImageClassificationApp(QWidget):
     #     else:
     #         msg += "\nHeight bar = (not set)"
     #     QMessageBox.information(self, "Calibration stored", msg)
+    # ------------------------------------------------------------
+    # LLM option
+    # ------------------------------------------------------------
+    def _update_llm_options(self):
+            """
+            Updates the precision dropdown based on the selected LLM model's metadata.
+            """
+            llm_name = self.cmb_llm.currentText()
+            meta = LLM_METADATA.get(llm_name, {})
 
+            precisions = meta.get("precisions")
+            self.cmb_llm_precision.clear()
 
+            if precisions:
+                for tech_name in precisions:
+                    display_name = PRECISION_DISPLAY_MAP.get(tech_name, tech_name)
+                    self.cmb_llm_precision.addItem(display_name, tech_name)
+                
+                # Set the default selection from metadata
+                default_precision = meta.get("default_precision")
+                if default_precision in precisions:
+                    index = self.cmb_llm_precision.findData(default_precision)
+                    if index != -1:
+                        self.cmb_llm_precision.setCurrentIndex(index)
+                
+                # Make the dropdown and its label visible
+                self.lbl_llm_precision.setVisible(True)
+                self.cmb_llm_precision.setVisible(True)
+            else:
+                # Hide the precision selector if not applicable
+                self.lbl_llm_precision.setVisible(False)
+                self.cmb_llm_precision.setVisible(False)
 
 ################################################################################################################################################
 ################################################################################################################################################
@@ -831,12 +878,18 @@ class ImageClassificationApp(QWidget):
         main_left.addWidget(grp_model)
         # -------------------- LLM selection -----------------------------
         grp_llm = QGroupBox("GPT Selection")
-        h_llm   = QHBoxLayout()
+        h_llm = QHBoxLayout()
         self.cmb_llm = QComboBox()
         self.cmb_llm.addItems(LLM_CATALOG.keys())
-        if self.cmb_llm.count() <= 1:
-            self.cmb_llm.setDisabled(True) # Disable if there's only one option
         h_llm.addWidget(self.cmb_llm)
+
+        self.lbl_llm_precision = QLabel("Mode:")
+        self.cmb_llm_precision = QComboBox()
+        h_llm.addWidget(self.lbl_llm_precision)
+        h_llm.addWidget(self.cmb_llm_precision)
+
+        h_llm.addStretch(1)
+        
         grp_llm.setLayout(h_llm)
         main_left.addWidget(grp_llm)
         # -------------------- Additional configs --------------------------
@@ -996,6 +1049,11 @@ class ImageClassificationApp(QWidget):
         h_main.addWidget(w_left, alignment=Qt.AlignmentFlag.AlignTop)
         h_main.addWidget(w_right, alignment=Qt.AlignmentFlag.AlignTop)
 
+        ################################################################
+        #LLM add
+        self.cmb_llm.currentIndexChanged.connect(self._update_llm_options)
+        self._update_llm_options() 
+        ################################################################
         self._on_model_changed() 
 
 

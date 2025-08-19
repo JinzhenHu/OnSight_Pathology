@@ -1,5 +1,6 @@
 {
   "name": "Lingshu-7B",
   "repo": "lingshu-medical-mllm/Lingshu-7B",
-  "dtype": "bfloat16"
+  "precisions": ["8bit", "4bit", "16bit"],
+  "default_precision": "8bit"
 }
