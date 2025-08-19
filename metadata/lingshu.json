@@ -1,0 +1,5 @@
+{
+  "name": "Lingshu-7B",
+  "repo": "lingshu-medical-mllm/Lingshu-7B",
+  "dtype": "bfloat16"
+}

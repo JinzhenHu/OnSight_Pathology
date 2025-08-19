@@ -15,10 +15,13 @@ with Image.open(args.image) as img:
 
 model, tokenizer, cfg = load_llm(args.cfg)
 msgs = []
-
 print(json.dumps({"type": "ready"}), flush=True)
 
-# Read prompts from stdin
+def streamer_callback(chunk):
+    """Takes a text chunk, wraps it in JSON, and prints it to stdout."""
+    print(json.dumps({"type": "chunk", "text": chunk}), flush=True)
+
+
 while True:
     line = sys.stdin.readline()
     if not line:
@@ -26,7 +29,11 @@ while True:
     try:
         msg = json.loads(line)
         if msg["type"] == "prompt":
-            reply, msgs = stream_reply(model, tokenizer, cfg, image_pil, msg["text"], msgs)
-            print(json.dumps({"type": "reply", "text": reply}), flush=True)
+            reply, msgs = stream_reply(
+                model, tokenizer, cfg,
+                image_pil, msg["text"], msgs,
+                streamer_callback=streamer_callback
+            )
+            print(json.dumps({"type": "stream_end"}), flush=True)
     except Exception as e:
         print(json.dumps({"type": "error", "text": str(e)}), flush=True)

@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog,QInputDialog
 )
 from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel
-from PyQt6.QtGui import QShortcut, QKeySequence,QIcon
+from PyQt6.QtGui import QShortcut, QKeySequence,QIcon,QTextCursor
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer, QProcess
 from pynput import mouse
 from PIL import Image
@@ -39,6 +39,7 @@ LLM_CATALOG = {
     # "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
     #"Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
     "Huatuo-7b":    "metadata/huatuo.json",
+    "Lingshu-7b":    "metadata/lingshu.json",
     # "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
     # "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
     # "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
@@ -169,18 +170,31 @@ class LLMChatDialog(QDialog):
         for line in output.strip().splitlines():
             try:
                 msg = json.loads(line)
-                if msg["type"] == "ready":
+                msg_type = msg.get("type")
+
+                if msg_type == "ready":
                     self.model_ready = True
                     self.txt_history.append("<i>Model loaded. You can start chatting.</i>")
-                elif msg["type"] == "reply":
-                    self._append("Assistant", msg["text"])
-                elif msg["type"] == "error":
-                    self._append("Error", msg["text"])
+                    self.inp.setEnabled(True)
+                    self.inp.setFocus()
                 
-                self.inp.setEnabled(True)
-                self.inp.setFocus()
+                elif msg_type == "chunk":
+                    # a piece of the stream, append it without a newline
+                    self.txt_history.moveCursor(QTextCursor.MoveOperation.End)
+                    self.txt_history.insertPlainText(msg["text"])
+                
+                elif msg_type == "stream_end":
+                    # The stream is finished, re-enable input
+                    self.inp.setEnabled(True)
+                    self.inp.setFocus()
+                
+                elif msg_type == "error":
+                    self._append("Error", msg["text"])
+                    self.inp.setEnabled(True)
+                    self.inp.setFocus()
+
             except Exception as e:
-                print("Malformed JSON:", line)
+                print(f"Malformed JSON or error processing message: {line}, Error: {e}")
 
     def closeEvent(self, event):
         if self.process and self.process.state() == QProcess.ProcessState.Running:
@@ -201,10 +215,14 @@ class LLMChatDialog(QDialog):
 
     def on_send(self):
         text = self.inp.text().strip()
-        if not text:
+        if not self.model_ready or not text:
             return
+        
         self.inp.clear()
         self._append("User", text)
+        
+        # Prepare the assistant's response area immediately
+        self.txt_history.append("<b>Assistant:</b> ")
         self.inp.setEnabled(False)
 
         if self.process:
