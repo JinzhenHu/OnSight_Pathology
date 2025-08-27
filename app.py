@@ -418,12 +418,20 @@ class DisclaimerDialog(QDialog):
         top_layout = QHBoxLayout()
         top_layout.setSpacing(15)
 
-        # Icon
+        # Icon in its own vbox to center it vertically
+        icon_layout = QVBoxLayout()
+        icon_layout.addStretch()
+
         icon_label = QLabel()
         # Use a standard Qt icon for a professional look
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
         icon_label.setPixmap(icon.pixmap(48, 48))
-        top_layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignTop)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # horizontal center
+        icon_layout.addWidget(icon_label)
+
+        icon_layout.addStretch()
+
+        top_layout.addLayout(icon_layout)  # add the vbox to the left
 
         # Text section (Title + Message)
         text_layout = QVBoxLayout()
@@ -486,7 +494,13 @@ class ImageClassificationApp(QWidget):
         self.last_result = ""
 
         # Load persistent settings
-        self.settings_file = "settings.json"
+        def get_user_settings_path(filename="settings.json"):
+            local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+            settings_dir = os.path.join(local_appdata, "OnSightPathology", "Settings")
+            os.makedirs(settings_dir, exist_ok=True)
+            return os.path.join(settings_dir, filename)
+
+        self.settings_file = get_user_settings_path()
         self.settings = self._load_settings()
 
         self._build_ui()
