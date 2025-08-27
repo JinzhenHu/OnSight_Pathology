@@ -1,8 +1,9 @@
-import sys
-import io
- # So that logging special characters doesn't cause a crash in exe
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8', errors='replace')
+import logging
+# Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
+# Crash logging to file unaffected.
+for h in logging.root.handlers[:]:
+    if isinstance(h, logging.StreamHandler):
+        logging.root.removeHandler(h)
 
 import crash_logging
 import sys
