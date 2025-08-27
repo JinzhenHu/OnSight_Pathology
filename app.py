@@ -1,5 +1,8 @@
 import os
-os.environ["PYTHONUTF8"] = "1" # So that logging special characters doesn't cause a crash
+import io
+ # So that logging special characters doesn't cause a crash in exe
+sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8', errors='replace')
 
 import crash_logging
 import sys
