@@ -10,5 +10,5 @@
     "Positive",
     "Negative"
   ],
-  "additional_configs": {"confidence_level":  0.6, "mask_transparency": 0.75}
+  "additional_configs": {"sensitivity":  0.4, "mask_transparency": 0.75}
 }

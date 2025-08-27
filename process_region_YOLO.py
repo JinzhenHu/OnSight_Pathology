@@ -31,7 +31,7 @@ def process_region(region, **kwargs):
     # Detect and render
 
     try:
-        _conf = float(kwargs['additional_configs'].get('confidence_level', 0.6))
+        _conf = 1-float(kwargs['additional_configs'].get('sensitivity', 0.4))
     except:
         _conf = 0.6
 

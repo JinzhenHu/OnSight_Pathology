@@ -267,7 +267,7 @@ def load_model(model_info):
                     return default
                 
             thred = 0.1
-            Cl = _safe_float(model_info['additional_configs'].get('confidence_level', 0))
+            Cl = 1-_safe_float(model_info['additional_configs'].get('sensitivity', 1))
 
             detector = MyMitosisDetection(model_path, config, Cl, thred)
             model = detector.load_model()

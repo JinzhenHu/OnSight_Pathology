@@ -31,9 +31,8 @@ def process_region(region, **kwargs):
     device = torch.device("cuda")
 
     thred = 0.1
-    
-    raw_cl = kwargs['additional_configs'].get('confidence_level', 0)
-    Cl = _safe_float(raw_cl)
+
+    Cl = 1-_safe_float(kwargs['additional_configs'].get('sensitivity', 1))
 
     metadata = kwargs['metadata']
     model = kwargs['model']

@@ -10,5 +10,5 @@
     "Positive",
     "Negative"
   ],
-  "additional_configs": {"confidence_level":  0.6, "box_size (0 for full size)": 0}
+  "additional_configs": {"sensitivity":  0.4, "box_size (0 for full size)": 0}
 }
