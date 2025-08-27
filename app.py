@@ -22,7 +22,8 @@ import torch
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox,
     QLineEdit, QGroupBox, QHBoxLayout, QFrame, QMessageBox, QStyledItemDelegate,
-    QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog,QInputDialog
+    QSizePolicy, QGridLayout, QDialog, QTextEdit, QFileDialog, QProgressDialog,QInputDialog,
+    QCheckBox, QStyle
 )
 from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel
 from PyQt6.QtGui import QShortcut, QKeySequence,QIcon,QTextCursor
@@ -40,14 +41,14 @@ print("Torch version:", torch.__version__)
 # VLM Model List
 ##############################################################################################################################################
 
-LLM_CATALOG = {    
-    # "Internvl3-2b(new)":    "metadata/llm_internvl3_2b.json",   
-    #"Internvl3-8b(new)":    "metadata/llm_internvl3_8b.json",
-    "Huatuo-7b":    "metadata/huatuo.json",
-    "Lingshu-7b":    "metadata/lingshu.json",
-    # "Internvl2-2b(old)":    "metadata/llm_internvl2_2b.json", 
-    # "Internvl2-8b(old)":    "metadata/llm_internvl2_8b.json",    
-    # "Qwen-VL-Chat":    "metadata/llm_qwen.json",            
+LLM_CATALOG = {     
+    # "Internvl3-2b(new)":      "metadata/llm_internvl3_2b.json",   
+    #"Internvl3-8b(new)":      "metadata/llm_internvl3_8b.json",
+    "Huatuo-7b":      "metadata/huatuo.json",
+    "Lingshu-7b":      "metadata/lingshu.json",
+    # "Internvl2-2b(old)":      "metadata/llm_internvl2_2b.json", 
+    # "Internvl2-8b(old)":      "metadata/llm_internvl2_8b.json",      
+    # "Qwen-VL-Chat":      "metadata/llm_qwen.json",              
    # "Bio-Medical LLaMA-3":  "metadata/llm_biomed_llama3.json",
 }
 
@@ -67,12 +68,12 @@ PRECISION_DISPLAY_MAP = {
 
 dropdown_categories = [
     ("▶️ Classification Models", [
-         #{'name': "Tumor Compact (VGG19)", 'info_file': 'metadata/tumor_compact_vgg.json'},
-         #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
-        #{'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
-        {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
-       #{'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
-       #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
+          #{'name': "Tumor Compact (VGG19)", 'info_file': 'metadata/tumor_compact_vgg.json'},
+          #{'name': "Tumor Compact (EfficientNetV2) (Test)", 'info_file': 'metadata/tumor_compact_efficientnet.json'},
+         #{'name': "Prior 16-class Tumor Compact (VIT)", 'info_file': 'metadata/tumor_compact_vit.json'},
+         {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
+        #{'name': "New Tumor 4-Class (Resnet)", 'info_file': 'metadata/tumor_compact_resnet.json'},
+        #{'name': "GliomaAstroOligo(VIT)", 'info_file': 'metadata/glio_vit.json'}
     ]),
     ("▶️ Segmentation Models", [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
@@ -98,7 +99,7 @@ class AggregateStats:
     n_tiles: int          = 0
     mitosis: int          = 0
     mib_pos: int          = 0        
-    mib_total: int        = 0      
+    mib_total: int        = 0        
 
     def reset(self):
         self.total_area_mm2 = self.conf_sum = self.mitosis = 0
@@ -307,9 +308,9 @@ class ClassificationThread(QThread):
             torch.cuda.empty_cache()
 
 
-###############################################################################################################    
+###############################################################################################################      
 # Stylesh
-###############################################################################################################    
+###############################################################################################################      
 PROFESSIONAL_STYLESHEET = """
 QWidget {
     background-color: #2c3e50;
@@ -355,7 +356,7 @@ QPushButton:disabled {
 QLabel {
     background-color: transparent;
 }
-QLineEdit, QTextEdit, QComboBox {
+QLineEdit, QTextEdit, QComboBox, QCheckBox {
     background-color: #2c3e50;
     border: 1px solid #566573;
     border-radius: 4px;
@@ -392,13 +393,82 @@ QFrame {
     border-radius: 4px;
     background-color: #2c3e50;
 }
-QMessageBox {
+QMessageBox, QDialog {
     background-color: #34495e;
 }
-QDialog {
-    background-color: #2c3e50;
+QDialog QWidget, QDialog QLabel, QDialog QPushButton, QDialog QCheckBox {
+    background-color: #34495e;
 }
 """
+##############################################################################################################################################
+# Disclaimer Dialog
+##############################################################################################################################################
+class DisclaimerDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Disclaimer")
+        self.setModal(True)
+        self.setMinimumWidth(450)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+
+        # --- Top section with icon and text ---
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(15)
+
+        # Icon
+        icon_label = QLabel()
+        # Use a standard Qt icon for a professional look
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        icon_label.setPixmap(icon.pixmap(48, 48))
+        top_layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignTop)
+
+        # Text section (Title + Message)
+        text_layout = QVBoxLayout()
+        
+        title_label = QLabel("<b>Important Notice</b>")
+        font = title_label.font()
+        font.setPointSize(12)
+        title_label.setFont(font)
+        text_layout.addWidget(title_label)
+
+        message = QLabel(
+            "This tool is intended for research and educational purposes only. "
+            "It is not has not yet been validated for clinical diagnostic use."
+        )
+        message.setWordWrap(True)
+        text_layout.addWidget(message)
+        
+        top_layout.addLayout(text_layout)
+        main_layout.addLayout(top_layout)
+        
+        # --- Separator Line ---
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #4a627a;") # A color from the theme
+        main_layout.addWidget(line)
+
+        # --- Checkbox ---
+        self.checkbox = QCheckBox("Don't show this message again")
+        main_layout.addWidget(self.checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # --- OK Button ---
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        ok_button.setDefault(True) # Allows pressing Enter to accept
+        ok_button.setMinimumWidth(120)
+        
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(ok_button)
+        button_layout.addStretch()
+        
+        main_layout.addLayout(button_layout)
+
+
 ##############################################################################################################################################
 # Main GUI 
 ##############################################################################################################################################
@@ -415,11 +485,15 @@ class ImageClassificationApp(QWidget):
         self.latest_frame = None  # np.ndarray RGB
         self.last_result = ""
 
+        # Load persistent settings
+        self.settings_file = "settings.json"
+        self.settings = self._load_settings()
+
         self._build_ui()
 ##############################################################################################################################################
 #Aggregate Function new functions
 ##############################################################################################################################################
-        self.show_calib_box = False   
+        self.show_calib_box = False  
         self.box_mm2        = None    
         self._calib_help_shown = False
 
@@ -432,6 +506,22 @@ class ImageClassificationApp(QWidget):
         self.inference_ready = False
         self.agg_records: list[dict] = [] 
         self.setWindowIcon(QIcon(resource_path("sample_icon")))
+
+    def _load_settings(self):
+        """Loads settings from a JSON file."""
+        try:
+            with open(self.settings_file, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {} # Return empty dict if file is missing or corrupted
+
+    def _save_settings(self):
+        """Saves current settings to the JSON file."""
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(self.settings, f, indent=4)
+        except Exception as e:
+            print(f"Error saving settings: {e}")
 
     def _agg_start(self):
         if not self.inference_ready:
@@ -458,7 +548,7 @@ class ImageClassificationApp(QWidget):
         self.agg_active = False
         self.btn_agg_start.setEnabled(True)
         self.btn_agg_stop.setEnabled(False)
-        self.btn_reset.setEnabled(False)      # disable until next Start
+        self.btn_reset.setEnabled(False)       # disable until next Start
         self.btn_agg_stop.setFocus() 
         self.agg_records.clear()
         self.btn_agg_export.setEnabled(False)
@@ -486,7 +576,7 @@ class ImageClassificationApp(QWidget):
         base_name = "Agregate_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir   = os.path.join(parent_dir, base_name)
         counter   = 1
-        while os.path.exists(out_dir):         
+        while os.path.exists(out_dir):        
             out_dir = os.path.join(parent_dir, f"{base_name}_({counter})")
             counter += 1
         os.makedirs(out_dir, exist_ok=True)
@@ -504,11 +594,11 @@ class ImageClassificationApp(QWidget):
             cv2.imwrite(anno_path,
                         cv2.cvtColor(rec["annot"], cv2.COLOR_RGB2BGR))
             row = rec["metrics"].copy()
-            if "Class" in row:                  # present only in classification
+            if "Class" in row:              # present only in classification
                 row.pop("Confidence score", None)
             row["file_orig"]      = orig_path
             row["file_annotated"] = anno_path
-            if "probs" in rec:                       # only classification
+            if "probs" in rec:                          # only classification
                 for cls, p in rec["probs"].items():
                     row[cls] = p
                     all_clsset.add(cls)
@@ -636,7 +726,7 @@ class ImageClassificationApp(QWidget):
             "annot": self.latest_frame.copy(),
             "orig":  self.latest_original.copy(),
             "metrics": new_metrics, 
-            **extra_payload               
+            **extra_payload           
         })
         self.btn_agg_export.setEnabled(True) 
         self.agg.total_area_mm2 += mm2 
@@ -661,7 +751,7 @@ class ImageClassificationApp(QWidget):
         ]
 
         if agg_type == "classification":
-            if not self.cls_stats:                   
+            if not self.cls_stats:              
                 avg = (self.agg.conf_sum / self.agg.n_tiles
                     if self.agg.n_tiles else 0)
                 lines.append(f"Average confidence: {avg:.3f}")
@@ -669,14 +759,14 @@ class ImageClassificationApp(QWidget):
                 lines.append("Avg confidence per class:")
                 for cls, st in self.cls_stats.items():
                     avg_c = st['conf_sum'] / st['tiles']
-                    lines.append(f"  • {cls}: {avg_c:.3f} "
-                                f"(n={st['tiles']})")
+                    lines.append(f"   • {cls}: {avg_c:.3f} "
+                                 f"(n={st['tiles']})")
 
         elif agg_type == "mitosis":
             density = (self.agg.mitosis / self.agg.total_area_mm2
                     if self.agg.total_area_mm2 else 0)
-            lines.append(f"Mitoses: {self.agg.mitosis}  "
-                        f"({density:.2f} / mm²)")
+            lines.append(f"Mitoses: {self.agg.mitosis}   "
+                         f"({density:.2f} / mm²)")
         elif agg_type == "mib":
             pct = (self.agg.mib_pos / self.agg.mib_total * 100
                 if self.agg.mib_total else 0)
@@ -736,68 +826,68 @@ class ImageClassificationApp(QWidget):
 
 
     # def _calibrate_area(self):
-    #     dlg = QDialog(self)
-    #     dlg.setWindowTitle("Calibrate Scale Bars")
+    #   dlg = QDialog(self)
+    #   dlg.setWindowTitle("Calibrate Scale Bars")
 
-    #     form = QGridLayout(dlg)
+    #   form = QGridLayout(dlg)
 
-    #     # instruction 
-    #     instr = QLabel(
-    #         "Measure the length of the scale-bar in the inference window "
-    #         "directly in your slide viewer and input the value here."
-    #     )
-    #     instr.setWordWrap(True)
-    #     form.addWidget(instr, 0, 0, 1, 2)
+    #   # instruction 
+    #   instr = QLabel(
+    #       "Measure the length of the scale-bar in the inference window "
+    #       "directly in your slide viewer and input the value here."
+    #   )
+    #   instr.setWordWrap(True)
+    #   form.addWidget(instr, 0, 0, 1, 2)
 
-    #     # width entry
-    #     form.addWidget(QLabel("Horizontal bar (mm):"), 1, 0)
-    #     edt_w = QLineEdit()
-    #     edt_w.setPlaceholderText("e.g. 0.300")
-    #     form.addWidget(edt_w, 1, 1)
+    #   # width entry
+    #   form.addWidget(QLabel("Horizontal bar (mm):"), 1, 0)
+    #   edt_w = QLineEdit()
+    #   edt_w.setPlaceholderText("e.g. 0.300")
+    #   form.addWidget(edt_w, 1, 1)
 
-    #     # height entry
-    #     form.addWidget(QLabel("Vertical bar (mm):"), 2, 0)
-    #     edt_h = QLineEdit()
-    #     edt_h.setPlaceholderText("e.g. 0.300")
-    #     form.addWidget(edt_h, 2, 1)
+    #   # height entry
+    #   form.addWidget(QLabel("Vertical bar (mm):"), 2, 0)
+    #   edt_h = QLineEdit()
+    #   edt_h.setPlaceholderText("e.g. 0.300")
+    #   form.addWidget(edt_h, 2, 1)
 
-    #     # OK / Cancel
-    #     btn_ok     = QPushButton("OK")
-    #     btn_cancel = QPushButton("Cancel")
-    #     btn_ok.clicked.connect(dlg.accept)
-    #     btn_cancel.clicked.connect(dlg.reject)
-    #     h_btn = QHBoxLayout()
-    #     h_btn.addStretch()
-    #     h_btn.addWidget(btn_ok)
-    #     h_btn.addWidget(btn_cancel)
-    #     form.addLayout(h_btn, 3, 0, 1, 2)
+    #   # OK / Cancel
+    #   btn_ok     = QPushButton("OK")
+    #   btn_cancel = QPushButton("Cancel")
+    #   btn_ok.clicked.connect(dlg.accept)
+    #   btn_cancel.clicked.connect(dlg.reject)
+    #   h_btn = QHBoxLayout()
+    #   h_btn.addStretch()
+    #   h_btn.addWidget(btn_ok)
+    #   h_btn.addWidget(btn_cancel)
+    #   form.addLayout(h_btn, 3, 0, 1, 2)
 
 
-    #     if dlg.exec() != QDialog.DialogCode.Accepted:
-    #         return
+    #   if dlg.exec() != QDialog.DialogCode.Accepted:
+    #       return
 
-    #     # --- parse numbers safely ---------------------------------
-    #     try:
-    #         w_mm = float(edt_w.text())
-    #         h_mm = float(edt_h.text() or "0")
-    #     except ValueError:
-    #         QMessageBox.warning(self, "Invalid input",
-    #                             "Please enter numeric values.")
-    #         return
-    #     if w_mm <= 0:
-    #         QMessageBox.warning(self, "Invalid width",
-    #                             "Width must be > 0.")
-    #         return
+    #   # --- parse numbers safely ---------------------------------
+    #   try:
+    #       w_mm = float(edt_w.text())
+    #       h_mm = float(edt_h.text() or "0")
+    #   except ValueError:
+    #       QMessageBox.warning(self, "Invalid input",
+    #                           "Please enter numeric values.")
+    #       return
+    #   if w_mm <= 0:
+    #       QMessageBox.warning(self, "Invalid width",
+    #                           "Width must be > 0.")
+    #       return
 
-    #     self.bar_mm_w = w_mm
-    #     self.bar_mm_h = h_mm if h_mm > 0 else None  
+    #   self.bar_mm_w = w_mm
+    #   self.bar_mm_h = h_mm if h_mm > 0 else None  
 
-    #     msg = f"Width bar  = {self.bar_mm_w:.3f} mm"
-    #     if self.bar_mm_h is not None:
-    #         msg += f"\nHeight bar = {self.bar_mm_h:.3f} mm"
-    #     else:
-    #         msg += "\nHeight bar = (not set)"
-    #     QMessageBox.information(self, "Calibration stored", msg)
+    #   msg = f"Width bar  = {self.bar_mm_w:.3f} mm"
+    #   if self.bar_mm_h is not None:
+    #       msg += f"\nHeight bar = {self.bar_mm_h:.3f} mm"
+    #   else:
+    #       msg += "\nHeight bar = (not set)"
+    #   QMessageBox.information(self, "Calibration stored", msg)
     # ------------------------------------------------------------
     # LLM option
     # ------------------------------------------------------------
@@ -973,7 +1063,7 @@ class ImageClassificationApp(QWidget):
         ##############################################################################################################################################
         # -------------------- Aggregate Scorer --------------------
         grp_agg = QGroupBox("Aggregate Function")
-        grid    = QGridLayout()                  
+        grid    = QGridLayout()                   
 
         # row 0 –– control buttons
         self.btn_agg_start = QPushButton("Start")
@@ -1011,7 +1101,7 @@ class ImageClassificationApp(QWidget):
         self.lbl_help = QLabel("Tip ⌨ Press <kbd>Space</kbd> to add this tile")
         self.lbl_help.setStyleSheet("color:grey; font-style:italic;")
         v_box.addWidget(self.lbl_help)
-        grid.addWidget(box, 1, 0, 1, 5)      
+        grid.addWidget(box, 1, 0, 1, 5)       
 
         grp_agg.setLayout(grid)
         main_right.addWidget(grp_agg)
@@ -1085,22 +1175,19 @@ class ImageClassificationApp(QWidget):
 
     # ------------------------------------- Thread------------------------------------------------------
     def _start(self):
-        if not hasattr(self, '_disclaimer_shown'):
-            #Disclaimer
-            QMessageBox.warning(
-                self, "Disclaimer",
-                "This tool is intended for research and educational purposes only. "
-                "It is not a medical tool and should not be used for clinical diagnosis, "
-                "patient management, or any other medical purpose. The accuracy of the "
-                "models has not been validated for clinical use."
-            )
-            self._disclaimer_shown = True
+        # Display disclaimer if not suppressed by user settings
+        if not self.settings.get("suppress_disclaimer", False):
+            dialog = DisclaimerDialog(self)
+            dialog.exec()
+            if dialog.checkbox.isChecked():
+                self.settings["suppress_disclaimer"] = True
+                self._save_settings()
 
         if self.selected_region is None:
             QMessageBox.warning(self, "No region", "Please select a screen region first.")
             return
         if self.thread and self.thread.isRunning():
-            self.thread.stop()       
+            self.thread.stop()      
             self.thread = None
 
         model_name = self.cmb_model.currentText()
@@ -1127,7 +1214,7 @@ class ImageClassificationApp(QWidget):
     # ---------------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
         self.latest_metrics = metrics   
-        self.latest_frame    = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()   # annotated
+        self.latest_frame   = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()   # annotated
         self.latest_original = metrics.get("orig_img", self.latest_frame).copy()
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).copy()
         h, w, c = frame_bgr.shape
@@ -1187,7 +1274,7 @@ class ImageClassificationApp(QWidget):
 
         dlg = LLMChatDialog(self.latest_frame, self)
         dlg.exec()
- 
+
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
         info = model_to_info[self.cmb_model.currentText()].get("info", "No info.")
@@ -1198,7 +1285,7 @@ class ImageClassificationApp(QWidget):
         Stop the current classification thread before switching models.
         """
         if self.thread and self.thread.isRunning():
-            self._stop()                       # kill the old worker
+            self._stop()                # kill the old worker
         name = self.cmb_model.currentText()
         
         name = self.cmb_model.currentText()
