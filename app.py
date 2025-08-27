@@ -1,4 +1,4 @@
-import os
+import sys
 import io
  # So that logging special characters doesn't cause a crash in exe
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8', errors='replace')
@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import mss
 import gc
+import os
 
 from datetime import datetime
 import csv
