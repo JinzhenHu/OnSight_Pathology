@@ -1224,7 +1224,9 @@ class ImageClassificationApp(QWidget):
         # Display disclaimer if not suppressed by user settings
         if not self.settings.get("suppress_disclaimer", False):
             dialog = DisclaimerDialog(self)
-            dialog.exec()
+            result = dialog.exec()
+            if result == QDialog.DialogCode.Rejected:
+                return
             if dialog.checkbox.isChecked():
                 self.settings["suppress_disclaimer"] = True
                 self._save_settings()
