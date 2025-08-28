@@ -418,12 +418,20 @@ class DisclaimerDialog(QDialog):
         top_layout = QHBoxLayout()
         top_layout.setSpacing(15)
 
-        # Icon
+        # Icon in its own vbox to center it vertically
+        icon_layout = QVBoxLayout()
+        icon_layout.addStretch()
+
         icon_label = QLabel()
         # Use a standard Qt icon for a professional look
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
         icon_label.setPixmap(icon.pixmap(48, 48))
-        top_layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignTop)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # horizontal center
+        icon_layout.addWidget(icon_label)
+
+        icon_layout.addStretch()
+
+        top_layout.addLayout(icon_layout)  # add the vbox to the left
 
         # Text section (Title + Message)
         text_layout = QVBoxLayout()
@@ -486,32 +494,16 @@ class ImageClassificationApp(QWidget):
         self.last_result = ""
 
         # Load persistent settings
-        self.settings_file = "settings.json"
+        def get_user_settings_path(filename="settings.json"):
+            local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+            settings_dir = os.path.join(local_appdata, "OnSightPathology", "Settings")
+            os.makedirs(settings_dir, exist_ok=True)
+            return os.path.join(settings_dir, filename)
+
+        self.settings_file = get_user_settings_path()
         self.settings = self._load_settings()
 
         self._build_ui()
-
-        # ######################################################################################################
-    # ############################Toggle View ###############################################
-    # ######################################################################################################
-    def _toggle_view(self):
-        """
-        Toggles the visibility of the setup panels to create a compact view.
-        """
-        is_compact = self.btn_toggle_view.isChecked()
-        self.w_left.setVisible(not is_compact)
-
-        if is_compact:
-            self.btn_toggle_view.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
-            self.btn_toggle_view.setToolTip("Show setup panels")
-        else:
-            self.btn_toggle_view.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
-            self.btn_toggle_view.setToolTip("Hide setup panels")
-
-        # Use a QTimer to adjust size after the event loop has processed the visibility change
-        QTimer.singleShot(0, self.adjustSize)
-    # ######################################################################################################
-    # ######################################################################################################
 ##############################################################################################################################################
 #Aggregate Function new functions
 ##############################################################################################################################################
@@ -528,6 +520,7 @@ class ImageClassificationApp(QWidget):
         self.inference_ready = False
         self.agg_records: list[dict] = [] 
         self.setWindowIcon(QIcon(resource_path("sample_icon")))
+        
 
     def _load_settings(self):
         """Loads settings from a JSON file."""
@@ -578,7 +571,6 @@ class ImageClassificationApp(QWidget):
         # self.box_mm2 = None
         self.show_calib_box = False
         self.cls_stats.clear()
-    
 
     # ======================================================================== 
     # Aggregate Export 
@@ -943,7 +935,23 @@ class ImageClassificationApp(QWidget):
                 # Hide the precision selector if not applicable
                 self.lbl_llm_precision.setVisible(False)
                 self.cmb_llm_precision.setVisible(False)
+    ###toggle settings
+    def _toggle_view(self):
+        """
+        Toggles the visibility of the setup panels to create a compact view.
+        """
+        is_compact = self.btn_toggle_view.isChecked()
+        self.w_left.setVisible(not is_compact)
 
+        if is_compact:
+            self.btn_toggle_view.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
+            self.btn_toggle_view.setToolTip("Show setup panels")
+        else:
+            self.btn_toggle_view.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+            self.btn_toggle_view.setToolTip("Hide setup panels")
+
+        # Use a QTimer to adjust size after the event loop has processed the visibility change
+        QTimer.singleShot(0, self.adjustSize)
 ################################################################################################################################################
 ################################################################################################################################################
     # --------------------- UI --------------------------------- 
@@ -1037,11 +1045,11 @@ class ImageClassificationApp(QWidget):
 
         main_left.addStretch()
 
-        # ----------- Controls (start/stop/export/chat) ----------
+# ----------- Controls (start/stop/export/chat) ----------
         grp_ctrl = QGroupBox("Inference Controls")
         v_ctrl = QVBoxLayout()
 
-# --- Create the Toggle Button first ---
+        # --- Create the Toggle Button first ---
         self.btn_toggle_view = QPushButton()
         self.btn_toggle_view.setCheckable(True)
         self.btn_toggle_view.setChecked(False)
@@ -1050,23 +1058,23 @@ class ImageClassificationApp(QWidget):
         self.btn_toggle_view.clicked.connect(self._toggle_view)
         self.btn_toggle_view.setFixedSize(30, 30)
 
-        ##### USING GPU STATUS ICON & TOGGLE BUTTON (COMBINED) #####
+        ##### USING GPU STATUS ICON & TOGGLE BUTTON #####
         status_widget = QWidget()
         status_layout = QHBoxLayout(status_widget)
-        status_layout.setContentsMargins(0, 0, 0, 5) # Add spacing below
+        status_layout.setContentsMargins(0, 0, 0, 5) 
         status_layout.setSpacing(6)
 
         from custom_widgets.PulsingDot import PulsingDot
         self.using_gpu_icon = PulsingDot(color="grey")
         label = QLabel("Using GPU")
+        label.setStyleSheet("QLabel { margin-top: -3px;  }")
 
-        # Add widgets to the horizontal layout
         status_layout.addWidget(self.using_gpu_icon)
         status_layout.addWidget(label)
-        status_layout.addStretch() # This pushes the button to the far right
-        status_layout.addWidget(self.btn_toggle_view) # Add the button to the same layout
+        status_layout.addStretch() 
+        status_layout.addWidget(self.btn_toggle_view) 
 
-        v_ctrl.addWidget(status_widget) # Add the whole row to the main vertical layout
+        v_ctrl.addWidget(status_widget) 
 
         self.btn_start = QPushButton("Start")
         self.btn_start.clicked.connect(self._start)
@@ -1168,25 +1176,20 @@ class ImageClassificationApp(QWidget):
         main_right.addStretch()
 
         # -------------------- Assemble main layout -----------------------
-# -------------------- Assemble main layout -----------------------
-        # ################################################################
-        # ######## MODIFICATION: Store left widget and set policy ########
-        # ################################################################
-        self.w_left = QWidget() # Make it an instance attribute to be hidden/shown
+        self.w_left = QWidget() 
         self.w_left.setLayout(main_left)
         w_right = QWidget()
         w_right.setLayout(main_right)
 
-        # Use 'Preferred' policy to allow the window to shrink
+        # Use 'Preferred' policy to allow the window to shrink 
         self.w_left.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         w_right.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        # ################################################################
-        # ################################################################
 
         h_main = QHBoxLayout(self)
         h_main.addSpacing(10)
         h_main.addWidget(self.w_left, alignment=Qt.AlignmentFlag.AlignTop)
         h_main.addWidget(w_right, alignment=Qt.AlignmentFlag.AlignTop)
+
         ################################################################
         #LLM add
         self.cmb_llm.currentIndexChanged.connect(self._update_llm_options)
