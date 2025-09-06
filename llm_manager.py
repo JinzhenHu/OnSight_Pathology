@@ -1,17 +1,11 @@
 # llm_manager.py
 import os
-from functools import lru_cache
 import json, torch
 from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig,AutoModelForCausalLM, TextIteratorStreamer
-import numpy as np
 import torchvision.transforms as T
-from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 from utils import resource_path
-from timm.models.layers import DropPath
-from pathlib import Path
-from transformers.generation import GenerationConfig
-import tempfile,atexit
+import tempfile
 from threading import Thread
 from contextlib import contextmanager
 from qwen_vl_utils import process_vision_info 

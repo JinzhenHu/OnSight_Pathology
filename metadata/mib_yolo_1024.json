@@ -2,7 +2,7 @@
   "repo": "diamandislabii/MIB_1024",
   "repo_src": "HuggingFace",
   "info": "YOLO model used for segmentation",
-  "mpp": 0.504,
+  "mpp": 0.252,
   "model": "YOLO",
   "tile_size": 1024,
   "aggregate_type": "mib",
@@ -10,5 +10,6 @@
     "Positive",
     "Negative"
   ],
-  "additional_configs": {"sensitivity":  0.4, "mask_transparency": 0.75}
+  "additional_configs": {"sensitivity":  0.4, "mask_transparency": 0.75},
+  "notes:": "Model trained on 20x (0.504 mpp) but we will be recommending 40x (0.252 mpp)"
 }
