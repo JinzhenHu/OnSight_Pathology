@@ -31,8 +31,9 @@ def process_region(region, **kwargs):
     device = torch.device("cuda")
 
     thred = 0.1
-
-    Cl = 1-_safe_float(kwargs['additional_configs'].get('sensitivity', 1))
+    
+    raw_cl = kwargs['additional_configs'].get('confidence_level', 0)
+    Cl = _safe_float(raw_cl)
 
     metadata = kwargs['metadata']
     model = kwargs['model']
@@ -90,47 +91,96 @@ def process_region(region, **kwargs):
 
     # Apply Non-Maximum Suppression on all detections
     prediction = nms(list(itertools.chain(*all_detections)))
-    if frame.shape[0]> tile_size:
-        BIG_FONT   = 34   # pixels
-        THICK_LINE = 4    # pixels
-    if frame.shape[0]<= tile_size:
-        BIG_FONT   = 24   # pixels
-        THICK_LINE = 2    # pixels
-    # Set up the annotator for drawing boxes
-    annotator = Annotator(
-        frame,
-        line_width=THICK_LINE,
-        font_size=BIG_FONT,
-        font="Arial_Bold.ttf",
-        pil=False,
-        example="abc",
-    )
+    scale_factor = h / tile_size  
+    font_scale = max(0.5, 0.8 * scale_factor)
+    thickness = max(1, int(2 * scale_factor))
 
-    # Annotate detections that meet the confidence threshold
+#############################################################  
+#Old
+#############################################################        
+    # Set up the annotator for drawing boxes
+    # annotator = Annotator(
+    #     frame,
+    #     line_width=THICK_LINE,
+    #     font_size=BIG_FONT,
+    #     font="Arial_Bold.ttf",
+    #     pil=False,
+    #     example="abc",
+    # )
+
+    # # Annotate detections that meet the confidence threshold
+    # for row in prediction:
+    #     if row[5] >= Cl:
+    #         # Choose color based on confidence
+    #         if row[5] > 0.7:
+    #             base_color = (0, 255, 0)
+    #         elif row[5] > 0.4:
+    #             base_color = (255, 0, 0)
+    #         else:
+    #             base_color = (0, 0, 255)
+    #         label_text = f'score {row[5]*100:.1f} %'
+    #         annotator.box_label(
+    #             row[:4],
+    #             label=label_text,
+    #             color=base_color,
+    #             txt_color=(255, 255, 255),
+    #             rotated=False,
+    #         )
+
+    # # Get frame dimensions
+    # frame_height, frame_width = frame.shape[:2]
+    # annotated_result = annotator.result()
+    # annotated_frame = annotated_result.astype(np.uint8)
+
+#############################################################  
+#New
+#############################################################  
+    annotated_frame = frame.copy()
+
+    # --- Professional Annotation with OpenCV ---
+    # You can adjust these parameters for style
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    # font_scale = 0.6
+    # font_thickness = 1
+    text_color = (255, 255, 255) # White
+
     for row in prediction:
-        if row[5] >= Cl:
-            # Choose color based on confidence
-            if row[5] > 0.7:
-                base_color = (0, 255, 0)
-            elif row[5] > 0.4:
-                base_color = (255, 0, 0)
+        if row[5] >= Cl: # Check against confidence threshold
+            # Define box color based on confidence score
+            score = row[5]
+            if score > 0.7:
+                box_color = (0, 255, 0)  # Green for high confidence
+            elif score > 0.4:
+                box_color = (255, 165, 0) # Yellow for medium confidence
             else:
-                base_color = (0, 0, 255)
-            label_text = f'score {row[5]*100:.1f} %'
-            annotator.box_label(
-                row[:4],
-                label=label_text,
-                color=base_color,
-                txt_color=(255, 255, 255),
-                rotated=False,
-            )
+                box_color = (0, 0, 255)  # Red for low confidence
+
+            # Get box coordinates
+            x1, y1, x2, y2 = map(int, row[:4])
+
+            # 1. Draw the bounding box
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_color, thickness)
+
+            # 2. Prepare the label text and size
+            label_text = f'{(score * 100):.1f}%'
+            (text_w, text_h), baseline = cv2.getTextSize(label_text, font, font_scale, thickness)
+            
+            # Adjusted position to prevent text from being cut off at the top
+            label_y_start = y1 - text_h - 10
+            if label_y_start < 0:
+                label_y_start = y1 + 5 # Move label inside if it goes off-screen
+            
+            cv2.rectangle(annotated_frame, (x1, label_y_start), (x1 + text_w, label_y_start + text_h + 5), box_color, -1)
+
+            # 4. Draw the label text using dynamic scale and thickness
+            text_y_pos = label_y_start + text_h
+            cv2.putText(annotated_frame, label_text, (x1, text_y_pos), font, font_scale, text_color, thickness, cv2.LINE_AA)
+
 
     # Get frame dimensions
     frame_height, frame_width = frame.shape[:2]
 
 
-    annotated_result = annotator.result()
-    annotated_frame = annotated_result.astype(np.uint8)
 
     annotated_frame=   cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR)
     prediction = [row for row in prediction if row[5] >= Cl]

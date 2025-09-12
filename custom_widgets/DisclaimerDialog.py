@@ -62,7 +62,7 @@ class DisclaimerDialog(QDialog):
         main_layout.addWidget(line)
 
         # --- Checkbox ---
-        self.checkbox = QCheckBox("Don't show this message again")
+        self.checkbox = QCheckBox("I have read and acknowledge the above terms of use")
         main_layout.addWidget(self.checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # --- OK Button ---
