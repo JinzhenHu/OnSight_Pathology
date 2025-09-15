@@ -48,31 +48,7 @@ def load_model(model_info):
     #ONNX
     ##############################################################################
     if model_info['repo_src'] == 'HuggingFace':
-        if model_info['model'] == 'ONNX':
-
-            from huggingface_hub import hf_hub_download
-            import torch
-            import onnxruntime as ort
-
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="model.onnx")
-
-            # Load ONNX model with GPU support if available
-            available_providers = ort.get_available_providers()
-            if 'CUDAExecutionProvider' in available_providers:
-                providers = ['CUDAExecutionProvider']
-            else:
-                providers = ['CPUExecutionProvider']
-
-            session = ort.InferenceSession(model_path, providers=providers)
-
-            from process_region_onnx import process_region
-
-            res['model'] = session
-            res['process_region_func'] = process_region
-            res['using_gpu'] = 'CUDAExecutionProvider' in available_providers
-
-            return res
-    # ##############################################################################
+#############################################################
     # #VIT glio
     # ##############################################################################
         if model_info['model'] == 'VIT':
@@ -317,3 +293,56 @@ def load_model(model_info):
     
 
     return res
+
+
+
+def get_gpu_memory():
+    """Return total GPU memory (in GB) if CUDA is available, else None."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return None
+    device = torch.cuda.current_device()
+    total = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
+    return total
+
+def get_system_memory():
+    """Return total system RAM (in GB)."""
+    import psutil
+
+    return psutil.virtual_memory().total / (1024 ** 3)
+
+def build_precision_labels(gpu_mem_gb, cpu_ram_gb):
+    """Return a dict of precision → display label with GPU/CPU availability notes."""
+
+    PRECISION_DISPLAY_MAP = {
+        "4bit": "Fastest Speed",
+        "8bit": "Balanced",
+        "16bit": "Highest Quality"
+    }
+
+    labels = {}
+    required = {
+        "4bit": 9.1,
+        "8bit": 11.2,
+        "16bit": 16.7,
+    }
+
+    for k, base_label in PRECISION_DISPLAY_MAP.items():
+        if gpu_mem_gb is None:
+            # No GPU available → CPU fallback only
+            if cpu_ram_gb >= 32:  # heuristic cutoff
+                labels[k] = f"{base_label} — CPU fallback (minutes per token)"
+            else:
+                labels[k] = f"{base_label} — CPU fallback may fail (low RAM)"
+        else:
+            req = required[k]
+            if gpu_mem_gb >= req:
+                labels[k] = f"{base_label}"  # fully supported
+            elif gpu_mem_gb >= req - 2:  # within ~2 GB tolerance
+                labels[k] = f"{base_label} — May load but unstable/slow"
+            else:
+                labels[k] = f"{base_label} — Too large for your GPU"
+
+    return labels
+

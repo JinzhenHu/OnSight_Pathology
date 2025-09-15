@@ -1,10 +1,13 @@
 import logging
+import os
 
 # Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
 # Crash logging to file unaffected.
 for h in logging.root.handlers[:]:
     if isinstance(h, logging.StreamHandler):
         logging.root.removeHandler(h)
+
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
 import crash_logging
 
@@ -31,7 +34,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize
 from pynput import mouse
 from dataclasses import dataclass
 
-from utils import load_model, resource_path
+from utils import load_model, resource_path, get_gpu_memory, get_system_memory, build_precision_labels
 import settings
 from custom_widgets.AboutDialog import AboutDialog
 from custom_widgets.CollapsibleGroupBox import CollapsibleGroupBox
@@ -682,8 +685,10 @@ class ImageClassificationApp(QMainWindow):
         cmb_llm_precision.clear()
 
         if precisions:
-            for tech_name in precisions:
-                display_name = settings.PRECISION_DISPLAY_MAP.get(tech_name, tech_name)
+
+            precision_labels = build_precision_labels(get_gpu_memory(), get_system_memory())
+
+            for tech_name, display_name in precision_labels.items():
                 cmb_llm_precision.addItem(display_name, tech_name)
 
             # Set the default selection from metadata
