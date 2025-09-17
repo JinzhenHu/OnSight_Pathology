@@ -32,8 +32,7 @@ def process_region(region, **kwargs):
 
     thred = 0.1
     
-    raw_cl = kwargs['additional_configs'].get('confidence_level', 0)
-    Cl = _safe_float(raw_cl)
+    Cl = 1-_safe_float(kwargs['additional_configs'].get('sensitivity', 1))
 
     metadata = kwargs['metadata']
     model = kwargs['model']
@@ -92,9 +91,10 @@ def process_region(region, **kwargs):
     # Apply Non-Maximum Suppression on all detections
     prediction = nms(list(itertools.chain(*all_detections)))
     scale_factor = h / tile_size  
-    font_scale = max(0.5, 0.8 * scale_factor)
-    thickness = max(1, int(2 * scale_factor))
-
+    # font_scale = max(0.5, 0.8 * scale_factor)
+    # thickness = max(1, int(2 * scale_factor))
+    font_scale = max(0.8, 1.3 * scale_factor)  
+    thickness = max(2, int(3 * scale_factor))
 #############################################################  
 #Old
 #############################################################        
@@ -162,7 +162,7 @@ def process_region(region, **kwargs):
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_color, thickness)
 
             # 2. Prepare the label text and size
-            label_text = f'{(score * 100):.1f}%'
+            label_text = f'{(score * 100):.0f}%'
             (text_w, text_h), baseline = cv2.getTextSize(label_text, font, font_scale, thickness)
             
             # Adjusted position to prevent text from being cut off at the top
