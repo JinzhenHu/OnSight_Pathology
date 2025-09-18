@@ -798,10 +798,10 @@ class ImageClassificationApp(QMainWindow):
         self.cmb_llm.addItems(settings.LLM_CATALOG.keys())
         h_llm.addWidget(self.cmb_llm)
 
-        self.lbl_llm_precision = QLabel("Mode:")
-        self.cmb_llm_precision = QComboBox()
-        h_llm.addWidget(self.lbl_llm_precision)
-        h_llm.addWidget(self.cmb_llm_precision)
+        # self.lbl_llm_precision = QLabel("Mode:")
+        # self.cmb_llm_precision = QComboBox()
+        # h_llm.addWidget(self.lbl_llm_precision)
+        # h_llm.addWidget(self.cmb_llm_precision)
 
         h_llm.addStretch(1)
 
@@ -874,7 +874,8 @@ class ImageClassificationApp(QMainWindow):
         # Chat button -----------------------------------------------------
         self.btn_chat = QPushButton("Chat with LLM")
         self.btn_chat.clicked.connect(
-            lambda: self._open_chat(self.cmb_llm.currentText(), self.cmb_llm_precision.currentData())
+            #lambda: self._open_chat(self.cmb_llm.currentText(), self.cmb_llm_precision.currentData())
+            lambda: self._open_chat(self.cmb_llm.currentText(), "4bit") 
         )
         self.btn_chat.setEnabled(False)
         v_ctrl.addWidget(self.btn_chat)
@@ -963,10 +964,10 @@ class ImageClassificationApp(QMainWindow):
 
         ################################################################
         # LLM add
-        self.cmb_llm.currentIndexChanged.connect(
-            lambda: self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
-        )
-        self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
+        # self.cmb_llm.currentIndexChanged.connect(
+        #     lambda: self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
+        # )
+        # self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
 
         ################################################################
         self._on_model_changed()
@@ -1333,35 +1334,58 @@ class ImageClassificationApp(QMainWindow):
         dlg.exec()
 
     # This is used for compact mode (instead of displaying on main GUI)
+    # def _open_llm_popup(self):
+    #     dialog = QDialog(self)
+    #     dialog.setWindowTitle("Select GPT Options")
+
+    #     layout = QVBoxLayout(dialog)
+    #     cmb_llm = QComboBox()
+    #     cmb_llm.addItems(settings.LLM_CATALOG.keys())
+    #     layout.addWidget(cmb_llm)
+
+    #     lbl_llm_precision = QLabel("Mode:")
+    #     cmb_llm_precision = QComboBox()
+    #     layout.addWidget(lbl_llm_precision)
+    #     layout.addWidget(cmb_llm_precision)
+
+    #     button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    #     button_box.accepted.connect(
+    #         lambda: self._open_chat(cmb_llm.currentText(), cmb_llm_precision.currentData())
+    #     )
+    #     button_box.accepted.connect(dialog.accept)
+    #     button_box.rejected.connect(dialog.reject)
+    #     layout.addWidget(button_box)
+
+    #     # LLM add
+    #     cmb_llm.currentIndexChanged.connect(
+    #         lambda: self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
+    #     )
+    #     self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
+
+    #     dialog.exec()
+
     def _open_llm_popup(self):
         dialog = QDialog(self)
-        dialog.setWindowTitle("Select GPT Options")
+        dialog.setWindowTitle("Select GPT Model")
 
         layout = QVBoxLayout(dialog)
         cmb_llm = QComboBox()
         cmb_llm.addItems(settings.LLM_CATALOG.keys())
+        layout.addWidget(QLabel("Select a model to chat with:"))
         layout.addWidget(cmb_llm)
 
-        lbl_llm_precision = QLabel("Mode:")
-        cmb_llm_precision = QComboBox()
-        layout.addWidget(lbl_llm_precision)
-        layout.addWidget(cmb_llm_precision)
-
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        
+        # This now directly calls _open_chat with "4bit"
         button_box.accepted.connect(
-            lambda: self._open_chat(cmb_llm.currentText(), cmb_llm_precision.currentData())
+            lambda: self._open_chat(cmb_llm.currentText(), "4bit")
         )
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
 
-        # LLM add
-        cmb_llm.currentIndexChanged.connect(
-            lambda: self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
-        )
-        self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
-
         dialog.exec()
+
 
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
