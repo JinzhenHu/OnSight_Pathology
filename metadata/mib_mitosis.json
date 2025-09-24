@@ -8,5 +8,5 @@
   "aggregate_type": "mitosis",
   "classes": ["Mitosis Detection with Confidence Score"
   ],
-  "additional_configs": {"sensitivity":  0.8}
+  "additional_configs": {"specificity":  0.2}
 }

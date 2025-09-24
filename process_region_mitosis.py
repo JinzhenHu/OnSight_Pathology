@@ -32,7 +32,7 @@ def process_region(region, **kwargs):
 
     thred = 0.1
     
-    Cl = 1-_safe_float(kwargs['additional_configs'].get('sensitivity', 1))
+    Cl = _safe_float(kwargs['additional_configs'].get('specificity', 0))
 
     metadata = kwargs['metadata']
     model = kwargs['model']

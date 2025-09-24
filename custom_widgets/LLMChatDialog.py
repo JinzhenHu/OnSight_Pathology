@@ -15,6 +15,8 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
 from PIL import Image
 import tempfile
 
+from utils import resource_path
+
 
 class LLMChatDialog(QDialog):
     """One-off chat about the latest inference frame."""
@@ -85,7 +87,7 @@ class LLMChatDialog(QDialog):
             ])
         else:
             # Running locally — use .py
-            script_path = os.path.join(os.path.dirname(__file__), "llm_worker_process.py")
+            script_path = resource_path("llm_worker_process.py")
             self.process.setProgram(sys.executable)
             self.process.setArguments([
                 script_path,
