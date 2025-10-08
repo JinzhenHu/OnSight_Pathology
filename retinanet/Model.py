@@ -65,7 +65,7 @@ class MyMitosisDetection:
 			self.model.load_state_dict(torch.load(self.path_model, weights_only=False)['model'])
 		else:
 			print("Model loaded on CPU")
-			self.model.load_state_dict(torch.load(self.path_model, map_location='cpu')['model'])
+			self.model.load_state_dict(torch.load(self.path_model, map_location='cpu', weights_only=False)['model'])
 
 		self.model.to(self.device)
 
