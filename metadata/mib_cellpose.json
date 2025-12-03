@@ -1,0 +1,15 @@
+{
+  "repo": "",
+  "repo_src": "HuggingFace",
+  "info": "Cellpose-SAM",
+  "mpp": 0.504,
+  "model": "Cellpose-SAM",
+  "tile_size": 1024,
+  "aggregate_type": "mib",
+  "classes": [
+    "Positive",
+    "Negative"
+  ],
+  "additional_configs": {"mask_transparency": 0.75},
+  "notes:": ""
+}

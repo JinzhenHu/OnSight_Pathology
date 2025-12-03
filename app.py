@@ -1,5 +1,11 @@
 import logging
 import os
+import sys
+
+# NOTE: ONLY FOR CPU EXE
+if 0:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
 # Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
 # Crash logging to file unaffected.
@@ -7,7 +13,13 @@ for h in logging.root.handlers[:]:
     if isinstance(h, logging.StreamHandler):
         logging.root.removeHandler(h)
 
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
 
 import crash_logging
 

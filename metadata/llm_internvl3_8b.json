@@ -1,9 +1,0 @@
-{
-    "name": "Intern VL 3-8B",
-    "repo": "OpenGVLab/InternVL3-8B",
-    "tokenizer_repo": "OpenGVLab/InternVL3-8B",
-    "dtype": "bfloat16"
-  
-}
-
-  

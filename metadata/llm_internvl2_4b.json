@@ -1,9 +1,0 @@
-{
-    "name": "Intern VL 2-4B",
-    "repo": "OpenGVLab/InternVL2-4B",
-    "tokenizer_repo": "OpenGVLab/InternVL2-4B",
-    "dtype": "bfloat16"
-  
-}
-
-  

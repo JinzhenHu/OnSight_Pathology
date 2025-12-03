@@ -1,3 +1,9 @@
+import os
+# NOTE: ONLY FOR CPU EXE
+if 0:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
+
 import argparse
 import json
 import sys

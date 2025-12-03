@@ -1,6 +1,10 @@
 venv/
 dist/
+dist-cpu/
+dist-gpu/
 build/
 .idea/
 Output/
+Output-cpu
+Output-gpu
 __pycache__/
