@@ -7,10 +7,11 @@ OutputBaseFilename=OnSightPathologyInstaller
 Compression=lzma
 SolidCompression=yes
 SetupIconFile="sample_icon.ico"
+OutputDir=output-gpu
 
 ; --- Add these two lines --- ; ~2 GB per slice (max allowed)
-;DiskSpanning=yes
-;DiskSliceSize=2000000000   
+DiskSpanning=yes
+DiskSliceSize=2000000000   
 
 [Files]
 Source: "dist\app\*"; DestDir: "{app}"; Flags: recursesubdirs
