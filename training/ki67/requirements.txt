@@ -1,0 +1,6 @@
+opencv-python
+pycocotools
+shapely
+openslide-python
+openslide-bin # windows
+ultralytics
