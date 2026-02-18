@@ -2,8 +2,8 @@ import logging
 import os
 import sys
 
-# NOTE: ONLY FOR CPU EXE
-if 0:
+# ONLY FOR CPU EXE
+if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
