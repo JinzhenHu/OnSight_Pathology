@@ -1,9 +1,7 @@
 import mss
 import numpy as np
 import cv2
-from skimage.color import rgb2hed
-from skimage.filters import threshold_otsu
-from sklearn.mixture import GaussianMixture
+from skimage.color import rgb2lab
 
 from utils import extract_tiles
 
@@ -38,181 +36,31 @@ def visualize_ki67_overlay(img, masks, labels, ki67_positive, alpha=0.4):
     return blended
 
 
-def compute_hed_and_dab(img):
-    """
-    img: HxWx3, BGR (OpenCV) or RGB (if you already converted).
-    Returns:
-        img_rgb: HxWx3 RGB image
-        hed:     HxWx3 HED image
-        dab_od:  HxW, positive OD-like measure where higher = more DAB
-    """
-    # Assume BGR input from OpenCV; convert to RGB for skimage
-    # img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+def classify_ki67_labb_approach(img, masks, min_area=10, threshold=0):
+    def compute_lab_b_signal(img_rgb, masks, labels, min_area=10):
+        lab = rgb2lab(img_rgb)
+        b_channel = lab[..., 2]  # b*: brown = positive, blue = negative
 
-    # RGB -> HED
-    hed = rgb2hed(img)
+        scores = []
+        valid_labels = []
+        for lab_id in labels:
+            region = masks == lab_id
+            if region.sum() < min_area:
+                continue
+            scores.append(float(b_channel[region].mean()))
+            valid_labels.append(lab_id)
 
-    # DAB is channel 2 (D). In HED, more stain ≈ more negative.
-    # Invert sign so "more brown" => larger positive value
-    # dab_od = -hed[..., 2]
-    dab_od = hed[..., 2]
-
-    return img, hed, dab_od
-
-
-# ---------- GMM helper: intersection of two 1D Gaussians ----------
-
-def gmm_two_component_threshold(gmm):
-    """
-    Given a fitted 2-component 1D GaussianMixture, find the intersection point
-    of the two weighted Gaussians as the threshold.
-
-    If no sign change is found, use the point where |p1 - p2| is minimal,
-    clamped to [m1, m2].
-    """
-    means = gmm.means_.flatten()
-    variances = gmm.covariances_.flatten()
-    weights = gmm.weights_.flatten()
-
-    # sort components by mean (c0 = low, c1 = high)
-    order = np.argsort(means)
-    m1, m2 = means[order]
-    v1, v2 = variances[order]
-    w1, w2 = weights[order]
-
-    s1, s2 = np.sqrt(v1), np.sqrt(v2)
-
-    # numeric search for intersection in a reasonable range
-    x_min = m1 - 3 * s1
-    x_max = m2 + 3 * s2
-    xs = np.linspace(x_min, x_max, 512)
-
-    def pdf(x, m, s):
-        return np.exp(-0.5 * ((x - m) / s) ** 2) / (s * np.sqrt(2 * np.pi))
-
-    p1 = w1 * pdf(xs, m1, s1)
-    p2 = w2 * pdf(xs, m2, s2)
-    diff = p1 - p2
-
-    # look for sign change between p1 and p2
-    sign_change = np.where(np.sign(diff[:-1]) * np.sign(diff[1:]) < 0)[0]
-
-    if len(sign_change) > 0:
-        i = sign_change[0]
-        x0, x1 = xs[i], xs[i + 1]
-        y0, y1 = diff[i], diff[i + 1]
-        thr = x0 - y0 * (x1 - x0) / (y1 - y0)
-        return float(thr)
-
-    # fallback: point of minimal |p1 - p2|
-    i_min = np.argmin(np.abs(diff))
-    thr = xs[i_min]
-
-    # clamp to [m1, m2]
-    thr = float(np.clip(thr, m1, m2))
-    return thr
-
-
-# ---------- Main classifier ----------
-
-def classify_ki67_gmm_hybrid(
-        img,
-        masks,
-        min_area=20,
-        gmm_random_state=0,
-        extreme_pct=1.0,  # use midpoint if intersection is outside [p1, p99]
-):
-    """
-    Ki-67 classifier that:
-
-      1. ALWAYS tries 2-component GMM on per-nucleus DAB means.
-         - Primary threshold = intersection of weighted Gaussians
-         - If intersection is "extreme" (e.g., < p1 or > p99), fall back to midpoint.
-      2. If GMM fails altogether, uses Otsu.
-      3. If Otsu also fails, uses homogeneous fallback.
-
-    Returns:
-        nucleus_labels, dab_means, ki67_positive, dab_thresh, method_used
-        method_used in {"gmm-intersection", "gmm-midpoint", "otsu", "homogeneous"}
-    """
-    _, _, dab_od = compute_hed_and_dab(img)
+        return np.array(valid_labels), np.array(scores)
 
     labels = np.unique(masks)
     labels = labels[labels != 0]
 
-    nucleus_labels = []
-    dab_means = []
+    valid_labels, scores = compute_lab_b_signal(img, masks, labels, min_area)
 
-    for lab in labels:
-        region = (masks == lab)
-        if region.sum() < min_area:
-            continue
-        dab_means.append(float(dab_od[region].mean()))
-        nucleus_labels.append(lab)
+    return valid_labels, scores > threshold
 
-    if not nucleus_labels:
-        return np.array([]), np.array([]), np.array([]), None, "none"
-
-    nucleus_labels = np.array(nucleus_labels)
-    dab_means = np.array(dab_means, dtype=float)
-
-    tiny = 1e-8
-
-    # ------------------------------
-    # 1) TRY GMM ALWAYS
-    # ------------------------------
-    try:
-        gmm = GaussianMixture(
-            n_components=2,
-            covariance_type="full",
-            random_state=gmm_random_state,
-        )
-        gmm.fit(dab_means.reshape(-1, 1))
-
-        means = gmm.means_.flatten()
-        order = np.argsort(means)
-        m1, m2 = means[order]
-        mid = 0.5 * (m1 + m2)
-
-        # primary candidate: intersection threshold
-        thr_int = gmm_two_component_threshold(gmm)
-
-        # sanity: if intersection is too close to extremes, use midpoint instead
-        p_low, p_high = np.percentile(dab_means, [extreme_pct, 100 - extreme_pct])
-
-        if thr_int < p_low or thr_int > p_high:
-            # suspicious intersection -> midpoint fallback
-            dab_thresh = float(mid)
-            method_used = "gmm-midpoint"
-        else:
-            dab_thresh = float(thr_int)
-            method_used = "gmm-intersection"
-
-        ki67_positive = dab_means > dab_thresh
-        return nucleus_labels, dab_means, ki67_positive, dab_thresh, method_used
-
-    except Exception:
-        # GMM failed (rare): fall through to Otsu + homogeneous
-        pass
-
-    # ------------------------------
-    # 2) Otsu fallback
-    # ------------------------------
-    try:
-        dab_thresh = float(threshold_otsu(dab_means))
-        ki67_positive = dab_means > dab_thresh
-        return nucleus_labels, dab_means, ki67_positive, dab_thresh, "otsu"
-    except Exception:
-        pass
-
-    # ------------------------------
-    # 3) Homogeneous fallback
-    # ------------------------------
-    med = float(np.median(dab_means))
-    dab_thresh = med + tiny
-    ki67_positive = dab_means > dab_thresh
-    return nucleus_labels, dab_means, ki67_positive, dab_thresh, "homogeneous"
-
+def um2_to_px(area_um2, mpp):
+        return area_um2 / (mpp ** 2)
 
 def process_region(region, **kwargs):
     metadata = kwargs['metadata']
@@ -238,8 +86,15 @@ def process_region(region, **kwargs):
 
     try:
         _mask_alpha = 1 - float(kwargs['additional_configs'].get('mask_transparency', 0.5))
+        _positivity_thresh = float(kwargs['additional_configs'].get('positivity_thresh', 0))
+        _min_area = float(kwargs['additional_configs'].get('min_area_um2', 1))
     except:
         _mask_alpha = 0.5
+        _positivity_thresh = 0
+        _min_area = 1
+
+    # NOTE: Default µm² area will be using 20x
+    _min_area = um2_to_px(_min_area, 0.504)
 
     tile_size_y = tile_size_x = tile_size
     if frame.shape[0] < tile_size:
@@ -256,12 +111,12 @@ def process_region(region, **kwargs):
 
             if masks[k].max() > 0:
 
-                labels, dab_means, ki67_pos, dab_thresh, method = classify_ki67_gmm_hybrid(
+                labels, ki67_pos = classify_ki67_labb_approach(
                     slices[k],
                     masks[k],
-                    min_area=20,
+                    min_area=_min_area,
+                    threshold=_positivity_thresh,
                 )
-                # print("Threshold:", dab_thresh, "Method:", method)
 
                 num_pos += ki67_pos.sum()
                 num_pos_neg += len(ki67_pos)

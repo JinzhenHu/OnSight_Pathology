@@ -10,6 +10,6 @@
     "Positive",
     "Negative"
   ],
-  "additional_configs": {"mask_transparency": 0.75},
+  "additional_configs": {"mask_transparency": 0.75, "positivity_thresh": 0, "min_area_um2": 5},
   "notes:": ""
 }
