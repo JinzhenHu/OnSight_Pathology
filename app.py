@@ -633,7 +633,7 @@ class ImageClassificationApp(QMainWindow):
         self.btn_agg_stop.setFocus()
         self.agg_records.clear()
         self.btn_agg_export.setEnabled(False)
-
+##
         # self.box_mm2 = None
         self.show_calib_box = False
         self.cls_stats.clear()
