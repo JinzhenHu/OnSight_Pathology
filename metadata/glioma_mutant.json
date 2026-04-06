@@ -1,0 +1,17 @@
+{
+  "repo": "diamandislabii/Glioma_Subtype",
+  "repo_src": "HuggingFace",
+  "info": "This H&E brain tumor classifier was developed using transfer learning on a Vision Transformer(Kaiko) petrained on WSIs",
+  "mpp": 0.504,
+  "model": "Glioma_Subtype_Astro_G4",
+  "tile_size": 512,
+  "aggregate_type": "classification",
+  "additional_configs": {
+      "Show ViT Attention Map": false
+  },
+  "classes": [
+      
+      "IDH-mutant",
+       "Glioblastoma"
+  ]
+}

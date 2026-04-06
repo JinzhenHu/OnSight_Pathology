@@ -1,10 +1,25 @@
-venv/
-dist/
-dist-cpu/
-dist-gpu/
+#排除环境和日志
+.venv/
+runs/
+logs/
+.ipynb_checkpoints/
 build/
-.idea/
-Output/
-Output-cpu
-Output-gpu
-__pycache__/
+NuLite/
+lemon/
+MEDIAR/
+
+# 排除数据集
+data/
+datasets/
+
+# 排除训练好的模型权重
+*.pth
+*.exe
+*.mp4
+*.zip
+*.pkl
+*.h5
+*.png
+*.h5ad
+checkpoint/
+github/

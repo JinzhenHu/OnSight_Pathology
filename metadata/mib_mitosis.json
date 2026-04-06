@@ -6,6 +6,7 @@
   "model": "Retinanet",
   "tile_size": 512,
   "aggregate_type": "mitosis",
+  "supported_mags": ["20x", "40x"],
   "classes": ["Mitosis Detection with Confidence Score"
   ],
   "additional_configs": {"specificity":  0.2}

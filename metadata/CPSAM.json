@@ -1,0 +1,10 @@
+{
+  "repo": "instanseg/embedding",
+  "repo_src": "PythonLib",
+  "info": "CPSAM (Cellpose + SAM)",
+  "mpp": 0.5,
+  "model": "CPSAM",
+  "tile_size": 256,
+  "aggregate_type": "eccentricity",
+  "notes:": "Calculates Cellularity and Eccentricity"
+}

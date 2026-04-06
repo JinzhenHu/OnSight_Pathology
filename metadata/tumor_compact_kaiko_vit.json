@@ -6,6 +6,9 @@
   "model": "VITtumor_kaiko",
   "tile_size": 1024,
   "aggregate_type": "classification",
+  "additional_configs": {
+      "Show ViT Attention Map": false
+  },
   "classes": [
      "Epithelial pattern", 
       "Glial histology",

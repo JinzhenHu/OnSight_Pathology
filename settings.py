@@ -28,10 +28,20 @@ PRECISION_DISPLAY_MAP = {
 MODEL_CATELOG = [
     ("▶️ Classification Models", [
         {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
+        #{'name': "Glioma Subtype (VIT)", 'info_file': 'metadata/glioma_vit.json'},
+        {'name': "Glioma Subtype (VIT_Kaiko)", 'info_file': 'metadata/glioma_mutant.json'},
+        #{'name': "Glioma Subtype (VIT_midnight)", 'info_file': 'metadata/glioma_midnight.json'},
+        {'name': "Magnification (VIT)", 'info_file': 'metadata/mag_detector.json'},
+        
     ]),
     ("▶️ Segmentation Models", [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
         {'name': "MIB (Cellpose-SAM)", 'info_file': 'metadata/mib_cellpose.json'},
+        #{'name': "Cellularity (InstanSeg)", 'info_file': 'metadata/instanseg.json'},
+        # {'name': "Cellularity (CPSAM)", 'info_file': 'metadata/CPSAM.json'},
+        {'name': "Cellular Features (CPSAM)", 'info_file': 'metadata/CPSAM_profiler.json'},
+        {'name': "CellVIT (NuLite-H)", 'info_file': 'metadata/nulight.json'},
+
     ]),
     ("▶️ Object Detection Models", [
         {'name': "Mitosis Detection (Retinanet)", 'info_file': 'metadata/mib_mitosis.json'}
