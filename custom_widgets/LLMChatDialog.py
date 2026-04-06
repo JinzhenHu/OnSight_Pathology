@@ -118,6 +118,7 @@ class LLMChatDialog(QDialog):
         self.btn_update = QPushButton("📸 Refresh Vision")
         self.btn_update.setObjectName("UpdateBtn")
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.setAutoDefault(False)
         self.btn_update.clicked.connect(self.on_update_image)
         
         # 将图片和按钮居中摆放
@@ -159,7 +160,8 @@ class LLMChatDialog(QDialog):
         self.btn_send.setObjectName("SendBtn")
         self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send.clicked.connect(self.on_send)
-        
+        self.btn_send.setAutoDefault(True)
+        self.btn_send.setDefault(True)
         input_layout.addWidget(self.inp)
         input_layout.addWidget(self.btn_send)
         main_vbox.addLayout(input_layout)
@@ -202,6 +204,11 @@ class LLMChatDialog(QDialog):
             return
             
         new_frame = self.parent.latest_frame.copy()
+
+        # 🚀 [核心修复 3] 像素级防抖：如果视野根本没动（新旧图一模一样），直接静默拦截！
+        if np.array_equal(self.frame_rgb, new_frame):
+            return
+
         self.frame_rgb = new_frame
         self._set_preview_image(self.frame_rgb)
         
@@ -211,8 +218,7 @@ class LLMChatDialog(QDialog):
                 msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
                 self.process.write(msg.encode("utf-8"))
                 
-        # 🚀 [修改] 优雅的灰色居中系统提示，使用 Table 强行隔离
-# 🚀 [修改] 优雅的灰色居中系统提示 (去掉了前后的 <br>，字号调为 10pt，缩小 padding)
+        # 优雅的灰色居中系统提示
         sys_html = """
         <table width="100%" cellspacing="0" cellpadding="0">
           <tr>
