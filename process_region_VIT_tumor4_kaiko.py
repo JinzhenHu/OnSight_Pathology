@@ -9,20 +9,8 @@ import torch.nn.functional as F
 from PIL import Image
 from pytorch_grad_cam import GradCAMPlusPlus
 from torchvision.transforms import v2
-# 把你的 reshape_transform 放到最外层
-def get_gaussian_window(height, width, sigma=0.5):
-    """
-    生成一个二维的高斯权重矩阵。
-    中心点权重最高 (1.0)，边缘权重向 0 递减。
-    sigma 控制平滑的范围，0.5 是一个比较均衡的经验值。
-    """
-    x = np.linspace(-1, 1, width)
-    y = np.linspace(-1, 1, height)
-    xx, yy = np.meshgrid(x, y)
-    
-    # 高斯公式：e^(-(x^2 + y^2) / (2 * sigma^2))
-    window = np.exp(-(xx**2 + yy**2) / (2.0 * sigma**2))
-    return window.astype(np.float32)
+
+
 def reshape_transform(tensor, height=14, width=14):
     result = tensor[:, 1:, :].reshape(tensor.size(0), height, width, tensor.size(2))
     result = result.transpose(2, 3).transpose(1, 2)
@@ -69,6 +57,10 @@ def process_region(region, **kwargs):
     metadata = kwargs['metadata']
     model = kwargs['model']
     tile_size = metadata['tile_size']
+    additional_configs = kwargs.get('additional_configs', {})
+    show_cam = additional_configs.get("Show ViT Attention Map", False)
+    if isinstance(show_cam, str):
+        show_cam = show_cam.lower() == 'true'
 
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
@@ -88,50 +80,48 @@ def process_region(region, **kwargs):
     result = []
     model.eval()
 
-    target_layers = [model.blocks[-1].norm1]
-    cam = GradCAMPlusPlus(model=model, target_layers=target_layers, reshape_transform=reshape_transform)
-    full_cam = np.zeros((h, w), dtype=np.float32)
-    weight_map = np.zeros((h, w), dtype=np.float32)
-
-    base_window = get_gaussian_window(tile_size, tile_size, sigma=0.5)
-
+    if show_cam:
+        target_layers = [model.blocks[-1].norm1]
+        cam = GradCAMPlusPlus(model=model, target_layers=target_layers, reshape_transform=reshape_transform)
+        full_cam = np.zeros((h, w), dtype=np.float32)
+        
     for rs, cs in tile_slices:
-        tile_img = Image.fromarray(frame[rs, cs])
-        tile_tensor = preprocessing(tile_img).unsqueeze(0).to(device)
-        
-        # 1. 正常分类预测
-        with torch.no_grad():
-            out = model(tile_tensor)
-            prob = F.softmax(out, dim=1)
-            result.append(prob)
+            tile_img = Image.fromarray(frame[rs, cs])
+            tile_tensor = preprocessing(tile_img).unsqueeze(0).to(device)
             
-            # 🌟 修复 3：拿到当前 tile 的最高概率（或者你要预测的目标类别概率）
-            tile_conf = prob.max().item() 
-        
-        grayscale_cam = cam(input_tensor=tile_tensor, targets=None)
-        cam_map = grayscale_cam[0]
+            with torch.no_grad():
+                out = model(tile_tensor)
+                prob = F.softmax(out, dim=1)
+                result.append(prob)
+                tile_conf = prob.max().item() 
+            
+            # 🚀 改进 3：条件触发，极大提速 inference 
+            if show_cam:
+                grayscale_cam = cam(input_tensor=tile_tensor, targets=None)
+                cam_map = grayscale_cam[0]
 
-        tile_h = rs.stop - rs.start
-        tile_w = cs.stop - cs.start
+                tile_h = rs.stop - rs.start
+                tile_w = cs.stop - cs.start
+                cam_map_resized = cv2.resize(cam_map, (tile_w, tile_h))
+                
+                # 放弃高斯窗口矩阵。直接按 tile 置信度缩放，保留高亮度
+                weighted_cam = cam_map_resized * tile_conf
+                
+                # 使用 np.maximum 覆盖，防止最后一行/一列强制裁剪叠加时造成的异常黑块
+                full_cam[rs, cs] = np.maximum(full_cam[rs, cs], weighted_cam)
 
-        cam_map_resized = cv2.resize(cam_map, (tile_w, tile_h))
-        
-        # 裁剪边缘块的 window（如果是最右边/最下边的块，尺寸可能不到 tile_size）
-        tile_window = base_window[:tile_h, :tile_w]
-        
-        # 🌟 核心：高斯权重平滑边缘 + 置信度惩罚压制背景噪音
-        weighted_cam = cam_map_resized * tile_window * tile_conf
-        
-        # 贴回大画布并记录权重
-        full_cam[rs, cs] += weighted_cam
-        weight_map[rs, cs] += tile_window
+        # 🚀 改进 4：使用大核全局高斯模糊彻底“融化”切块的硬边缘
+    if show_cam:
+        # 自适应模糊核大小：随切块大小成比例放大，并确保为奇数
+        blur_kernel = max(15, (tile_size // 8) | 1) 
+        full_cam = cv2.GaussianBlur(full_cam, (blur_kernel, blur_kernel), 0)
 
-    # >>> [GRAD-CAM NORMALIZATION START] >>>
-    # 平均重叠区域并归一化到 0.0 - 1.0 之间
-    full_cam = full_cam / (weight_map + 1e-8)
-    if full_cam.max() > 0:
-        full_cam = (full_cam - full_cam.min()) / (full_cam.max() - full_cam.min() + 1e-8)
-    # <<< [GRAD-CAM NORMALIZATION END] <<<
+        # 最终的 0.0 - 1.0 全局归一化
+        if full_cam.max() > 0:
+            full_cam = (full_cam - full_cam.min()) / (full_cam.max() - full_cam.min() + 1e-8)
+
+
+
 
     result_tensor = torch.vstack(result)
     final_prob= torch.mean(result_tensor, dim=0)
@@ -145,6 +135,7 @@ def process_region(region, **kwargs):
     res = ''
     for idx in top_3_idx:
         res += '{}: {:.4f}\n'.format(metadata['classes'][idx], final_prob_numpy[idx])
+    
     final_conf = float(final_prob_numpy[top_3_idx[0]])
     top_1 = top_3_idx[0] 
     
@@ -154,9 +145,13 @@ def process_region(region, **kwargs):
         "probs":      probs_dict,
         "area_px":   frame.shape[0] * frame.shape[1],
         "mpp":       metadata.get("mpp", 0.25),
-        "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
-        "attention_map": full_cam # <--- 传回 Grad-CAM 热力图
+        "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
     }
+
+    # 只有开关打开时，才会向主 UI 吐出 attention_map 数据
+    if show_cam:
+        metrics["attention_map"] = full_cam
+        
     return frame, res, metrics
     # for rs, cs in tile_slices:
     #     tile_img = Image.fromarray(frame[rs, cs])

@@ -7,8 +7,8 @@ from utils import resource_path
 ##############################################################################################################################################
 
 LLM_CATALOG = {
-    "Huatuo-7b": "metadata/huatuo.json",
     "Lingshu-7b": "metadata/lingshu.json",
+    "Huatuo-7b": "metadata/huatuo.json",
 }
 
 LLM_METADATA = {}

@@ -23,6 +23,7 @@ class LLMChatDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("AI Copilot")
         self.resize(500, 750)
+        self.BASE_FONT_SIZE = 12
         
         # ==========================================
         # 1. 酷炫的全局亮色主题 (Apple / ChatGPT 风格)
@@ -35,7 +36,7 @@ class LLMChatDialog(QDialog):
                 background-color: #FFFFFF;
                 border: none;
                 font-family: 'Segoe UI', -apple-system, sans-serif;
-                font-size: 11pt;
+                font-size: 13pt;
                 color: #2C3E50;
             }
             /* 现代化的圆角输入框 */
@@ -44,7 +45,7 @@ class LLMChatDialog(QDialog):
                 border: 1px solid #E9ECEF;
                 border-radius: 20px;
                 padding: 10px 18px;
-                font-size: 11pt;
+                font-size: 13pt;
                 color: #2C3E50;
             }
             QLineEdit:focus {
@@ -58,7 +59,7 @@ class LLMChatDialog(QDialog):
                 border-radius: 20px;
                 padding: 10px 20px;
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: 13pt;
             }
             QPushButton#SendBtn:hover {
                 background-color: #228BE6;
@@ -74,6 +75,7 @@ class LLMChatDialog(QDialog):
                 border-radius: 15px;
                 padding: 6px 12px;
                 font-weight: bold;
+                font-size: 13pt;
             }
             QPushButton#UpdateBtn:hover {
                 background-color: #F8F9FA;
@@ -133,11 +135,15 @@ class LLMChatDialog(QDialog):
         img_layout.addLayout(h_btn_center)
         main_vbox.addWidget(img_container)
 
-        # --- 中间：无边框优雅聊天流 ---
+# --- 中间：无边框优雅聊天流 ---
         self.txt_history = QTextEdit()
         self.txt_history.setReadOnly(True)
-        # 隐藏滚动条，让它更像网页
         self.txt_history.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # 🚀 [新增] 强制全局大号字体
+        font = QFont("Segoe UI", self.BASE_FONT_SIZE)
+        self.txt_history.setFont(font)
+        
         main_vbox.addWidget(self.txt_history)
 
         # --- 底部：现代化输入区 ---
@@ -146,7 +152,8 @@ class LLMChatDialog(QDialog):
         
         self.inp = QLineEdit()
         self.inp.setPlaceholderText("Message AI Copilot...")
-        self.inp.returnPressed.connect(self.on_send) # 按回车也能发
+        self.inp.setFont(font) # 🚀 [新增] 输入框也变大
+        self.inp.returnPressed.connect(self.on_send)
         
         self.btn_send = QPushButton("Send")
         self.btn_send.setObjectName("SendBtn")
@@ -201,19 +208,26 @@ class LLMChatDialog(QDialog):
         Image.fromarray(new_frame).save(self.temp_img_path)
         
         if self.process and self.process.state() == QProcess.ProcessState.Running:
-            msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
-            self.process.write(msg.encode("utf-8"))
-            
-        # 优雅的灰色居中系统提示
+                msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
+                self.process.write(msg.encode("utf-8"))
+                
+        # 🚀 [修改] 优雅的灰色居中系统提示，使用 Table 强行隔离
+# 🚀 [修改] 优雅的灰色居中系统提示 (去掉了前后的 <br>，字号调为 10pt，缩小 padding)
         sys_html = """
-        <div style="text-align: center; margin: 15px 0;">
-            <span style="background-color: #F8F9FA; color: #868E96; padding: 4px 12px; border-radius: 12px; font-size: 9pt;">
-                👁️ Vision synchronized with current microscope view
-            </span>
-        </div>
+        <table width="100%" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center">
+              <table cellspacing="0" cellpadding="6" bgcolor="#F8F9FA">
+                <tr>
+                  <td><span style="color: #868E96; font-size: 10pt;">👁️ Vision synchronized with current microscope view</span></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
         """
-        self.txt_history.append(sys_html)
 
+        self.txt_history.append(sys_html)
 
     def _start_process(self):
         self.process = QProcess(self)
@@ -256,11 +270,20 @@ class LLMChatDialog(QDialog):
 
                 elif msg_type == "chunk":
                     # 接收流式文本
-                    self.txt_history.moveCursor(QTextCursor.MoveOperation.End)
-                    self.txt_history.insertPlainText(msg["text"])
+                    cursor = self.txt_history.textCursor()
+                    cursor.movePosition(QTextCursor.MoveOperation.End)
+                    
+                    # 🚀 [核心修复] 强制锁定流式打字的大小和颜色！
+                    fmt = cursor.charFormat()
+                    fmt.setFontPointSize(self.BASE_FONT_SIZE)
+                    fmt.setForeground(QColor("#2C3E50"))
+                    cursor.setCharFormat(fmt)
+                    
+                    cursor.insertText(msg["text"])
+                    self.txt_history.setTextCursor(cursor)
                     # 自动滚到底部
                     self.txt_history.verticalScrollBar().setValue(self.txt_history.verticalScrollBar().maximum())
-
+                    
                 elif msg_type == "stream_end":
                     self.inp.setEnabled(True)
                     self.btn_send.setEnabled(True)
@@ -276,36 +299,45 @@ class LLMChatDialog(QDialog):
                 pass
 
     def on_send(self):
-        text = self.inp.text().strip()
-        if not self.model_ready or not text:
-            return
+            text = self.inp.text().strip()
+            if not self.model_ready or not text:
+                return
 
-        self.inp.clear()
+            self.inp.clear()
 
-        # 1. 用户的炫酷蓝色气泡 (右对齐)
-        user_html = f"""
-        <div style="text-align: right; margin-top: 15px; margin-bottom: 5px;">
-            <span style="background-color: #339AF0; color: white; padding: 10px 16px; border-radius: 16px; font-size: 11pt; display: inline-block;">
-                {text}
-            </span>
-        </div>
-        """
-        self.txt_history.append(user_html)
+            # 1. 用户的蓝色气泡 (字号改为 12pt)
+            user_html = f"""
+            <table width="100%" cellspacing="0" cellpadding="0">
+            <tr>
+                <td width="20%"></td>
+                <td align="right">
+                <table cellspacing="0" cellpadding="10" bgcolor="#339AF0">
+                    <tr>
+                    <td><span style="color: white; font-size: 12pt;">{text}</span></td>
+                    </tr>
+                </table>
+                </td>
+            </tr>
+            </table>
+            """
+            self.txt_history.append(user_html)
 
-        # 2. AI 的简洁灰色前缀 (左对齐)
-        ai_start_html = """
-        <div style="margin-top: 10px; margin-bottom: 5px;">
-            <b style="color: #20C997; font-size: 11pt;">✦ Assistant</b>
-        </div>
-        """
-        self.txt_history.append(ai_start_html)
-        
-        self.inp.setEnabled(False)
-        self.btn_send.setEnabled(False)
+            # 2. AI 的前缀 (去掉了 <br><br>，字号改为 12pt)
+            ai_start_html = """
+            <table width="100%" cellspacing="0" cellpadding="0">
+            <tr>
+                <td><b style="color: #20C997; font-size: 12pt;">✦ Assistant</b></td>
+            </tr>
+            </table>
+            """
+            self.txt_history.append(ai_start_html)
+            
+            self.inp.setEnabled(False)
+            self.btn_send.setEnabled(False)
 
-        if self.process:
-            msg = json.dumps({"type": "prompt", "text": text}) + "\n"
-            self.process.write(msg.encode("utf-8"))
+            if self.process:
+                msg = json.dumps({"type": "prompt", "text": text}) + "\n"
+                self.process.write(msg.encode("utf-8"))
 
     def closeEvent(self, event):
         if self.process and self.process.state() == QProcess.ProcessState.Running:
