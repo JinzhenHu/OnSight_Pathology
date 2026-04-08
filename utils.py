@@ -590,20 +590,6 @@ def get_he_deconvolution(im_rgb):
 
 
 
-def compute_texture_map(im_rgb, tissue_mask, sigma=8):
-    """
-    低倍下补充一个简单纹理图：
-    用灰度局部方差近似组织复杂度/异质性。
-    """
-    gray = cv2.cvtColor(im_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
-
-    mean = cv2.GaussianBlur(gray, (0, 0), sigmaX=sigma, sigmaY=sigma)
-    mean_sq = cv2.GaussianBlur(gray * gray, (0, 0), sigmaX=sigma, sigmaY=sigma)
-    var = np.maximum(mean_sq - mean * mean, 0)
-
-    var *= tissue_mask.astype(np.float32)
-    return var
-
 
 def compute_suspicious_score_map(
     im_rgb,
@@ -623,8 +609,6 @@ def compute_suspicious_score_map(
     G = im_rgb[:, :, 1].astype(np.float32) * tissue_float
     B = im_rgb[:, :, 2].astype(np.float32) * tissue_float
 
-    # 简单纹理
-   # texture_map = compute_texture_map(im_rgb, tissue_mask, sigma=max(4, sigma_region // 3))
 
     # 归一化
     Hn = normalize_to_01(H_strength)
@@ -639,14 +623,10 @@ def compute_suspicious_score_map(
     # 红色惩罚：E 高但 H 不高，容易是假阳性
     red_penalty = np.clip(E_region - H_region, 0, 1)
 
-    # 偏蓝紫奖励，压制纯红区域
-    # rb_ratio = (B + 1.0) / (R + 1.0)
-    # rb_ratio = normalize_to_01(rb_ratio)
-    #rb_region = cv2.GaussianBlur(rb_ratio, (0, 0), sigmaX=sigma_region, sigmaY=sigma_region)
 
     local_tissue = cv2.GaussianBlur(tissue_float, (0, 0), sigmaX=sigma_region, sigmaY=sigma_region)
 
-    # 新分数：重 H、轻 texture、惩罚红区、奖励蓝紫偏向
+    # 新分数：轻 惩罚红区、奖励蓝紫偏向
     score = (
        1 * H_region -
        # 0.15 * T_region +
@@ -664,7 +644,7 @@ def compute_suspicious_score_map(
 
 
 
-def visualize_hotspot_overlay(im_rgb, score_map, tissue_mask, percentile = 80, merge_kernel_size=15):
+def visualize_hotspot_overlay(im_rgb, score_map, tissue_mask, percentile = 60, merge_kernel_size=15):
 
     valid_scores = score_map[tissue_mask > 0]
     if len(valid_scores) == 0 or np.max(valid_scores) <= 1e-8:

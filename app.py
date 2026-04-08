@@ -1973,27 +1973,44 @@ class ImageClassificationApp(QMainWindow):
         grp_model.setLayout(h_model)
         main_layout.addWidget(grp_model)
 
+        # >>> [核心修复 1：补齐丢失的倍数面板] >>>
+        grp_mag = CollapsibleGroupBox("Active Magnification")
+        h_mag = QHBoxLayout()
+        
+        self.cmb_global_mag = QComboBox()
+        self.cmb_global_mag.addItems(["5x", "10x", "20x", "40x"])
+        self.cmb_global_mag.setCurrentText(self.current_mag)
+        self.cmb_global_mag.currentTextChanged.connect(self._on_global_mag_changed)
+        
+        self.lbl_global_mpp = QLabel()
+        self._update_global_mpp_label()
+
+        self.chk_auto_mag = QCheckBox("Auto-sync AI")
+        self.chk_auto_mag.setStyleSheet("color: #3498db; font-weight: bold;")
+        self.chk_auto_mag.setChecked(self.settings.get("auto_mag_sync", False)) 
+        self.chk_auto_mag.clicked.connect(self._on_auto_mag_clicked)
+
+        h_mag.addWidget(self.cmb_global_mag)
+        h_mag.addWidget(self.chk_auto_mag) 
+        h_mag.addWidget(self.lbl_global_mpp)
+        grp_mag.content_layout().addLayout(h_mag)
+        main_layout.addWidget(grp_mag)
+        # <<< [核心修复 1 结束] <<<
+
         # -------------------- Additional configs --------------------------
         self.grp_cfg = CollapsibleGroupBox("Additional Configs")
         self.v_cfg = self.grp_cfg.content_layout()
         main_layout.addWidget(self.grp_cfg)
 
-        # self.grp_cfg.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        # self.grp_cfg.content_layout().setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-
         # -------------------- Screen Capture (collapsible) --------------------
         grp_cap = CollapsibleGroupBox("Screen Capture")
         v_cap = grp_cap.content_layout()
 
-        # NOTE: Shows as popup instead of UI text
-        # self.lbl_cap_hint = QLabel("Recommended Capture Size:")
-        # self.lbl_cap_hint.setStyleSheet("color:red;")
-        # v_cap.addWidget(self.lbl_cap_hint)
-
         btn_sel = QPushButton("Select Screen Region")
         btn_sel.clicked.connect(self._select_region)
         v_cap.addWidget(btn_sel)
-# +++ 插入 Real-time Mag Detector Widget +++
+
+        # +++ 插入 Real-time Mag Detector Widget +++
         self.mag_widget = MagDetectorWidget(get_region_callback=lambda: self.selected_region)
         self.mag_widget.mag_detected.connect(self._on_mag_detected)
         self.mag_widget.tracking_state_changed.connect(self._on_mag_tracking_changed)
@@ -2004,10 +2021,6 @@ class ImageClassificationApp(QMainWindow):
         v_cap.addWidget(self.lbl_region)
 
         main_layout.addWidget(grp_cap)
-
-        ##############################################################################################################################################
-        # Aggregate Function UI
-        ##############################################################################################################################################
 
         # -------------------- Aggregate Function (collapsible) --------------------
         grp_agg = CollapsibleGroupBox("Aggregate Function")
@@ -2042,7 +2055,7 @@ class ImageClassificationApp(QMainWindow):
         h_row2.addWidget(self.btn_calib)
         h_row2.addWidget(self.btn_agg_export)
         h_row2.addStretch()
-        grid.addLayout(h_row2, 1, 0, 1, 3)  # span across 3 columns
+        grid.addLayout(h_row2, 1, 0, 1, 3)
 
         # row 1 –– results + tip
         box = QFrame()
@@ -2059,9 +2072,7 @@ class ImageClassificationApp(QMainWindow):
 
         main_layout.addWidget(grp_agg)
 
-        ################################################################################################################################################
-        ################################################################################################################################################
-# -------------------- Display output (Compact 模式同步更新) -----------------------------
+        # -------------------- Display output (Compact 模式同步更新) -----------------------------
         grp_out = QGroupBox("Inference Output")
         v_out = QVBoxLayout()
 
@@ -2082,12 +2093,28 @@ class ImageClassificationApp(QMainWindow):
         lbl_layout.addWidget(self.overlay_clustering, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         lbl_layout.addWidget(self.overlay_histomics, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
+        # >>> [核心修复 2：补齐丢失的倍数警告标签] >>>
+        self.lbl_mag_warning = QLabel("⚠️ Warning: Magnification mismatch!")
+        self.lbl_mag_warning.setStyleSheet("""
+            background-color: rgba(30, 40, 50, 220); 
+            padding: 8px 14px; 
+            border: 1px solid #ff4c4c; 
+            border-radius: 6px;
+        """)
+        self.lbl_mag_warning.hide() 
+        lbl_layout.addWidget(self.lbl_mag_warning, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        # <<< [核心修复 2 结束] <<<
+
+        # >>> [核心修复 3：补齐丢失的放大窗口更新信号] >>>
+        self.overlay_clustering.worker.finished.connect(self._on_overlay_worker_finished)
+        self.overlay_histomics.worker.finished.connect(self._on_overlay_worker_finished)
+        # <<< [核心修复 3 结束] <<<
+
         self.current_active_overlay = None 
 
         v_out.addWidget(self.lbl_img)
         
         # --- Compact 模式下的 ROI Finder ---
- # --- Compact 模式下的 ROI Finder ---
         grp_roi = QGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
@@ -2095,7 +2122,6 @@ class ImageClassificationApp(QMainWindow):
         h_roi_top.addWidget(QLabel("Method:"))
         
         self.cmb_roi_method = QComboBox()
-        # 🚀 [顺序调换]
         self.cmb_roi_method.addItems(["Hotspot", "Cluster"]) 
         self.cmb_roi_method.currentIndexChanged.connect(self._on_roi_method_changed)
         h_roi_top.addWidget(self.cmb_roi_method)
@@ -2103,10 +2129,8 @@ class ImageClassificationApp(QMainWindow):
 
         self.stacked_params = QStackedWidget()
         
-        # 卡片 1：Hotspot
-# --- 卡片 1：Hotspot 参数页 ---
+        # --- 卡片 1：Hotspot 参数页 ---
         page_hotspot = QWidget()
-        # 初始默认显示 Hotspot，设置它的尺寸策略为 Preferred
         page_hotspot.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         h_hotspot = QHBoxLayout(page_hotspot)
         h_hotspot.setContentsMargins(0, 0, 0, 0)
@@ -2118,12 +2142,11 @@ class ImageClassificationApp(QMainWindow):
         self.spin_percentile.setSingleStep(5)
         self.spin_percentile.valueChanged.connect(self._update_overlay_params)
 
-        # 🚀 [新增] Kernel 参数框
         self.lbl_kernel = QLabel("Kernel:")
         self.spin_kernel = QSpinBox()
         self.spin_kernel.setRange(1, 99) 
-        self.spin_kernel.setValue(5)      # 默认值 5
-        self.spin_kernel.setSingleStep(2) # 建议奇数步进 (3, 5, 7...)
+        self.spin_kernel.setValue(5)      
+        self.spin_kernel.setSingleStep(2) 
         self.spin_kernel.valueChanged.connect(self._update_overlay_params)
         
         h_hotspot.addWidget(self.lbl_percentile)
@@ -2131,18 +2154,16 @@ class ImageClassificationApp(QMainWindow):
         h_hotspot.addWidget(self.lbl_kernel)
         h_hotspot.addWidget(self.spin_kernel)
         h_hotspot.addStretch() 
-        self.stacked_params.addWidget(page_hotspot) # 索引 0
+        self.stacked_params.addWidget(page_hotspot) 
 
-        # --- 卡片 2：Cluster 参数页 (🚀 完美对齐网格版) ---
+        # --- 卡片 2：Cluster 参数页 ---
         page_cluster = QWidget()
-        # 初始时它是隐藏的，必须设为 Ignored 才能消除幽灵空白
         page_cluster.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored) 
         
         grid_cluster = QGridLayout(page_cluster)
         grid_cluster.setContentsMargins(0, 0, 0, 0)
-        grid_cluster.setSpacing(8) # 让上下两排紧凑一点
+        grid_cluster.setSpacing(8) 
         
-        # 第一排 (Row 0)
         self.lbl_patch = QLabel("Patch:")
         self.spin_patch = QSpinBox()
         self.spin_patch.setRange(16, 256); self.spin_patch.setValue(36); self.spin_patch.setSingleStep(16)
@@ -2158,7 +2179,6 @@ class ImageClassificationApp(QMainWindow):
         grid_cluster.addWidget(self.lbl_clusters, 0, 2)
         grid_cluster.addWidget(self.spin_clusters, 0, 3)
 
-        # 第二排 (Row 1)
         self.spin_sat = QSpinBox()
         self.spin_sat.setRange(0, 255); self.spin_sat.setValue(10)
         self.spin_sat.valueChanged.connect(self._update_overlay_params)
@@ -2177,11 +2197,9 @@ class ImageClassificationApp(QMainWindow):
         grid_cluster.addWidget(self.spin_val, 1, 3)
         grid_cluster.addWidget(QLabel("Tissue:"), 1, 4)
         grid_cluster.addWidget(self.spin_tissue, 1, 5)
-        
-        # 🚀 在最右侧（第 6 列）加一个弹簧，把所有格子紧紧挤在左边对齐
         grid_cluster.setColumnStretch(6, 1) 
 
-        self.stacked_params.addWidget(page_cluster) # 索引 1
+        self.stacked_params.addWidget(page_cluster) 
 
         h_roi_top.addWidget(self.stacked_params)
         v_roi.addLayout(h_roi_top)
@@ -2224,9 +2242,7 @@ class ImageClassificationApp(QMainWindow):
         
         # 强制初始化 ROI UI 状态
         self._on_roi_method_changed(0)
-
         self._on_model_changed()
-
     # ------------- UX ---------------
     def _select_region(self):
 

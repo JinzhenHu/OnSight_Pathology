@@ -192,7 +192,7 @@ def process_region(region, **kwargs):
             features_df = compute_nuclei_features(
             im_label=masks,
             im_nuclei=im_nuclei,          
-            im_cytoplasm=im_cytoplasm,     
+            #im_cytoplasm=im_cytoplasm,     
             morphometry_features_flag=True,
             fsd_features_flag=False,
             intensity_features_flag=True,
