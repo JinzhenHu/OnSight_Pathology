@@ -342,6 +342,55 @@ def process_region(region, **kwargs):
                 cluster_dict = dict(zip(df_meta['label'].values, clusters))
                 features_df['Cluster'] = features_df['Label'].map(cluster_dict)
                 final_vis_img = fast_cluster_overlay(frame, masks, df_meta['label'].values, clusters, k_clusters, alpha=_overlay_alpha)
+# 在 process_region_cpsam_cellfeatures.py 中
+            elif cluster_method == "Cascade Clustering":
+                masks = clear_border(masks)
+                # 🚀 核心对齐：调用和 H&E 模式一模一样的特征提取函数
+                features_df = compute_nuclei_features(
+                    im_label=masks, im_nuclei=im_nuclei, im_cytoplasm=im_cytoplasm,     
+                    morphometry_features_flag=True, fsd_features_flag=False,
+                    intensity_features_flag=True, gradient_features_flag=False, haralick_features_flag=False
+                )
+                valid_labels = features_df['Label'].values.astype(int)
+                
+                pipeline = configs.get('cascade_pipeline', [])
+                features_df['Cluster_Path'] = "All Cells"
+                
+                if not pipeline:
+                    features_df['Cluster'] = 0
+                else:
+                    from sklearn.cluster import KMeans
+                    from sklearn.preprocessing import StandardScaler
+                    
+                    for step in pipeline:
+                        target = step['target']
+                        feats = step['features']
+                        k = step['k']
+                        step_id = step['step_id']
+                        
+                        mask = (features_df['Cluster_Path'] == target)
+                        # 只有选了特征且细胞够多才聚类
+                        if mask.sum() >= k and len(feats) > 0:
+                            valid_feats = [f for f in feats if f in features_df.columns]
+                            X = features_df.loc[mask, valid_feats].fillna(0).values
+                            X_scaled = StandardScaler().fit_transform(X)
+                            
+                            kmeans = KMeans(n_clusters=k, random_state=42)
+                            labels = kmeans.fit_predict(X_scaled)
+                            
+                            # 名字生成，例如 S1-C0, S1-C1
+                            features_df.loc[mask, 'Cluster_Path'] = [f"S{step_id}-C{l}" for l in labels]
+                    
+                    # 映射回整数 ID 供渲染
+                    unique_paths = sorted(features_df['Cluster_Path'].unique())
+                    path_to_id = {p: i for i, p in enumerate(unique_paths)}
+                    features_df['Cluster'] = features_df['Cluster_Path'].map(path_to_id)
+                    actual_k = len(unique_paths)
+                    clusters = features_df['Cluster'].values
+                    # 🚀 [关键] 记录名字字典供 HTML 表头使用
+                    cluster_name_map = {i: p for p, i in path_to_id.items()}
+
+                final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
 
             # elif cluster_method == "Region Clustering":
             #     features_df = compute_nuclei_features(
@@ -614,7 +663,8 @@ def process_region(region, **kwargs):
         """
         for i in range(actual_k):
             count = cluster_stats[i]["count"]
-            html_text += f'<th align="right" style="padding: 8px; border-bottom: 2px solid #ccc; font-size: 10pt;"><span style="color:{cluster_hex_colors[i]}; font-size:13pt; vertical-align:middle;">■</span> C{i}<br><span style="font-size:8pt; color:#888; font-weight:normal;">n={count}</span></th>'
+            c_name = cluster_name_map.get(i, f"C{i}") if 'cluster_name_map' in locals() else f"C{i}"
+            html_text += f'<th align="right" style="padding: 8px; border-bottom: 2px solid #ccc; font-size: 10pt;"><span style="color:{cluster_hex_colors[i]}; font-size:13pt; vertical-align:middle;">■</span> {c_name}<br><span style="font-size:8pt; color:#888; font-weight:normal;">n={count}</span></th>'
         html_text += "</tr>"
 
         def make_row_pivot(name, key, unit=""):

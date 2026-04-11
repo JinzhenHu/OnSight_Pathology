@@ -10,6 +10,7 @@ from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
 from utils_clustering import clear_cluster_models_cache 
 from custom_widgets.CheckableComboBox import CheckableComboBox
+from custom_widgets.cascade_widget import CascadeClusteringWidget
 # NOTE: ONLY FOR CPU EXE
 if 0:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -222,7 +223,6 @@ QDialog QWidget, QDialog QLabel, QDialog QPushButton, QDialog QCheckBox {
 class ClassificationThread(QThread):
     # update_image = pyqtSignal(np.ndarray, str)
     update_image = pyqtSignal(np.ndarray, str, dict)
-    
 
     def __init__(self, ui_instance, model_name):
         super().__init__()
@@ -261,7 +261,7 @@ class ClassificationThread(QThread):
             # # <<< [修改结束 1] <<<
             
             # # >>> mpp[修改开始 1] 支持读取 ComboBox 和 CheckBox 的值 >>>
-# >>> [修改开始 4] 提取 CheckableComboBox 的勾选值 >>>
+            # >>> [修改开始 4] 提取 CheckableComboBox 的勾选值 >>>
             extra_cfg = {}
             for k, w in self.ui.additional_config_inputs.items():
                 if isinstance(w, CheckableComboBox):
@@ -274,6 +274,7 @@ class ClassificationThread(QThread):
                 else:
                     extra_cfg[k] = w.text()
             # <<< [修改结束 4] <<<
+            extra_cfg['cascade_pipeline'] = getattr(self.ui, 'current_cascade_pipeline', [])
 
             # --- 新增：检测 MPP 是否处于已校准状态 ---
             saved_mpp = self.ui.calibrated_mpp
@@ -2762,61 +2763,123 @@ class ImageClassificationApp(QMainWindow):
             self.additional_config_rows[k] = row_widget
             # <<< [新增结束] <<<
 # >>> [核心新增代码 3]：动态显示/隐藏 Context Scale 和 Clusters (k) 联动逻辑 >>>
+# >>> [核心新增代码 3]：动态显示/隐藏 Context Scale 和 Clusters (k) 联动逻辑 >>>
+# app.py 约 1050 行左右，_on_model_changed 结尾处
+
+        # >>> [核心新增：实时级联聚类面板挂载] >>>
         if "Clustering Method" in self.additional_config_inputs:
             cmb_clustering = self.additional_config_inputs["Clustering Method"]
             
-            # 获取需要控制的行容器
+            # 获取需要联动隐藏的行
             row_context_scale = self.additional_config_rows.get("Context Scale")
             row_k = self.additional_config_rows.get("Clusters (k)")
-            
-            # 🚀 [新增] 获取 Image Type 行容器
             row_img_type = self.additional_config_rows.get("Image Type")
-            
-            # 新增获取特征列表行
             row_feat_he = self.additional_config_rows.get("H&E Features (Multi-Select)")
             row_feat_muscle = self.additional_config_rows.get("Muscle Features (Multi-Select)")
 
+            # 1. 准备所有可能的特征列表给级联组件
+            he_feats = meta.get("additional_configs", {}).get("H&E Features (Multi-Select)", [])
+            mu_feats = meta.get("additional_configs", {}).get("Muscle Features (Multi-Select)", [])
+            
+            # 2. 实例化组件并塞入布局
+            self.cascade_widget = CascadeClusteringWidget(he_feats)
+            self.v_cfg.addSpacing(5)
+            self.v_cfg.addWidget(self.cascade_widget)
+            self.cascade_widget.hide() # 默认隐藏
+            
+            # 3. 变量初始化与数据同步
+            self.current_cascade_pipeline = []
+            self.cascade_widget.pipeline_updated.connect(lambda p: setattr(self, 'current_cascade_pipeline', p))
+
+            # 4. 定义 UI 刷新逻辑
             def update_clustering_ui():
                 method_text = cmb_clustering.currentText()
                 img_type_text = ""
-                
-                # 如果有 Image Type 下拉菜单，获取它的值
                 if "Image Type" in self.additional_config_inputs:
                     img_type_text = self.additional_config_inputs["Image Type"].currentText()
 
-                # 逻辑 1：显示 Context Scale
+                # 原有控件隐藏逻辑
                 if row_context_scale:
                     row_context_scale.setVisible(method_text in ["Single Cell Clustering", "Region Clustering"])
-                
-                # 逻辑 2：显示 Clusters (k)
                 if row_k:
-                    row_k.setVisible(method_text != "None")
-                    
-                # 🚀 逻辑 3 [核心修复]：只有选了 Customized Features 时，才显示 Image Type 下拉菜单！
+                    # 级联模式下不显示全局 k 值，因为每层都有独立的 k
+                    row_k.setVisible(method_text not in ["None", "Cascade Clustering"])
+                
+                # 控制 Customized Features 相关的子选项
                 is_custom = (method_text == "Customized Features")
-                if row_img_type:
-                    row_img_type.setVisible(is_custom)
-                    
-                # 逻辑 4：仅在选 Customized Features 时，根据 Image Type 显示对应的特征打勾框！
-                if row_feat_he:
-                    row_feat_he.setVisible(is_custom and img_type_text == "H&E Cell Analysis")
-                if row_feat_muscle:
-                    row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
-                    
-                # 逻辑 5：显存释放
-                if method_text not in ["Single Cell Clustering", "Region Clustering"]:
-                    try:
-                        from utils_clustering import clear_cluster_models_cache
-                        clear_cluster_models_cache()
-                    except ImportError: pass
+                if row_img_type: row_img_type.setVisible(is_custom)
+                if row_feat_he: row_feat_he.setVisible(is_custom and img_type_text == "H&E Cell Analysis")
+                if row_feat_muscle: row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
 
-            # 绑定信号：当 Clustering Method 或 Image Type 改变时，都触发刷新！
+                # 🚀 级联面板显示逻辑
+                if method_text == "Cascade Clustering":
+                    self.cascade_widget.show()
+                    self.cascade_widget.emit_pipeline() # 强制同步一次初始流水线
+                else:
+                    self.cascade_widget.hide()
+
+            # 5. 绑定切换信号并执行初始化
             cmb_clustering.currentTextChanged.connect(lambda _: update_clustering_ui())
             if "Image Type" in self.additional_config_inputs:
                 self.additional_config_inputs["Image Type"].currentTextChanged.connect(lambda _: update_clustering_ui())
             
-            # 初始化状态
             update_clustering_ui()
+# <<< [核心新增结束] <<<
+        # if "Clustering Method" in self.additional_config_inputs:
+        #     cmb_clustering = self.additional_config_inputs["Clustering Method"]
+            
+        #     # 获取需要控制的行容器
+        #     row_context_scale = self.additional_config_rows.get("Context Scale")
+        #     row_k = self.additional_config_rows.get("Clusters (k)")
+            
+        #     # 🚀 [新增] 获取 Image Type 行容器
+        #     row_img_type = self.additional_config_rows.get("Image Type")
+            
+        #     # 新增获取特征列表行
+        #     row_feat_he = self.additional_config_rows.get("H&E Features (Multi-Select)")
+        #     row_feat_muscle = self.additional_config_rows.get("Muscle Features (Multi-Select)")
+
+        #     def update_clustering_ui():
+        #         method_text = cmb_clustering.currentText()
+        #         img_type_text = ""
+                
+        #         # 如果有 Image Type 下拉菜单，获取它的值
+        #         if "Image Type" in self.additional_config_inputs:
+        #             img_type_text = self.additional_config_inputs["Image Type"].currentText()
+
+        #         # 逻辑 1：显示 Context Scale
+        #         if row_context_scale:
+        #             row_context_scale.setVisible(method_text in ["Single Cell Clustering", "Region Clustering"])
+                
+        #         # 逻辑 2：显示 Clusters (k)
+        #         if row_k:
+        #             row_k.setVisible(method_text != "None")
+                    
+        #         # 🚀 逻辑 3 [核心修复]：只有选了 Customized Features 时，才显示 Image Type 下拉菜单！
+        #         is_custom = (method_text == "Customized Features")
+        #         if row_img_type:
+        #             row_img_type.setVisible(is_custom)
+                    
+        #         # 逻辑 4：仅在选 Customized Features 时，根据 Image Type 显示对应的特征打勾框！
+        #         if row_feat_he:
+        #             row_feat_he.setVisible(is_custom and img_type_text == "H&E Cell Analysis")
+        #         if row_feat_muscle:
+        #             row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
+                    
+        #         # 逻辑 5：显存释放
+        #         if method_text not in ["Single Cell Clustering", "Region Clustering"]:
+        #             try:
+        #                 from utils_clustering import clear_cluster_models_cache
+        #                 clear_cluster_models_cache()
+        #             except ImportError: pass
+
+        #     # 绑定信号：当 Clustering Method 或 Image Type 改变时，都触发刷新！
+        #     cmb_clustering.currentTextChanged.connect(lambda _: update_clustering_ui())
+        #     if "Image Type" in self.additional_config_inputs:
+        #         self.additional_config_inputs["Image Type"].currentTextChanged.connect(lambda _: update_clustering_ui())
+            
+        #     # 初始化状态
+        #     update_clustering_ui()
 # <<< [核心新增结束] <<<
 # <<< [核心新增结束] <<<
         # if "Clustering Method" in self.additional_config_inputs:
