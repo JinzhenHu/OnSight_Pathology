@@ -19,6 +19,8 @@ cv_datas, cv_binaries, cv_hiddenimports = collect_all("cv2")
 skimage_datas, skimage_binaries, skimage_hiddenimports = collect_all("skimage")
 lazy_datas, lazy_binaries, lazy_hiddenimports = collect_all("lazy_loader")
 
+# 🚀 [新增 LLM 相关] 强制收集 transformers 等大模型核心库，防止子进程找不到模块
+tf_datas, tv_binaries_tf, tf_hiddenimports = collect_all("transformers")
 
 a = Analysis(
     ['app.py'],
@@ -33,7 +35,8 @@ a = Analysis(
         + np_binaries
         + cv_binaries
         + skimage_binaries # [新增]
-        + lazy_binaries,   # [新增]
+        + lazy_binaries   # [新增]
+        + tv_binaries_tf,
 
     # -------- 数据文件 --------
     datas=
@@ -52,7 +55,8 @@ a = Analysis(
         + np_datas
         + cv_datas
         + skimage_datas # [新增]
-        + lazy_datas,   # [新增]
+        + lazy_datas
+        + tf_datas,   # [新增]
 
     # -------- 隐式导入 --------
     hiddenimports=
@@ -62,6 +66,7 @@ a = Analysis(
         + cv_hiddenimports
         + skimage_hiddenimports # [新增]
         + lazy_hiddenimports    # [新增]
+        + tf_hiddenimports
         + [
             "torch",
             "torchvision",
@@ -72,6 +77,13 @@ a = Analysis(
             "PyQt6",
             "skimage",      # [新增]
             "lazy_loader",  # [新增]
+            # 🚀 [新增 LLM 相关] 大模型自调用所需的隐式依赖
+            "transformers",
+            "qwen_vl_utils",
+            "accelerate",
+            "timm",
+            "PIL",
+            "scipy",
         ],
 
     hookspath=[],

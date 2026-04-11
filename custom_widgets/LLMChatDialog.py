@@ -242,10 +242,11 @@ class LLMChatDialog(QDialog):
             self.llm_precision = "8bit"
 
         if getattr(sys, 'frozen', False):
-            script_path = os.path.join(os.path.dirname(sys.executable), "llm_worker_process.exe")
-            self.process.setProgram(script_path)
-            self.process.setArguments(["--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
+            # 🚀 生产环境：调用自己 (app.exe)，并传入特殊身份参数
+            self.process.setProgram(sys.executable)
+            self.process.setArguments(["--run-llm-worker", "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
         else:
+            # 👨‍💻 开发环境：正常调用 python.exe 运行脚本
             script_path = resource_path("llm_worker_process.py")
             self.process.setProgram(sys.executable)
             self.process.setArguments([script_path, "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])

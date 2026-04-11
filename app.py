@@ -1,7 +1,10 @@
 import logging
 import os
 import sys
-
+if "--run-llm-worker" in sys.argv:
+    sys.argv.remove("--run-llm-worker")
+    import llm_worker_process  # 直接运行子进程逻辑并阻塞
+    sys.exit(0)
 from custom_widgets.mag_detector_widget import MagDetectorWidget
 from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
@@ -219,6 +222,7 @@ QDialog QWidget, QDialog QLabel, QDialog QPushButton, QDialog QCheckBox {
 class ClassificationThread(QThread):
     # update_image = pyqtSignal(np.ndarray, str)
     update_image = pyqtSignal(np.ndarray, str, dict)
+    
 
     def __init__(self, ui_instance, model_name):
         super().__init__()

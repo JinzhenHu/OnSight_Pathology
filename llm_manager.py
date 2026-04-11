@@ -81,8 +81,7 @@ class AgentMemoryBot:
             self.memory_summary = ""
             self.first_image_message = None
             if streamer_callback:
-                streamer_callback("\n<br><span style='color:gray;'>[System: New ROI detected. Context cleared. Starting fresh...]</span><br>\n")
-
+                streamer_callback("\n[System: New ROI detected. Context cleared. Starting fresh...]\n\n")
         if len(self.history) == 0 and pil_img is not None:
             user_message = self._build_user_message(prompt, pil_img)
             self.first_image_message = user_message
@@ -93,7 +92,7 @@ class AgentMemoryBot:
 
         before_tokens = self._estimate_text_tokens(self._build_model_messages())
         if before_tokens > self.max_input_tokens and streamer_callback:
-            streamer_callback("\n<br><span style='color:gray;'>[System: Generating memory summary to save VRAM...]</span><br>\n")
+            streamer_callback("\n[System: Generating memory summary to save VRAM...]\n\n")
             
         self._prune_history()
 
@@ -278,9 +277,9 @@ class AgentMemoryBot:
 
         raw_reply = ""
         for new_text in streamer:
-            raw_reply += new_text
-            if streamer_callback:
-                streamer_callback(new_text.replace("\n", "<br>"))
+                    raw_reply += new_text
+                    if streamer_callback:
+                        streamer_callback(new_text)
 
         thread.join()
         return raw_reply

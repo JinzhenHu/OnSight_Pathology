@@ -350,13 +350,13 @@ def process_region(region, **kwargs):
     final_conf = float(final_prob_numpy[top_1])
 
     # 4. 最简单的文本拼接
-    res = f"预测类别: {metadata['classes'][top_1]}<br>"
-    res += f"连续倍数: {continuous_mag:.2f} x"
+    res = f"Predicted Magnification: {metadata['classes'][top_1]}<br>"
+    res += f"Continuous Magnification: {continuous_mag:.2f}X"
 
     # ---------------------------------------------------------
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     probs_dict = {cls: float(p) for cls, p in zip(metadata['classes'], final_prob_numpy)}
-    print(f"预测结果: {metadata['classes'][top_1]}")
+    print(f"Predicted Magnification: {metadata['classes'][top_1]}")
     
     metrics = {
         "conf":          float(continuous_mag),
