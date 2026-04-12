@@ -342,10 +342,10 @@ def process_region(region, **kwargs):
                 cluster_dict = dict(zip(df_meta['label'].values, clusters))
                 features_df['Cluster'] = features_df['Label'].map(cluster_dict)
                 final_vis_img = fast_cluster_overlay(frame, masks, df_meta['label'].values, clusters, k_clusters, alpha=_overlay_alpha)
-# 在 process_region_cpsam_cellfeatures.py 中
-            elif cluster_method == "Cascade Clustering":
+# process_region_cpsam_cellfeatures.py
+# process_region_cpsam_cellfeatures.py
+            elif cluster_method == "Hierarchical Gating":
                 masks = clear_border(masks)
-                # 🚀 核心对齐：调用和 H&E 模式一模一样的特征提取函数
                 features_df = compute_nuclei_features(
                     im_label=masks, im_nuclei=im_nuclei, im_cytoplasm=im_cytoplasm,     
                     morphometry_features_flag=True, fsd_features_flag=False,
@@ -358,36 +358,76 @@ def process_region(region, **kwargs):
                 
                 if not pipeline:
                     features_df['Cluster'] = 0
+                    actual_k = 1
+                    clusters = features_df['Cluster'].values
+                    cluster_name_map = {0: "All Cells"}
                 else:
                     from sklearn.cluster import KMeans
                     from sklearn.preprocessing import StandardScaler
                     
+                    area_feats = ['Size.Area', 'Area']
+                    linear_feats = ['Size.Perimeter', 'Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter', 
+                                    'Perimeter', 'axis_major_length', 'axis_minor_length', 'equivalent_diameter_area']
+
                     for step in pipeline:
                         target = step['target']
-                        feats = step['features']
+                        method = step.get('method', 'K-Means') 
                         k = step['k']
-                        step_id = step['step_id']
                         
                         mask = (features_df['Cluster_Path'] == target)
-                        # 只有选了特征且细胞够多才聚类
-                        if mask.sum() >= k and len(feats) > 0:
-                            valid_feats = [f for f in feats if f in features_df.columns]
-                            X = features_df.loc[mask, valid_feats].fillna(0).values
-                            X_scaled = StandardScaler().fit_transform(X)
+                        if mask.sum() == 0: continue
+
+                        # 🚀 统一族谱树命名 (与前端 UI 完全对应！)
+                        prefix = "C" if target == "All Cells" else f"{target}."
+                        new_names = [f"{prefix}{i+1}" for i in range(k)]
+
+                        # 引擎 A：无监督 K-Means 聚类
+                        if method == "K-Means":
+                            feats = step['features']
+                            if mask.sum() >= k and len(feats) > 0:
+                                valid_feats = [f for f in feats if f in features_df.columns]
+                                if not valid_feats: continue
+                                
+                                X = features_df.loc[mask, valid_feats].fillna(0).values
+                                X_scaled = StandardScaler().fit_transform(X)
+                                
+                                kmeans = KMeans(n_clusters=k, random_state=42)
+                                labels = kmeans.fit_predict(X_scaled)
+                                
+                                centers = kmeans.cluster_centers_.mean(axis=1)
+                                mapping = {old: new for new, old in enumerate(np.argsort(centers))}
+                                labels = np.array([mapping[l] for l in labels])
+                                
+                                features_df.loc[mask, 'Cluster_Path'] = [new_names[l] for l in labels]
+                            else:
+                                features_df.loc[mask, 'Cluster_Path'] = new_names[0]
+
+                        # 引擎 B：绝对数值阈值门控 (Threshold)
+                        elif method == "Threshold":
+                            feat = step['feature']
+                            thresh = step['threshold']
                             
-                            kmeans = KMeans(n_clusters=k, random_state=42)
-                            labels = kmeans.fit_predict(X_scaled)
-                            
-                            # 名字生成，例如 S1-C0, S1-C1
-                            features_df.loc[mask, 'Cluster_Path'] = [f"S{step_id}-C{l}" for l in labels]
+                            if feat in features_df.columns:
+                                vals = features_df.loc[mask, feat].fillna(0).values.copy()
+                                
+                                if feat in area_feats: vals = vals * (mpp ** 2)
+                                elif feat in linear_feats: vals = vals * mpp
+                                
+                                labels = (vals >= thresh).astype(int)
+                                features_df.loc[mask, 'Cluster_Path'] = [new_names[l] for l in labels]
+                            else:
+                                features_df.loc[mask, 'Cluster_Path'] = new_names[0]
                     
-                    # 映射回整数 ID 供渲染
-                    unique_paths = sorted(features_df['Cluster_Path'].unique())
+                    # 排序：根据节点深度进行智能排序，例如 C1, C2, C1.1, C1.2
+                    def sort_key(x):
+                        if not x.startswith('C'): return [999]
+                        return [int(part) for part in x.replace('C', '').split('.')]
+                    
+                    unique_paths = sorted(features_df['Cluster_Path'].unique(), key=sort_key)
                     path_to_id = {p: i for i, p in enumerate(unique_paths)}
                     features_df['Cluster'] = features_df['Cluster_Path'].map(path_to_id)
                     actual_k = len(unique_paths)
                     clusters = features_df['Cluster'].values
-                    # 🚀 [关键] 记录名字字典供 HTML 表头使用
                     cluster_name_map = {i: p for p, i in path_to_id.items()}
 
                 final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
@@ -490,7 +530,8 @@ def process_region(region, **kwargs):
         cmap = plt.get_cmap('gist_rainbow')
         
         for i in range(actual_k):
-            rgba = cmap(i / max(1, k_clusters - 1)) 
+            # 🚀 核心修复：原来错写成了 max(1, k_clusters - 1)，必须改成 actual_k
+            rgba = cmap(i / max(1, actual_k - 1)) 
             hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
             cluster_hex_colors.append(hex_color)
             

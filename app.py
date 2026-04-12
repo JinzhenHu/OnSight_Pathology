@@ -2803,7 +2803,7 @@ class ImageClassificationApp(QMainWindow):
                     row_context_scale.setVisible(method_text in ["Single Cell Clustering", "Region Clustering"])
                 if row_k:
                     # 级联模式下不显示全局 k 值，因为每层都有独立的 k
-                    row_k.setVisible(method_text not in ["None", "Cascade Clustering"])
+                    row_k.setVisible(method_text not in ["None", "Hierarchical Gating"])
                 
                 # 控制 Customized Features 相关的子选项
                 is_custom = (method_text == "Customized Features")
@@ -2812,7 +2812,7 @@ class ImageClassificationApp(QMainWindow):
                 if row_feat_muscle: row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
 
                 # 🚀 级联面板显示逻辑
-                if method_text == "Cascade Clustering":
+                if method_text == "Hierarchical Gating":
                     self.cascade_widget.show()
                     self.cascade_widget.emit_pipeline() # 强制同步一次初始流水线
                 else:
@@ -2825,6 +2825,84 @@ class ImageClassificationApp(QMainWindow):
             
             update_clustering_ui()
 # <<< [核心新增结束] <<<
+# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
+# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
+# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
+# >>> [精修版：Ki-67 Refine 动态联动逻辑] >>>
+# >>> [app.py 终极修复版：Ki-67 Refine 联动] >>>
+# >>> [app.py 终极防弹版：Ki-67 Refine 联动] >>>
+        if "Refine Positives" in self.additional_config_inputs:
+            cmb_refine = self.additional_config_inputs["Refine Positives"]
+            
+            row_refine_preview = self.additional_config_rows.get("Show Refinement Preview")
+            row_refine_feats_multi = self.additional_config_rows.get("Refine Features (Multi-Select)")
+            row_refine_feat_single = self.additional_config_rows.get("Refine Feature")
+            row_refine_k = self.additional_config_rows.get("K Clusters")
+            row_refine_target_multi = self.additional_config_rows.get("Select target groups (Multi-Select)")
+            row_refine_cutoff = self.additional_config_rows.get("Threshold Cutoff")
+
+            k_input = self.additional_config_inputs.get("K Clusters")
+            target_cmb = self.additional_config_inputs.get("Select target groups (Multi-Select)")
+
+            # 🚀 让下拉框在初始化时就认识自己的身份，绝对不会显示错！
+            if isinstance(target_cmb, CheckableComboBox):
+                target_cmb.placeholder_base = "groups"
+
+            if k_input and target_cmb and isinstance(target_cmb, CheckableComboBox):
+                def update_target_groups():
+                    try:
+                        text = k_input.text() if hasattr(k_input, 'text') else str(k_input.value())
+                        k_val = int(text)
+                    except:
+                        k_val = 2
+                    
+                    k_val = max(2, min(k_val, 15))
+                    checked_items = target_cmb.get_checked_items()
+                    
+                    # 🚀 加固锁：保证哪怕出错，信号锁定也必定会解除
+                    target_cmb.blockSignals(True)
+                    try:
+                        # 绝对不要用 target_cmb.clear()，使用我们新写的安全方法！
+                        target_cmb.clear_items()
+                        
+                        new_items = [f"Group{i}" for i in range(k_val)]
+                        target_cmb.addItems(new_items, checked_by_default=False)
+                        
+                        # 恢复之前的选中状态
+                        for i in range(target_cmb.model().rowCount()):
+                            item = target_cmb.model().item(i)
+                            if item and item.text() in checked_items:
+                                item.setCheckState(Qt.CheckState.Checked)
+                    finally:
+                        # 无论成功失败，必须解锁，否则框永远点不开！
+                        target_cmb.blockSignals(False)
+                        if hasattr(target_cmb, '_update_display_text'):
+                            target_cmb._update_display_text()
+
+                # 绑定信号
+                if hasattr(k_input, 'textChanged'):
+                    k_input.textChanged.connect(lambda _: update_target_groups())
+                
+                # 初始调用，填入 Group0 和 Group1
+                update_target_groups()
+
+            def update_refine_ui():
+                method = cmb_refine.currentText()
+                is_km = (method == "K-Means")
+                is_th = (method == "Threshold")
+                if row_refine_preview: row_refine_preview.setVisible(is_km)
+                if row_refine_feats_multi: row_refine_feats_multi.setVisible(is_km)
+                if row_refine_k: row_refine_k.setVisible(is_km)
+                if row_refine_target_multi: row_refine_target_multi.setVisible(is_km)
+                if row_refine_feat_single: row_refine_feat_single.setVisible(is_th)
+                if row_refine_cutoff: row_refine_cutoff.setVisible(is_th)
+
+            cmb_refine.currentTextChanged.connect(lambda _: update_refine_ui())
+            update_refine_ui()
+        # <<< [结束] <<<
+        # <<< [新增结束：Ki-67 Refine Positives] <<<
+        # <<< [新增结束：Ki-67 Refine Positives] <<<
+        # <<< [新增结束：Ki-67 Refine Positives] <<<
         # if "Clustering Method" in self.additional_config_inputs:
         #     cmb_clustering = self.additional_config_inputs["Clustering Method"]
             
