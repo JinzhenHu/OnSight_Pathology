@@ -1,71 +1,134 @@
+# Main application for OnSight Pathology
+#
+# Run:
+#   App main.py
+
 import logging
 import os
 import sys
-if "--run-llm-worker" in sys.argv:
-    sys.argv.remove("--run-llm-worker")
-    import llm_worker_process  # 直接运行子进程逻辑并阻塞
-    sys.exit(0)
-from custom_widgets.mag_detector_widget import MagDetectorWidget
-from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
-from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
-from utils_clustering import clear_cluster_models_cache 
-from custom_widgets.CheckableComboBox import CheckableComboBox
-from custom_widgets.cascade_widget import CascadeClusteringWidget
-# NOTE: ONLY FOR CPU EXE
-if 0:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
-# Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
-# Crash logging to file unaffected.
-for h in logging.root.handlers[:]:
-    if isinstance(h, logging.StreamHandler):
-        logging.root.removeHandler(h)
+from datetime import datetime
+from dataclasses import dataclass
 
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w")
-
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-os.environ["TQDM_DISABLE"] = "1"
-
-import crash_logging
-
-import sys
-import math
-import time
+import csv
+import gc
 import json
+import math
+import re
+import time
+
 import cv2
 import numpy as np
-import gc
-import os
-from datetime import datetime
-import csv
 import torch
-from PyQt6.QtWidgets import (
-    QApplication, QSpinBox, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox,
-    QLineEdit, QGroupBox, QHBoxLayout, QFrame, QMessageBox, QStyledItemDelegate,
-    QSizePolicy, QGridLayout, QDialog, QFileDialog, QInputDialog,
-    QDialogButtonBox, QMainWindow, QLayout, QCheckBox, 
-    QDoubleSpinBox, QScrollArea  
-) 
-from PyQt6.QtGui import QPixmap, QImage, QStandardItem, QStandardItemModel, QAction
-from PyQt6.QtGui import QShortcut, QKeySequence, QIcon
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize
+
 from pynput import mouse
-from dataclasses import dataclass
-from PyQt6.QtWidgets import QStackedWidget
-from utils import load_model, resource_path, get_gpu_memory, get_system_memory, build_precision_labels
+
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize
+from PyQt6.QtGui import (
+    QAction,
+    QIcon,
+    QImage,
+    QKeySequence,
+    QPixmap,
+    QShortcut,
+    QStandardItem,
+    QStandardItemModel,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QDoubleSpinBox,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QStackedWidget,
+    QStyledItemDelegate,
+    QVBoxLayout,
+    QWidget,
+)
+
 import settings
+from utils import (
+    build_precision_labels,
+    get_gpu_memory,
+    get_system_memory,
+    load_model,
+    resource_path,
+)
+from utils_clustering import clear_cluster_models_cache
+
 from custom_widgets.AboutDialog import AboutDialog
+from custom_widgets.cascade_widget import CascadeClusteringWidget  
+from custom_widgets.CheckableComboBox import CheckableComboBox
 from custom_widgets.CollapsibleGroupBox import CollapsibleGroupBox
 from custom_widgets.DisclaimerDialog import DisclaimerDialog
 from custom_widgets.LLMChatDialog import LLMChatDialog
 from custom_widgets.ResizeImageDialog import ResizableImageDialog
+from custom_widgets.mag_detector_widget import MagDetectorWidget
+from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
+from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
 
-print("Torch version:", torch.__version__)
 
+def run_llm_worker_if_requested() -> None:
+    """If launched with --run-llm-worker, start worker process and exit."""
+    if "--run-llm-worker" not in sys.argv:
+        return
+
+    sys.argv.remove("--run-llm-worker")
+    import llm_worker_process  
+
+    sys.exit(0)
+
+
+def configure_runtime_environment() -> None:
+    """Set runtime environment flags."""
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    os.environ["TQDM_DISABLE"] = "1"
+
+    # NOTE: ONLY FOR CPU EXE
+    if 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
+
+
+def configure_logging() -> None:
+    """Remove default stream handlers if needed."""
+    for handler in logging.root.handlers[:]:
+        if isinstance(handler, logging.StreamHandler):
+            logging.root.removeHandler(handler)
+
+
+def ensure_stdio() -> None:
+    """Ensure stdout/stderr are available."""
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+
+
+def bootstrap() -> None:
+    """Application bootstrap before main window/app creation."""
+    run_llm_worker_if_requested()
+    configure_runtime_environment()
+    configure_logging()
+    ensure_stdio()
+
+
+bootstrap()
 
 ###############################################################################################################################################
 # Data Class for aggregator function
@@ -78,15 +141,6 @@ class AggregateStats:
     mitosis: int = 0
     mib_pos: int = 0
     mib_total: int = 0
-    
-    # Eccentricity 任务专用
-    ecc_mean_sum: float = 0.0
-    ecc_median_sum: float = 0.0
-    ecc_mid50_mean_sum: float = 0.0
-    ecc_std_sum: float = 0.0
-    cellularity_sum: float = 0.0
-    
-    # Cell Profiler 任务专用 (动态字典)
     dynamic_sums: dict = None
 
     def __post_init__(self):
@@ -97,33 +151,22 @@ class AggregateStats:
         self.total_area_mm2 = self.conf_sum = self.mitosis = 0
         self.n_tiles = self.mib_pos = self.mib_total = 0
         
-        self.ecc_mean_sum = 0.0
-        self.ecc_median_sum = 0.0
-        self.ecc_mid50_mean_sum = 0.0
-        self.ecc_std_sum = 0.0
         self.cellularity_sum = 0.0
-        self.dynamic_sums = {} # 重置时清空字典
+        self.dynamic_sums = {} 
     
-# >>> [这里需要新增一个初始化函数] >>>
     def __post_init__(self):
         if self.dynamic_sums is None:
             self.dynamic_sums = {}
-    # <<< [新增结束] <<<
 
     def reset(self):
         self.total_area_mm2 = self.conf_sum = self.mitosis = 0
         self.n_tiles = self.mib_pos = self.mib_total = 0
         
-        # >>> [修改开始 2.1] 重置这 4 个变量 >>>
-        self.ecc_mean_sum = 0.0
-        self.ecc_median_sum = 0.0
-        self.ecc_mid50_mean_sum = 0.0
-        self.ecc_std_sum = 0.0
         self.cellularity_sum = 0.0
         self.dynamic_sums = {}
-        # <<< [修改结束 2.1] <<<
+
 ###############################################################################################################
-# Stylesh
+# GUI Stylesh
 ###############################################################################################################      
 PROFESSIONAL_STYLESHEET = """
 QWidget {
@@ -215,13 +258,11 @@ QDialog QWidget, QDialog QLabel, QDialog QPushButton, QDialog QCheckBox {
 }
 """
 
-
 ##############################################################################################################################################
 # Worker thread
 ##############################################################################################################################################
 
 class ClassificationThread(QThread):
-    # update_image = pyqtSignal(np.ndarray, str)
     update_image = pyqtSignal(np.ndarray, str, dict)
 
     def __init__(self, ui_instance, model_name):
@@ -238,34 +279,9 @@ class ClassificationThread(QThread):
     def run(self):
         while self.running:
             t0 = time.time()
-            # extra_cfg = {
-            #     k: w.text() for k, w in self.ui.additional_config_inputs.items()
-            # }
-            # # >>> [修改开始 1] 支持读取 ComboBox 的值 >>>
-            # extra_cfg = {}
-            # for k, w in self.ui.additional_config_inputs.items():
-            #     if isinstance(w, QComboBox):
-            #         extra_cfg[k] = w.currentText()
-            #     else:
-            #         extra_cfg[k] = w.text()
-            # # <<< [修改结束 1] <<<
-            # # >>> [修改开始 1] 支持读取 ComboBox 和 CheckBox 的值 >>>
-            # extra_cfg = {}
-            # for k, w in self.ui.additional_config_inputs.items():
-            #     if isinstance(w, QComboBox):
-            #         extra_cfg[k] = w.currentText()
-            #     elif isinstance(w, QCheckBox):
-            #         extra_cfg[k] = w.isChecked()
-            #     else:
-            #         extra_cfg[k] = w.text()
-            # # <<< [修改结束 1] <<<
-            
-            # # >>> mpp[修改开始 1] 支持读取 ComboBox 和 CheckBox 的值 >>>
-            # >>> [修改开始 4] 提取 CheckableComboBox 的勾选值 >>>
             extra_cfg = {}
             for k, w in self.ui.additional_config_inputs.items():
                 if isinstance(w, CheckableComboBox):
-                    # 获取被打勾的列表，例如 ['Size.Area', 'Nucleus.Intensity.Mean']
                     extra_cfg[k] = w.get_checked_items()
                 elif isinstance(w, QComboBox):
                     extra_cfg[k] = w.currentText()
@@ -273,14 +289,12 @@ class ClassificationThread(QThread):
                     extra_cfg[k] = w.isChecked()
                 else:
                     extra_cfg[k] = w.text()
-            # <<< [修改结束 4] <<<
             extra_cfg['cascade_pipeline'] = getattr(self.ui, 'current_cascade_pipeline', [])
 
-            # --- 新增：检测 MPP 是否处于已校准状态 ---
+            # check mpp calibration status and update extra_cfg accordingly
             saved_mpp = self.ui.calibrated_mpp
             if saved_mpp and "mpp" in extra_cfg:
                 try:
-                    # 如果用户没手动去乱改输入框的值，就标记为已校准
                     if abs(float(extra_cfg["mpp"]) - saved_mpp) < 1e-5:
                         extra_cfg["is_calibrated"] = True
                     else:
@@ -289,8 +303,6 @@ class ClassificationThread(QThread):
                     extra_cfg["is_calibrated"] = False
             else:
                 extra_cfg["is_calibrated"] = False
-            # ----------------------------------------
-            # <<< mpp[修改结束 1] <<<
 
             frame, res_txt, metrics = self.process_region(
                 self.ui.selected_region,
@@ -298,23 +310,15 @@ class ClassificationThread(QThread):
                 metadata=self.metadata,
                 additional_configs=extra_cfg,
             )
-            #res_txt += f"\n({time.time() - t0:.4f}s)"
             res_txt += f"<br><span style='color:gray; font-size:8pt;'>({time.time() - t0:.4f}s)</span>"
-            # print(res_txt)
-            # self.update_image.emit(frame, res_txt)
-            #######################################################################
-            # Aggregate Function update image new version
-            #######################################################################
             self.update_image.emit(frame, res_txt, metrics)
-            #######################################################################
-            #######################################################################
-            time.sleep(0.1)
+            #time.sleep(0.1)
 
     def stop(self):
         self.running = False
         self.wait()
 
-        # -------- free the model from GPU memory ---------
+        #free the model from GPU memory
         if self.using_gpu:
             del self.model
             gc.collect()
@@ -335,7 +339,7 @@ class ImageClassificationApp(QMainWindow):
         self.selected_region = None
         self.additional_config_inputs = {}
         self.thread = None
-        self.latest_frame = None  # np.ndarray RGB
+        self.latest_frame = None  
         self.last_result = ""
         self.enlarged_window = None
 
@@ -349,21 +353,17 @@ class ImageClassificationApp(QMainWindow):
         self.settings_file = get_user_settings_path()
         self.settings = self._load_settings()
 
-        # # >>> 新增：加载全局校准的 MPP >>>
-        # self.calibrated_mpp = self.settings.get("calibrated_mpp", None)
-        # # <<< 新增结束 <<<
 
-        # >>> 字典化管理 MPP (5x, 10x, 20x, 40x) >>>
+        # dictionary management for MPP (5x, 10x, 20x, 40x) >>>
         self.calibrated_mpps = self.settings.get("calibrated_mpps", {"5x": None, "10x": None, "20x": None, "40x": None})
-        self.current_mag = self.settings.get("current_mag", "20x") # 默认档位
+        self.current_mag = self.settings.get("current_mag", "20x") 
         self.calibrated_mpp = self.calibrated_mpps.get(self.current_mag)
-        # <<< 字典化管理 MPP 结束 <<<
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
         self.central_layout = QVBoxLayout(self.central_widget)
-        self.central_layout.setContentsMargins(0, 0, 0, 0)  # remove QMainWindow padding around layout
+        self.central_layout.setContentsMargins(0, 0, 0, 0) 
         self.central_layout.setSpacing(0)
 
         # Track which widget is currently active
@@ -381,7 +381,7 @@ class ImageClassificationApp(QMainWindow):
         self.box_mm2 = None
         self._calib_help_shown = False
 
-        self.cls_stats = {}  # {class: {'tiles':0, 'conf_sum':0, 'area':0}}
+        self.cls_stats = {} 
 
         self.agg = AggregateStats()
         self.latest_metrics = None
@@ -428,7 +428,7 @@ class ImageClassificationApp(QMainWindow):
             with open(self.settings_file, 'r') as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {}  # Return empty dict if file is missing or corrupted
+            return {}  
 
     def _save_settings(self):
         """Saves current settings to the JSON file."""
@@ -438,9 +438,8 @@ class ImageClassificationApp(QMainWindow):
         except Exception as e:
             print(f"Error saving settings: {e}")
 
-    # >>> 字典化管理 MPP (5x, 10x, 20x, 40x) >>>
     def _update_global_mpp_label(self):
-        """刷新左侧显示的 MPP 数值"""
+        """Updates the MPP label in the UI based on the currently selected magnification and its calibrated MPP value."""
         if not hasattr(self, 'lbl_global_mpp'): return
         mpp = self.calibrated_mpps.get(self.current_mag)
         if mpp:
@@ -451,90 +450,55 @@ class ImageClassificationApp(QMainWindow):
             self.lbl_global_mpp.setStyleSheet("color: grey;")
 
     def _on_global_mag_changed(self, text):
-        """当用户在左侧切换 5x/10x/20x/40x 时触发"""
+        """Triggered when the user switches 5x/10x/20x/40x on the left side"""
         self.current_mag = text
         self.settings["current_mag"] = text
         self.calibrated_mpp = self.calibrated_mpps.get(text)
         self._save_settings()
         self._update_global_mpp_label()
         
-        # 同步更新 Additional Configs 里的 mpp 输入框
+
         if "mpp" in self.additional_config_inputs:
             if self.calibrated_mpp is not None:
                 self.additional_config_inputs["mpp"].setText(f"{self.calibrated_mpp:.3f}")
             else:
-                # 如果这个倍数还没被校准过，退回模型的默认预设值
                 meta = settings.MODEL_METADATA.get(self.cmb_model.currentText(), {})
                 self.additional_config_inputs["mpp"].setText(str(meta.get("mpp", 0.25)))
-        # <<< 字典化管理 MPP 结束 <<<
-        # ==================== Magnification 联动逻辑 ====================
-# ==================== Magnification 联动逻辑 ====================
-    # ==================== Magnification 联动逻辑 ====================
+
+
+    # Mag detection and auto-sync related functions 
     def _on_auto_mag_clicked(self, checked):
-        """当用户手动点击 Auto-sync AI 勾选框时触发"""
+        """Triggered when the user manually clicks the Auto-sync AI checkbox."""
         
-        # 🚀 [拦截器] 如果用户想打勾，先查岗：探测器开了吗？
+        # Check if the user is trying to enable auto-sync without the detector running.
         if checked:
             if not hasattr(self, 'mag_widget') or not self.mag_widget.is_tracking:
-                # 没开！立刻弹窗教育用户
                 QMessageBox.warning(
                     self, 
                     "Detector Not Running", 
                     "Please start the 'Real-time Mag' detector first before enabling Auto-sync."
                 )
-                # 悄悄把勾选框退回到“未勾选”状态，并且不触发信号避免死循环
                 self.chk_auto_mag.blockSignals(True)
                 self.chk_auto_mag.setChecked(False)
                 self.chk_auto_mag.blockSignals(False)
-                return # 终止后续操作，不锁下拉菜单
+                return 
                 
-        # 如果查岗通过，或者用户是主动取消勾选，正常执行：
         self.settings["auto_mag_sync"] = checked
         self._save_settings()
         
-        # 开启自动同步时，将手动下拉菜单变灰锁定；关闭时解锁
+    
         if hasattr(self, 'cmb_global_mag'):
             self.cmb_global_mag.setEnabled(not checked)
 
-    # def _on_mag_tracking_changed(self, is_tracking):
-    #     """当探测器被用户手动关闭时，自动扯掉 Auto-sync 的勾"""
-    #     if not is_tracking and hasattr(self, 'chk_auto_mag'):
-    #         if self.chk_auto_mag.isChecked():
-    #             self.chk_auto_mag.blockSignals(True)
-    #             self.chk_auto_mag.setChecked(False)
-    #             self.chk_auto_mag.blockSignals(False)
-                
-    #             self.settings["auto_mag_sync"] = False
-    #             self._save_settings()
-                
-    #             if hasattr(self, 'cmb_global_mag'):
-    #                 self.cmb_global_mag.setEnabled(True)
-
-    # def _on_mag_tracking_changed(self, is_tracking):
-    #     """核心状态机：探测器开启时解锁选项并恢复设置，关闭时灰掉选项"""
-    #     if hasattr(self, 'chk_auto_mag'):
-    #         self.chk_auto_mag.setEnabled(is_tracking)
-            
-    #         if is_tracking:
-    #             self.chk_auto_mag.setToolTip("Automatically sync AI detected magnification")
-    #             # 探测器启动了，恢复用户上次的 Auto-sync 偏好
-    #             was_auto = self.settings.get("auto_mag_sync", False)
-    #             self.chk_auto_mag.setChecked(was_auto)
-    #             if hasattr(self, 'cmb_global_mag'):
-    #                 self.cmb_global_mag.setEnabled(not was_auto)
-    #         else:
-    #             self.chk_auto_mag.setToolTip("Please start the Real-time Mag detector first.")
-    #             self.chk_auto_mag.setChecked(False)
-    #             if hasattr(self, 'cmb_global_mag'):
-    #                 self.cmb_global_mag.setEnabled(True)
     def _on_mag_tracking_changed(self, is_tracking):
-        """核心状态机：探测器开启时解锁选项并恢复设置，关闭时灰掉选项"""
+        """Triggered when the mag detector starts or stops tracking. 
+        Enables/disables the Auto-sync checkbox and shows/hides warnings as needed."""
+
         if hasattr(self, 'chk_auto_mag'):
             self.chk_auto_mag.setEnabled(is_tracking)
             
             if is_tracking:
                 self.chk_auto_mag.setToolTip("Automatically sync AI detected magnification")
-                # 探测器启动了，恢复用户上次的 Auto-sync 偏好
                 was_auto = self.settings.get("auto_mag_sync", False)
                 self.chk_auto_mag.setChecked(was_auto)
                 if hasattr(self, 'cmb_global_mag'):
@@ -545,48 +509,20 @@ class ImageClassificationApp(QMainWindow):
                 if hasattr(self, 'cmb_global_mag'):
                     self.cmb_global_mag.setEnabled(True)
                     
-        # >>> [新增] 探测器关闭时，隐藏红色警告框 >>>
         if not is_tracking and hasattr(self, 'lbl_mag_warning'):
             self.lbl_mag_warning.hide()
-        # <<< [新增结束] <<<
-    # def _on_mag_detected(self, continuous_mag, pred_cls):
-    #         """当 AI 检测到新倍数时，自动切档"""
-    #         # 直接读取 UI 勾选框的真实状态最稳妥
-    #         if not self.chk_auto_mag.isChecked() or not (hasattr(self, 'mag_widget') and self.mag_widget.is_tracking):
-    #             return
-                
-    #         if hasattr(self, 'cmb_global_mag'):
-    #             import re
-    #             match = re.search(r'\d+', str(pred_cls))
-    #             if match:
-    #                 clean_cls = f"{match.group()}x"
-    #             else:
-    #                 clean_cls = str(pred_cls).lower()
-                
-    #             # 只有发现倍数真变了，才操作 UI
-    #             if self.cmb_global_mag.currentText() != clean_cls:
-    #                 index = self.cmb_global_mag.findText(clean_cls)
-    #                 if index >= 0:
-    #                     self.cmb_global_mag.setCurrentIndex(index)
+      
     def _on_mag_detected(self, continuous_mag, pred_cls):
-            """当 AI 检测到新倍数时，自动切档并进行警告提示"""
-            
-            # --- 1. 处理倍数文本清洗 ---
-            import re
             match = re.search(r'\d+', str(pred_cls))
             if match:
                 clean_cls = f"{match.group()}x"
             else:
                 clean_cls = str(pred_cls).lower()
 
-# >>> [修改开始] 倍数不匹配警告逻辑（支持多倍数） >>>
             if hasattr(self, 'supported_mags') and hasattr(self, 'lbl_mag_warning'):
-                # 只要探测器开着，就实时比对当前倍数是否在支持的列表里
                 if hasattr(self, 'mag_widget') and self.mag_widget.is_tracking:
-                    # 🚀 判断当前倍数是否在支持的列表里
                     if clean_cls not in self.supported_mags:
                         req_str = " or ".join(self.supported_mags)
-                        # 🚀 使用 HTML 富文本让排版更现代、重点更突出
                         warning_html = (
                             f"<div style='line-height: 1.5;'>"
                             f"  <b style='font-size: 12pt; color: #ff4c4c;'>⚠️ Magnification Mismatch</b><br>"
@@ -600,20 +536,16 @@ class ImageClassificationApp(QMainWindow):
                         self.lbl_mag_warning.show()
                     else:
                         self.lbl_mag_warning.hide()
-            # <<< [修改结束] <<<
 
-            # --- 2. 原有的 Auto-sync AI 联动逻辑 ---
             if not self.chk_auto_mag.isChecked() or not (hasattr(self, 'mag_widget') and self.mag_widget.is_tracking):
                 return
                 
             if hasattr(self, 'cmb_global_mag'):
-                # 只有发现倍数真变了，才操作 UI
                 if self.cmb_global_mag.currentText() != clean_cls:
                     index = self.cmb_global_mag.findText(clean_cls)
                     if index >= 0:
                         self.cmb_global_mag.setCurrentIndex(index)
-    # ================================================================
-    # ================================================================
+
     def _agg_start(self):
         self.agg_active = True
         self.lbl_agg.setText(self._agg_text() or "Collecting …")
@@ -634,24 +566,18 @@ class ImageClassificationApp(QMainWindow):
         # self.agg_active = False
         # self.btn_agg_start.setEnabled(True)
         # self.btn_agg_stop.setEnabled(False)
-        self.btn_reset.setEnabled(False)  # enabled after the first add
+        self.btn_reset.setEnabled(False)  
         self.btn_agg_stop.setFocus()
         self.agg_records.clear()
         self.btn_agg_export.setEnabled(False)
-##
-        # self.box_mm2 = None
         self.show_calib_box = False
         self.cls_stats.clear()
 
-    #############################################################################
-    #clustering新代码
-    #############################################################################
     def _update_overlay_params(self):
             """Pushes new spinbox values to the ACTIVE overlay widget in real-time."""
             if hasattr(self, 'current_active_overlay') and self.current_active_overlay:
                 method = self.cmb_roi_method.currentText()
                 
-                # 🚀 [新增参数传递]
                 if method == "Cluster":
                     self.current_active_overlay.patch_size = self.spin_patch.value()
                     self.current_active_overlay.n_clusters = self.spin_clusters.value()
@@ -661,40 +587,30 @@ class ImageClassificationApp(QMainWindow):
                 elif method == "Hotspot":
                     self.current_active_overlay.percentile = self.spin_percentile.value()
                     self.current_active_overlay.kernel_size = self.spin_kernel.value()
-    #############################################################################
-    #clustering新代码
-    #############################################################################
 
-    # ======================================================================== 
-    # Aggregate Export 
-    # ========================================================================
+                      
+    # Aggregate export function
     def _agg_export(self):
         if not self.agg_records:
             QMessageBox.information(
                 self, "Nothing to export", "No tiles added yet.")
             return
 
-        # ── Choose main folder ────────────────────────────────────────────
         parent_dir = QFileDialog.getExistingDirectory(
             self, "Select export folder", "")
         if not parent_dir:
             return
-        # >>> [新增/修改代码] 弹出对话框让用户输入自定义名字 >>>
         default_name = "Aggregate_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         custom_name, ok = QInputDialog.getText(
             self, "Export Folder Name",
             "Please enter a name for the export folder:",
             QLineEdit.EchoMode.Normal, default_name
         )
-        
-        # 如果用户点了取消，或者把名字删光了没填，就直接退出
+    
         if not ok or not custom_name.strip():
             return
             
         base_name = custom_name.strip()
-        # <<< [修改结束] <<<
-        # ── Automatic generate subfolder ─────────────────────────────────
-        #base_name = "Agregate_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = os.path.join(parent_dir, base_name)
         counter = 1
         while os.path.exists(out_dir):
@@ -702,7 +618,7 @@ class ImageClassificationApp(QMainWindow):
             counter += 1
         os.makedirs(out_dir, exist_ok=True)
 
-        # ── Save Images ───────────────────────────────────
+        # save images and build rows for CSV
         rows = []
         all_clsset = set()
         for idx, rec in enumerate(self.agg_records, start=1):
@@ -739,55 +655,33 @@ class ImageClassificationApp(QMainWindow):
                 avg_row[cls] = sum(vals) / len(vals) if vals else ""
             rows.append(avg_row)
 
-        # >>> [新增代码] 为 Eccentricity 任务在最后加上 Average 行 >>>
         meta = settings.MODEL_METADATA[self.cmb_model.currentText()]
         agg_type = meta.get("aggregate_type", "classification")
-        
-        if agg_type == "eccentricity" and rows:
-            avg_row = {k: "" for k in rows[0].keys()}
-            avg_row["file_orig"] = "OVERALL AVERAGE" 
-            
-            # 一个小辅助函数，用来算当前列的平均值
-            def get_col_avg(col_name):
-                vals = [r[col_name] for r in rows if col_name in r and isinstance(r[col_name], (int, float))]
-                return sum(vals) / len(vals) if vals else ""
 
-            avg_row["Cellularity (%)"] = get_col_avg("Cellularity (%)")
-            avg_row["Ecc Mean"] = get_col_avg("Ecc Mean")
-            avg_row["Ecc Median"] = get_col_avg("Ecc Median")
-            avg_row["Ecc Mid-50% Mean"] = get_col_avg("Ecc Mid-50% Mean")
-            avg_row["Ecc Std Dev"] = get_col_avg("Ecc Std Dev")
-                
-            rows.append(avg_row)
-        elif agg_type == "cell_profiler" and rows:
+        if agg_type == "cell_profiler" and rows:
             avg_row = {k: "" for k in rows[0].keys()}
             avg_row["file_orig"] = "OVERALL AVERAGE" 
             
-            # Dynamically calculate the average for ANY column that contains numbers
             for col_name in rows[0].keys():
                 if col_name not in ["file_orig", "file_annotated", "Class"]:
                     vals = [r[col_name] for r in rows if col_name in r and isinstance(r[col_name], (int, float))]
                     avg_row[col_name] = sum(vals) / len(vals) if vals else ""
                 
             rows.append(avg_row)
-        # <<< [新增结束] <<<
 
-        # ── wrte CSV ─────────────────────────────────────────────
+        # wrte CSV
         csv_path = os.path.join(out_dir, "aggregate_metrics.csv")
         with open(csv_path, "w", newline="", encoding='utf-8') as fh:
             writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
 
-        # ── Complete ───────────────────────────────────────────
+        # Complete
         QMessageBox.information(
             self, "Export complete",
             f"Saved {len(rows)-1} images and metrics to:\n{out_dir}")
 
-    # ======================================================================== 
-    # Aggregate helpers 
-    # ========================================================================
-
+    # aggregate function triggered by space-bar shortcut and Add button
     def _on_add(self):
         if not self.agg_active or not self.latest_metrics:
             return
@@ -800,16 +694,8 @@ class ImageClassificationApp(QMainWindow):
         if self.box_mm2 and not self.show_calib_box:
             mm2 = self.box_mm2 * 9
         else:
-           # mm2 = m["area_px"] * (m["mpp"] / 1000) ** 2
             current_mpp = self.calibrated_mpp if self.calibrated_mpp is not None else m.get("mpp", 0.25)
             mm2 = m["area_px"] * (current_mpp / 1000.0) ** 2
-        # >>> [修复1] 必须在这里初始化，否则跑其他模型会报错找不到变量 >>>
-        add_ecc_mean = 0.0
-        add_ecc_median = 0.0
-        add_ecc_mid50_mean = 0.0
-        add_ecc_std = 0.0
-        add_cell = 0.0
-        # <<< [修复结束] <<<
 
         # ---------- Mitosis Task----------
         if agg_type == "mitosis":
@@ -885,45 +771,7 @@ class ImageClassificationApp(QMainWindow):
             # ────────────────────────────────────────────────────────────
             extra_payload = {"probs": m["probs"]}
 
-        # >>> [新增] Eccentricity Task 分支 >>>
-# ---------- 1. 传统的 Eccentricity 任务 ----------
-        elif agg_type == "eccentricity":
-            # 使用 .get() 防崩溃。如果传进来的参数名字变了，这里会自动变成 0，不会闪退
-            cell_val = m.get("cellularity", 0.0)
-            ecc_mean = m.get("ecc_mean", 0.0)
-            ecc_median = m.get("ecc_median", 0.0)
-            ecc_mid50_mean = m.get("ecc_mid50_mean", 0.0)
-            ecc_std = m.get("ecc_std", 0.0)
-
-            reply = QMessageBox.question(
-                self, "Add this tile?",
-                (f"Cellularity: {cell_val * 100:.2f}%\n"
-                 f"Mean: {ecc_mean:.4f} | Median: {ecc_median:.4f}\n"
-                 f"Mid-50% Mean: {ecc_mid50_mean:.4f} | Std: {ecc_std:.4f}\n"
-                 f"Tile area: {mm2:.3f} mm²\n\n"
-                 "Add to aggregate?"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if reply != QMessageBox.StandardButton.Yes: return
-            
-            add_conf = add_mitos = add_pos = add_tot = 0
-            # 提取给下面累加器用的变量
-            add_ecc_mean = ecc_mean
-            add_ecc_median = ecc_median
-            add_ecc_mid50_mean = ecc_mid50_mean
-            add_ecc_std = ecc_std
-            add_cell = cell_val
-            
-            new_metrics = {
-                "Cellularity (%)": cell_val * 100,
-                "Ecc Mean": ecc_mean,
-                "Ecc Median": ecc_median,
-                "Ecc Mid-50% Mean": ecc_mid50_mean,
-                "Ecc Std Dev": ecc_std,
-                "Tissue area (mm2)": mm2
-            }
-
-        # ---------- 2. 全新的 Cell Profiler 任务 (动态收集) ----------
+        # ---------- Single cell profiler ----------
         elif agg_type == "cell_profiler":
             reply = QMessageBox.question(
                 self, "Add this tile?",
@@ -936,17 +784,15 @@ class ImageClassificationApp(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes: return
             
             add_conf = add_mitos = add_pos = add_tot = add_cell = 0
-            add_ecc_mean = add_ecc_median = add_ecc_mid50_mean = add_ecc_std = 0.0
-            
-            # 动态抓取 metrics 里的所有数字特征
+
+
             new_metrics = {"Tissue area (mm2)": mm2}
             for key, value in m.items():
                 if isinstance(value, (int, float)):
                     new_metrics[key] = value
-                    # 后台隐式累加，不会把界面撑爆
+
                     self.agg.dynamic_sums[key] = self.agg.dynamic_sums.get(key, 0.0) + value
-        # <<< [Modified] <<<
-        
+
         # ---------- Accumulate Function ----------
         self.agg_records.append({
             "annot": self.latest_frame.copy(),
@@ -962,13 +808,6 @@ class ImageClassificationApp(QMainWindow):
         self.agg.mib_pos += add_pos
         self.agg.mib_total += add_tot
         
-    # >>> [新增] 累加 eccentricity 数据 >>>
-        self.agg.ecc_mean_sum += add_ecc_mean
-        self.agg.ecc_median_sum += add_ecc_median
-        self.agg.ecc_mid50_mean_sum += add_ecc_mid50_mean
-        self.agg.ecc_std_sum += add_ecc_std
-        self.agg.cellularity_sum += add_cell
-        # <<< [新增结束] <<<
         self.lbl_agg.setText(self._agg_text())
         self.btn_reset.setEnabled(True)
 
@@ -1011,47 +850,23 @@ class ImageClassificationApp(QMainWindow):
                 f"Average Ki-67%: {pct:.2f}"
             ]
 
-        # >>> [新增] Eccentricity 显示逻辑 >>>
-# ---------- 1. 传统的 Eccentricity 界面显示 ----------
-        elif agg_type == "eccentricity":
-            n = self.agg.n_tiles
-            avg_ecc_mean = (self.agg.ecc_mean_sum / n) if n else 0
-            avg_ecc_median = (self.agg.ecc_median_sum / n) if n else 0
-            avg_ecc_mid50_mean = (self.agg.ecc_mid50_mean_sum / n) if n else 0
-            avg_ecc_std = (self.agg.ecc_std_sum / n) if n else 0
-            avg_cell = (self.agg.cellularity_sum / n) if n else 0
-            
-            lines += [
-                f"Avg Cellularity: {avg_cell * 100:.2f}%",
-                f"Avg Ecc Mean: {avg_ecc_mean:.4f}",
-                f"Avg Ecc Median: {avg_ecc_median:.4f}",
-                f"Avg Ecc Mid-50%: {avg_ecc_mid50_mean:.4f}",
-                f"Avg Ecc Std Dev: {avg_ecc_std:.4f}",
-            ]
-            
-        # ---------- 2. 全新的 Cell Profiler 界面显示 ----------
         elif agg_type == "cell_profiler":
             n = self.agg.n_tiles
             # 从动态字典里安全读取你最想展示的几个核心指标
             avg_cell = self.agg.dynamic_sums.get('cellularity_percent', 0) / n if n else 0
-            avg_area = self.agg.dynamic_sums.get('Size.Area_mean', 0) / n if n else 0
-            avg_circ = self.agg.dynamic_sums.get('Shape.Circularity_mean', 0) / n if n else 0
-            avg_ecc = self.agg.dynamic_sums.get('Shape.Eccentricity_mean', 0) / n if n else 0
+            median_area = self.agg.dynamic_sums.get('Size.Area_median', 0) / n if n else 0
+            median_circ = self.agg.dynamic_sums.get('Shape.Circularity_median', 0) / n if n else 0
             median_ecc = self.agg.dynamic_sums.get('Shape.Eccentricity_median', 0) / n if n else 0
 
-            
-            
             lines += [
                 f"Avg Cellularity: {avg_cell:.2f} cells/mm²",
-                #f"Avg Nuclear Area: {avg_area:.2f} μm²",
-                #f"Avg Circularity: {avg_circ:.4f}",
-                f"Avg Eccentricity: {avg_ecc:.4f}",
-                f"Median Eccentricity: {median_ecc:.4f}",
+                f"Avg Nuclear Area: {median_area:.2f} μm²",
+                f"Avg Circularity: {median_circ:.4f}",
+                f"Avg Eccentricity: {median_ecc:.4f}",
                 "",
                 f"✓ Tracking {len(self.agg.dynamic_sums)} total features",
                 f"  (Will be saved on Export)"
             ]
-        # <<< [新增结束] <<<
         return "\n".join(lines)
     def _calibrate_area(self):
         # ───────── First Click ─────────
@@ -1070,7 +885,6 @@ class ImageClassificationApp(QMainWindow):
             self.btn_calib.setText("Enter area")
             return
 
-        # ───────── Second Click (Custom Dialog) ─────────
         dialog = QDialog(self)
         dialog.setWindowTitle("Calibrate Area")
         form = QVBoxLayout(dialog)
@@ -1078,13 +892,13 @@ class ImageClassificationApp(QMainWindow):
         
         h_layout = QHBoxLayout()
         
-        # --- 左侧：Magnification 下拉菜单 ---
+        # Magnification
         cmb_mag = QComboBox()
         cmb_mag.addItems(["5x", "10x", "20x", "40x"])
         if hasattr(self, 'cmb_global_mag'):
-            cmb_mag.setCurrentText(self.cmb_global_mag.currentText()) # 默认选中主界面正在用的倍数
+            cmb_mag.setCurrentText(self.cmb_global_mag.currentText()) 
             
-        # --- 右侧：SpinBox 和 单位 ---
+        # SpinBox
         spin_val = QDoubleSpinBox()
         spin_val.setDecimals(4)
         spin_val.setMaximum(9999999.0)
@@ -1103,7 +917,6 @@ class ImageClassificationApp(QMainWindow):
         btn_box.rejected.connect(dialog.reject)
         form.addWidget(btn_box)
 
-        # 核心：自动聚焦并全选，让用户打字直接覆盖！
         spin_val.setFocus()
         spin_val.selectAll()
 
@@ -1111,7 +924,7 @@ class ImageClassificationApp(QMainWindow):
             val = spin_val.value()
             mag_key = cmb_mag.currentText()
             
-            # 统一转换为平方微米 (um²) 来计算 MPP
+            # convert to um² for consistent MPP calculation
             if cmb_unit.currentText() == "mm²":
                 val_um2 = val * 1_000_000.0
             else:
@@ -1126,24 +939,21 @@ class ImageClassificationApp(QMainWindow):
                 physical_box_w = bx  / os_scale
                 physical_box_h = by  / os_scale
                 
-                # 计算出真实的 MPP: sqrt( 物理面积 / 像素面积 )
+                # calculate MPP: sqrt( physical area / pixel area )
                 new_mpp = math.sqrt(val_um2 / (physical_box_w * physical_box_h))
                 
-                # 保存到字典中并持久化
+                # save to the corresponding magnification profile 
                 self.calibrated_mpps[mag_key] = new_mpp
                 self.settings["calibrated_mpps"] = self.calibrated_mpps
                 self._save_settings()
                 
-                # --- 新增：强制 UI 刷新逻辑 ---
                 if hasattr(self, 'cmb_global_mag'):
                     if self.cmb_global_mag.currentText() == mag_key:
-                        # 如果主界面当前正停留在被校准的倍数上，手动强制刷新 UI
                         self.calibrated_mpp = new_mpp
                         self._update_global_mpp_label()
                         if "mpp" in self.additional_config_inputs:
                             self.additional_config_inputs["mpp"].setText(f"{new_mpp:.3f}")
                     else:
-                        # 如果校准的是其他倍数，直接切过去（PyQt 会自动触发切换信号并刷新）
                         self.cmb_global_mag.setCurrentText(mag_key)
                 # ------------------------------
                 
@@ -1158,222 +968,8 @@ class ImageClassificationApp(QMainWindow):
         # Close and Reset
         self.show_calib_box = False
         self.btn_calib.setText("Calibrate")    
-    # def _calibrate_area(self):
-    #     # ───────── First Click ─────────
-    #     if not self.show_calib_box:
-    #         if not self._calib_help_shown:
-    #             QMessageBox.information(
-    #                 self, "How to calibrate",
-    #                 "Step 1: A translucent box will appear.\n"
-    #                 "Step 2: In your slide viewer draw a box that exactly overlaps it\n"
-    #                 "    and note the physical area.\n"
-    #                 "Step 3: Click the 'Enter Area' button and input the measured value.")
-    #             self._calib_help_shown = True
-
-    #         self.show_calib_box = True
-    #         QApplication.processEvents()
-    #         self.btn_calib.setText("Enter area")
-    #         return
-
-    #     # ───────── Second Click (Custom Dialog) ─────────
-    #     dialog = QDialog(self)
-    #     dialog.setWindowTitle("Calibrate Area")
-    #     form = QVBoxLayout(dialog)
-    #     form.addWidget(QLabel("Enter the physical area of the highlighted box:"))
-        
-    #     h_layout = QHBoxLayout()
-    #     # 使用 QDoubleSpinBox 替代旧的 QInputDialog
-    #     from PyQt6.QtWidgets import QDoubleSpinBox
-    #     spin_val = QDoubleSpinBox()
-    #     spin_val.setDecimals(4)
-    #     spin_val.setMaximum(9999999.0)
-    #     spin_val.setMinimum(0.0001)
-        
-    #     cmb_unit = QComboBox()
-    #     cmb_unit.addItems(["μm²", "mm²"])
-        
-    #     h_layout.addWidget(spin_val)
-    #     h_layout.addWidget(cmb_unit)
-    #     form.addLayout(h_layout)
-        
-    #     btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-    #     btn_box.accepted.connect(dialog.accept)
-    #     btn_box.rejected.connect(dialog.reject)
-    #     form.addWidget(btn_box)
-
-    #     # 核心：自动聚焦并全选，让你打字直接覆盖！
-    #     spin_val.setFocus()
-    #     spin_val.selectAll()
-
-    #     if dialog.exec() == QDialog.DialogCode.Accepted and spin_val.value() > 0:
-    #         val = spin_val.value()
-            
-    #         # 统一转换为平方微米 (um²) 来计算 MPP
-    #         if cmb_unit.currentText() == "mm²":
-    #             val_um2 = val * 1_000_000.0
-    #         else:
-    #             val_um2 = val
-
-    #         if self.latest_frame is not None:
-    #             h, w, c = self.latest_frame.shape
-    #             bx = int(w / 3)
-    #             by = int(h / 3)
-                
-    #             # 计算出真实的 MPP: sqrt( 物理面积 / 像素面积 )
-    #             new_mpp = math.sqrt(val_um2 / (bx * by))
-                
-    #             # 全局记录 MPP 并持久化
-    #             self.calibrated_mpp = new_mpp
-    #             self.settings["calibrated_mpp"] = new_mpp
-    #             self._save_settings()
-                
-    #             # 立即同步到左侧界面的 mpp 输入框中
-    #             if "mpp" in self.additional_config_inputs:
-    #                 self.additional_config_inputs["mpp"].setText(f"{new_mpp:.5f}")
-
-    #             QMessageBox.information(
-    #                 self, "Calibration successful",
-    #                 f"Calculated Global MPP = {new_mpp:.5f} μm/px\n"
-    #                 "This MPP has been saved and will override all default settings."
-    #             )
-    #     else:
-    #         QMessageBox.information(self, "Cancelled", "No valid area recorded.")
-
-    #     # Close and Reset
-    #     self.show_calib_box = False
-    #     self.btn_calib.setText("Calibrate")
-    # # ------------------------------------------------------------
-    # # CALIBRATION DIALOG 
-    # # ------------------------------------------------------------
-    # def _calibrate_area(self):
-    #     # ───────── First Click ─────────
-    #     if not self.show_calib_box:
-    #         # First Time Instruction Pop-up
-    #         if not self._calib_help_shown:
-    #             QMessageBox.information(
-    #                 self, "How to calibrate",
-    #                 "Step 1: A translucent box will appear.\n"
-    #                 "Step 2: In your slide viewer draw a box that exactly overlaps it\n"
-    #                 "    and note the physical area (mm²).\n"
-    #                 "Step 3: Click the 'Enter Area' button and input the measured value.")
-    #             self._calib_help_shown = True
-
-    #         # Open Calibrate Box
-    #         self.show_calib_box = True
-    #         QApplication.processEvents()
-
-    #         # Wait for Second Click
-    #         self.btn_calib.setText("Enter area")
-    #         return
-
-    #     # ───────── Second Click ─────────
-    #     val, ok = QInputDialog.getDouble(
-    #         self, "Calibrate Area",
-    #         "Enter the measured area of the highlighted box (mm²):",
-    #         decimals=4, min=0.0001
-    #     )
-
-    #     if ok and val > 0:
-    #         self.box_mm2 = val
-    #     # >>> mpp[修改开始 3] 根据用户输入的面积自动计算并保存 MPP >>>
-    #         if self.latest_frame is not None:
-    #             h, w, c = self.latest_frame.shape
-    #             bx = int(w / 3)
-    #             by = int(h / 3)
-                
-    #             # 计算像素真实代表的面积，开根号得出 MPP
-    #             pixel_area_um2 = (val * 1000000.0) / (bx * by)
-    #             calibrated_mpp = math.sqrt(pixel_area_um2)
-                
-    #             # 永久保存到本地设置
-    #             self.settings["calibrated_mpp"] = calibrated_mpp
-    #             self._save_settings()
-
-    #             # 如果左侧配置栏有 mpp 输入框，立刻更新显示
-    #             if "mpp" in self.additional_config_inputs:
-    #                 self.additional_config_inputs["mpp"].setText(f"{calibrated_mpp:.5f}")
-
-    #             QMessageBox.information(
-    #                 self, "Calibration stored",
-    #                 f"Calibration box = {self.box_mm2:.4f} mm²\n"
-    #                 f"Calculated MPP = {calibrated_mpp:.5f} μm/px\n\n"
-    #                 "This MPP has been saved and will be used automatically."
-    #             )
-    #         # <<< mpp[修改结束 3] <<<
-    #     else:
-    #         QMessageBox.information(
-    #             self, "Calibration cancelled",
-    #             "No calibration value recorded.")
-
-    #     # Close and Reset
-    #     self.show_calib_box = False
-    #     self.btn_calib.setText("Calibrate")
-
-    # def _calibrate_area(self):
-    #   dlg = QDialog(self)
-    #   dlg.setWindowTitle("Calibrate Scale Bars")
-
-    #   form = QGridLayout(dlg)
-
-    #   # instruction 
-    #   instr = QLabel(
-    #       "Measure the length of the scale-bar in the inference window "
-    #       "directly in your slide viewer and input the value here."
-    #   )
-    #   instr.setWordWrap(True)
-    #   form.addWidget(instr, 0, 0, 1, 2)
-
-    #   # width entry
-    #   form.addWidget(QLabel("Horizontal bar (mm):"), 1, 0)
-    #   edt_w = QLineEdit()
-    #   edt_w.setPlaceholderText("e.g. 0.300")
-    #   form.addWidget(edt_w, 1, 1)
-
-    #   # height entry
-    #   form.addWidget(QLabel("Vertical bar (mm):"), 2, 0)
-    #   edt_h = QLineEdit()
-    #   edt_h.setPlaceholderText("e.g. 0.300")
-    #   form.addWidget(edt_h, 2, 1)
-
-    #   # OK / Cancel
-    #   btn_ok     = QPushButton("OK")
-    #   btn_cancel = QPushButton("Cancel")
-    #   btn_ok.clicked.connect(dlg.accept)
-    #   btn_cancel.clicked.connect(dlg.reject)
-    #   h_btn = QHBoxLayout()
-    #   h_btn.addStretch()
-    #   h_btn.addWidget(btn_ok)
-    #   h_btn.addWidget(btn_cancel)
-    #   form.addLayout(h_btn, 3, 0, 1, 2)
-
-    #   if dlg.exec() != QDialog.DialogCode.Accepted:
-    #       return
-
-    #   # --- parse numbers safely ---------------------------------
-    #   try:
-    #       w_mm = float(edt_w.text())
-    #       h_mm = float(edt_h.text() or "0")
-    #   except ValueError:
-    #       QMessageBox.warning(self, "Invalid input",
-    #                           "Please enter numeric values.")
-    #       return
-    #   if w_mm <= 0:
-    #       QMessageBox.warning(self, "Invalid width",
-    #                           "Width must be > 0.")
-    #       return
-
-    #   self.bar_mm_w = w_mm
-    #   self.bar_mm_h = h_mm if h_mm > 0 else None  
-
-    #   msg = f"Width bar  = {self.bar_mm_w:.3f} mm"
-    #   if self.bar_mm_h is not None:
-    #       msg += f"\nHeight bar = {self.bar_mm_h:.3f} mm"
-    #   else:
-    #       msg += "\nHeight bar = (not set)"
-    #   QMessageBox.information(self, "Calibration stored", msg)
-    # ------------------------------------------------------------
-    # LLM option
-    # ------------------------------------------------------------
+   
+    # LLM precision options update based on model metadata
     def _update_llm_options(self, cmb_llm, cmb_llm_precision, lbl_llm_precision):
         """
         Updates the precision dropdown based on the selected LLM model's metadata.
@@ -1406,7 +1002,6 @@ class ImageClassificationApp(QMainWindow):
             lbl_llm_precision.setVisible(False)
             cmb_llm_precision.setVisible(False)
 
-    ###toggle settings
     def _toggle_view(self, checked):
         """
         Toggle between full and compact view.
@@ -1441,13 +1036,13 @@ class ImageClassificationApp(QMainWindow):
         self.adjustSize()
 
     ################################################################################################################################################
+    #Build UI
     ################################################################################################################################################
-    # --------------------- UI --------------------------------- 
     def _build_ui(self, main_layout):
 
         main_left = QVBoxLayout()
         main_right = QVBoxLayout()
-                # -------------------- Model selection ------------------------------
+        # -------------------- Model selection ------------------------------
         grp_model = QGroupBox("Model Selection")
         h_model = QHBoxLayout()
 
@@ -1483,7 +1078,6 @@ class ImageClassificationApp(QMainWindow):
         self.cmb_model.currentIndexChanged.connect(self._on_model_changed)
         h_model.addWidget(self.cmb_model)
 
-        # Info button
         btn_info = QPushButton("ℹ️")
         btn_info.setFixedSize(30, 30)
         btn_info.clicked.connect(self._show_model_info)
@@ -1506,12 +1100,11 @@ class ImageClassificationApp(QMainWindow):
         self.lbl_region = QLabel("Selected Region: NOT SET")
         self.lbl_region.setStyleSheet("color:grey;")
         v_cap.addWidget(self.lbl_region)
-        # +++ 插入 Real-time Mag Detector Widget +++
+
         self.mag_widget = MagDetectorWidget(get_region_callback=lambda: self.selected_region)
         self.mag_widget.mag_detected.connect(self._on_mag_detected)
         self.mag_widget.tracking_state_changed.connect(self._on_mag_tracking_changed)
         v_cap.addWidget(self.mag_widget)
-        # +++++++++++++++++++++++++++++++++++++++++
         
         grp_cap.setLayout(v_cap)
         main_left.addWidget(grp_cap)
@@ -1549,13 +1142,13 @@ class ImageClassificationApp(QMainWindow):
         self.btn_stop.setEnabled(False)
         v_ctrl.addWidget(self.btn_stop)
 
-        # Export button ---------------------------------------------------
+        # --------------------Export button --------------------
         self.btn_export = QPushButton("Export")
         self.btn_export.clicked.connect(self._export)
         self.btn_export.setEnabled(False)
         v_ctrl.addWidget(self.btn_export)
 
-        # Chat button -----------------------------------------------------
+        # --------------------Chat button --------------------
         self.btn_chat = QPushButton("Chat with LLM")
         self.btn_chat.clicked.connect(
             #lambda: self._open_chat(self.cmb_llm.currentText(), self.cmb_llm_precision.currentData())
@@ -1567,9 +1160,6 @@ class ImageClassificationApp(QMainWindow):
         grp_ctrl.setLayout(v_ctrl)
         main_right.addWidget(grp_ctrl)
 
-
-
-        # >>> 字典化管理 MPP (5x, 10x, 20x, 40x) >>>
         grp_mag = QGroupBox("Active Magnification")
         h_mag = QHBoxLayout()
         
@@ -1581,26 +1171,19 @@ class ImageClassificationApp(QMainWindow):
         self.lbl_global_mpp = QLabel()
         self._update_global_mpp_label()
 
-        # >>> [新增] Auto-sync AI 联动选项 >>>
-# >>> [修改] Auto-sync AI 状态机优化 >>>
-# >>> [修改] Auto-sync UI 初始化 >>>
         self.chk_auto_mag = QCheckBox("Auto-sync AI")
         self.chk_auto_mag.setStyleSheet("color: #3498db; font-weight: bold;")
-        # 软件刚启动时探测器肯定没开，所以强制默认为 False
         self.chk_auto_mag.setChecked(False) 
         self.settings["auto_mag_sync"] = False 
         
         self.chk_auto_mag.clicked.connect(self._on_auto_mag_clicked)
-        # <<< [修改] <<<
-        # <<< [修改] <<<
-        # <<< [新增] <<<
+
 
         h_mag.addWidget(self.cmb_global_mag)
-        h_mag.addWidget(self.chk_auto_mag)  # 将复选框加进去
+        h_mag.addWidget(self.chk_auto_mag) 
         h_mag.addWidget(self.lbl_global_mpp)
         grp_mag.setLayout(h_mag)
         main_left.addWidget(grp_mag)
-        # <<< 字典化管理 MPP 结束 <<<
 
         # -------------------- Additional configs --------------------------
         self.grp_cfg = QGroupBox("Additional Configs")
@@ -1608,16 +1191,14 @@ class ImageClassificationApp(QMainWindow):
         self.grp_cfg.setLayout(self.v_cfg)
         main_left.addWidget(self.grp_cfg)
 
-        # =========================================================================
-       # =========================================================================
-        # >>> [修改] 将 ROI Finder 的控制面板移到左侧，并将下拉菜单和参数放在同一行 >>>
+
         grp_roi = QGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
         h_roi_top.addWidget(QLabel("Method:"))
         self.cmb_roi_method = QComboBox()
-        # 🚀 [顺序调换] 将 Hotspot 放在前面
+
         self.cmb_roi_method.addItems(["Hotspot", "Cluster"]) 
         self.cmb_roi_method.currentIndexChanged.connect(self._on_roi_method_changed)
         h_roi_top.addWidget(self.cmb_roi_method)
@@ -1625,9 +1206,8 @@ class ImageClassificationApp(QMainWindow):
 
         self.stacked_params = QStackedWidget()
         
-        # --- 卡片 1：Hotspot 参数页 (移到了前面) ---
+        # --------------------Find ROI (Hotspot)--------------------
         page_hotspot = QWidget()
-        # 初始默认显示 Hotspot，设置它的尺寸策略为 Preferred
         page_hotspot.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         h_hotspot = QHBoxLayout(page_hotspot)
         h_hotspot.setContentsMargins(0, 0, 0, 0)
@@ -1640,12 +1220,12 @@ class ImageClassificationApp(QMainWindow):
         self.spin_percentile.valueChanged.connect(self._update_overlay_params)
 
         
-        # 🚀 [新增] Kernel 参数框
+        # Kernel 
         self.lbl_kernel = QLabel("Kernel:")
         self.spin_kernel = QSpinBox()
         self.spin_kernel.setRange(1, 99) 
-        self.spin_kernel.setValue(5)      # 默认值 5
-        self.spin_kernel.setSingleStep(2) # 建议奇数步进 (3, 5, 7...)
+        self.spin_kernel.setValue(5)    
+        self.spin_kernel.setSingleStep(2) 
         self.spin_kernel.valueChanged.connect(self._update_overlay_params)
 
 
@@ -1654,18 +1234,17 @@ class ImageClassificationApp(QMainWindow):
         h_hotspot.addWidget(self.lbl_kernel)
         h_hotspot.addWidget(self.spin_kernel)
         h_hotspot.addStretch() 
-        self.stacked_params.addWidget(page_hotspot) # 索引 0
+        self.stacked_params.addWidget(page_hotspot) 
 
-        # --- 卡片 2：Cluster 参数页 (🚀 完美对齐网格版) ---
+        # --------------------Find ROI (Hotspot)--------------------
         page_cluster = QWidget()
-        # 初始时它是隐藏的，必须设为 Ignored 才能消除幽灵空白
         page_cluster.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored) 
         
         grid_cluster = QGridLayout(page_cluster)
         grid_cluster.setContentsMargins(0, 0, 0, 0)
-        grid_cluster.setSpacing(8) # 让上下两排紧凑一点
+        grid_cluster.setSpacing(8)
         
-        # 第一排 (Row 0)
+        # Row 0
         self.lbl_patch = QLabel("Patch:")
         self.spin_patch = QSpinBox()
         self.spin_patch.setRange(16, 256); self.spin_patch.setValue(36); self.spin_patch.setSingleStep(16)
@@ -1681,7 +1260,7 @@ class ImageClassificationApp(QMainWindow):
         grid_cluster.addWidget(self.lbl_clusters, 0, 2)
         grid_cluster.addWidget(self.spin_clusters, 0, 3)
 
-        # 第二排 (Row 1)
+        # Row 1
         self.spin_sat = QSpinBox()
         self.spin_sat.setRange(0, 255); self.spin_sat.setValue(10)
         self.spin_sat.valueChanged.connect(self._update_overlay_params)
@@ -1701,16 +1280,13 @@ class ImageClassificationApp(QMainWindow):
         grid_cluster.addWidget(QLabel("Tissue:"), 1, 4)
         grid_cluster.addWidget(self.spin_tissue, 1, 5)
         
-        # 🚀 在最右侧（第 6 列）加一个弹簧，把所有格子紧紧挤在左边对齐
         grid_cluster.setColumnStretch(6, 1) 
 
-        self.stacked_params.addWidget(page_cluster) # 索引 1
-        # -------------------------------------------------------------
+        self.stacked_params.addWidget(page_cluster) 
 
         h_roi_top.addWidget(self.stacked_params)
         v_roi.addLayout(h_roi_top)
 
-        # 2. 启停按钮 (单独放下一行)
         h_overlay_ctrl = QHBoxLayout()
         self.btn_overlay_start = QPushButton("Find ROI")
         self.btn_overlay_pause = QPushButton("Pause")
@@ -1732,9 +1308,6 @@ class ImageClassificationApp(QMainWindow):
         grp_roi.setLayout(v_roi)
         main_left.addWidget(grp_roi)
 
-
-        # <<< [新增结束] <<<
-        # =========================================================================
         # -------------------- LLM selection -----------------------------
         grp_llm = QGroupBox("GPT Selection")
         h_llm = QHBoxLayout()
@@ -1752,9 +1325,6 @@ class ImageClassificationApp(QMainWindow):
         grp_llm.setLayout(h_llm)
         main_left.addWidget(grp_llm)
     
-        ##############################################################################################################################################
-        # Aggregate Function UI
-        ##############################################################################################################################################
         # -------------------- Aggregate Scorer --------------------
         grp_agg = QGroupBox("Aggregate Function")
         grid = QGridLayout()
@@ -1801,16 +1371,14 @@ class ImageClassificationApp(QMainWindow):
         grp_agg.setLayout(grid)
         main_right.addWidget(grp_agg)
 
-        ################################################################################################################################################
- # -------------------- Display output -----------------------------
+        
+        # -------------------- Display output -----------------------------
         grp_out = QGroupBox("Inference Output")
         v_out = QVBoxLayout()
 
-        # 1. 必须先创建底图标签 lbl_img
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 2. 再把两个透明图层 (Overlay) 像贴膜一样盖在 lbl_img 上
         lbl_layout = QVBoxLayout(self.lbl_img)
         lbl_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -1822,27 +1390,23 @@ class ImageClassificationApp(QMainWindow):
         
         lbl_layout.addWidget(self.overlay_clustering, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         lbl_layout.addWidget(self.overlay_histomics, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
-        # >>> [新增] 动态倍数警告标签，放在图片左下角 >>>
         self.lbl_mag_warning = QLabel("⚠️ Warning: Magnification mismatch!")
         self.lbl_mag_warning.setStyleSheet("""
-            background-color: rgba(30, 40, 50, 220); /* 偏深蓝灰的半透明底色，比纯黑高级 */
+            background-color: rgba(30, 40, 50, 220); 
             padding: 8px 14px; 
-            border: 1px solid #ff4c4c; /* 加一圈淡淡的红色描边，强调这是警告 */
+            border: 1px solid #ff4c4c; 
             border-radius: 6px;
         """)
-        self.lbl_mag_warning.hide() # 默认隐藏
+        self.lbl_mag_warning.hide() 
         lbl_layout.addWidget(self.lbl_mag_warning, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
-        # <<< [新增结束] <<<
-        # >>> [新增] 把两个图层的后台完成信号接入放大窗口 >>>
+
         self.overlay_clustering.worker.finished.connect(self._on_overlay_worker_finished)
         self.overlay_histomics.worker.finished.connect(self._on_overlay_worker_finished)
-        # <<< [新增结束] <<<
         
         self.current_active_overlay = None 
 
         v_out.addWidget(self.lbl_img)
         
-        # 3. 结果文字和放大按钮
         self.lbl_res = QLabel("Result:")
         v_out.addWidget(self.lbl_res)
 
@@ -1857,9 +1421,6 @@ class ImageClassificationApp(QMainWindow):
         main_right.addStretch()
 
         # -------------------- Assemble main layout -----------------------
-        # -------------------------------------------------------------------------
-
-        # -------------------- Assemble main layout -----------------------
         self.w_left = QWidget()
         self.w_left.setLayout(main_left)
         w_right = QWidget()
@@ -1872,17 +1433,11 @@ class ImageClassificationApp(QMainWindow):
         main_layout.addWidget(self.w_left, alignment=Qt.AlignmentFlag.AlignTop)
         main_layout.addWidget(w_right, alignment=Qt.AlignmentFlag.AlignTop)
 
-        ################################################################
-        # LLM add
-        # self.cmb_llm.currentIndexChanged.connect(
-        #     lambda: self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
-        # )
-        # self._update_llm_options(self.cmb_llm, self.cmb_llm_precision, self.lbl_llm_precision)
-
-        ################################################################
         self._on_roi_method_changed(0)
         self._on_model_changed()
-
+    ################################################################################################################################################
+    #Build UI Compact
+    ################################################################################################################################################
     def _build_ui_compact(self, main_layout):
 
         main_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
@@ -1978,7 +1533,6 @@ class ImageClassificationApp(QMainWindow):
         grp_model.setLayout(h_model)
         main_layout.addWidget(grp_model)
 
-        # >>> [核心修复 1：补齐丢失的倍数面板] >>>
         grp_mag = CollapsibleGroupBox("Active Magnification")
         h_mag = QHBoxLayout()
         
@@ -2000,7 +1554,6 @@ class ImageClassificationApp(QMainWindow):
         h_mag.addWidget(self.lbl_global_mpp)
         grp_mag.content_layout().addLayout(h_mag)
         main_layout.addWidget(grp_mag)
-        # <<< [核心修复 1 结束] <<<
 
         # -------------------- Additional configs --------------------------
         self.grp_cfg = CollapsibleGroupBox("Additional Configs")
@@ -2015,7 +1568,6 @@ class ImageClassificationApp(QMainWindow):
         btn_sel.clicked.connect(self._select_region)
         v_cap.addWidget(btn_sel)
 
-        # +++ 插入 Real-time Mag Detector Widget +++
         self.mag_widget = MagDetectorWidget(get_region_callback=lambda: self.selected_region)
         self.mag_widget.mag_detected.connect(self._on_mag_detected)
         self.mag_widget.tracking_state_changed.connect(self._on_mag_tracking_changed)
@@ -2054,7 +1606,6 @@ class ImageClassificationApp(QMainWindow):
         grid.addWidget(self.btn_agg_stop, 0, 1)
         grid.addWidget(self.btn_reset, 0, 2)
 
-        # second row (centered)
         h_row2 = QHBoxLayout()
         h_row2.addStretch()
         h_row2.addWidget(self.btn_calib)
@@ -2062,7 +1613,6 @@ class ImageClassificationApp(QMainWindow):
         h_row2.addStretch()
         grid.addLayout(h_row2, 1, 0, 1, 3)
 
-        # row 1 –– results + tip
         box = QFrame()
         box.setFrameShape(QFrame.Shape.Box)
         box.setLineWidth(1)
@@ -2077,15 +1627,13 @@ class ImageClassificationApp(QMainWindow):
 
         main_layout.addWidget(grp_agg)
 
-        # -------------------- Display output (Compact 模式同步更新) -----------------------------
+        # -------------------- Display output-----------------------------
         grp_out = QGroupBox("Inference Output")
         v_out = QVBoxLayout()
 
-        # 1. 创建底图
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 2. 创建双图层并堆叠
         lbl_layout = QVBoxLayout(self.lbl_img)
         lbl_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -2098,7 +1646,6 @@ class ImageClassificationApp(QMainWindow):
         lbl_layout.addWidget(self.overlay_clustering, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         lbl_layout.addWidget(self.overlay_histomics, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
-        # >>> [核心修复 2：补齐丢失的倍数警告标签] >>>
         self.lbl_mag_warning = QLabel("⚠️ Warning: Magnification mismatch!")
         self.lbl_mag_warning.setStyleSheet("""
             background-color: rgba(30, 40, 50, 220); 
@@ -2108,18 +1655,17 @@ class ImageClassificationApp(QMainWindow):
         """)
         self.lbl_mag_warning.hide() 
         lbl_layout.addWidget(self.lbl_mag_warning, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
-        # <<< [核心修复 2 结束] <<<
 
-        # >>> [核心修复 3：补齐丢失的放大窗口更新信号] >>>
+
         self.overlay_clustering.worker.finished.connect(self._on_overlay_worker_finished)
         self.overlay_histomics.worker.finished.connect(self._on_overlay_worker_finished)
-        # <<< [核心修复 3 结束] <<<
+
 
         self.current_active_overlay = None 
 
         v_out.addWidget(self.lbl_img)
         
-        # --- Compact 模式下的 ROI Finder ---
+        # -------------------- ROI Finder ------------------------------
         grp_roi = QGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
@@ -2134,7 +1680,7 @@ class ImageClassificationApp(QMainWindow):
 
         self.stacked_params = QStackedWidget()
         
-        # --- 卡片 1：Hotspot 参数页 ---
+        # --- 1：Hotspot---
         page_hotspot = QWidget()
         page_hotspot.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         h_hotspot = QHBoxLayout(page_hotspot)
@@ -2161,7 +1707,7 @@ class ImageClassificationApp(QMainWindow):
         h_hotspot.addStretch() 
         self.stacked_params.addWidget(page_hotspot) 
 
-        # --- 卡片 2：Cluster 参数页 ---
+        # --- 2：Cluster ---
         page_cluster = QWidget()
         page_cluster.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored) 
         
@@ -2209,7 +1755,6 @@ class ImageClassificationApp(QMainWindow):
         h_roi_top.addWidget(self.stacked_params)
         v_roi.addLayout(h_roi_top)
 
-        # 启停按钮
         h_overlay_ctrl = QHBoxLayout()
         self.btn_overlay_start = QPushButton("Find ROI")
         self.btn_overlay_pause = QPushButton("Pause")
@@ -2231,7 +1776,6 @@ class ImageClassificationApp(QMainWindow):
         grp_roi.setLayout(v_roi)
         v_out.addWidget(grp_roi)
 
-        # --- 结果与放大 ---
         self.lbl_res = QLabel("Result:")
         v_out.addWidget(self.lbl_res)
 
@@ -2245,9 +1789,9 @@ class ImageClassificationApp(QMainWindow):
 
         main_layout.addStretch()
         
-        # 强制初始化 ROI UI 状态
         self._on_roi_method_changed(0)
         self._on_model_changed()
+
     # ------------- UX ---------------
     def _select_region(self):
 
@@ -2300,14 +1844,11 @@ class ImageClassificationApp(QMainWindow):
             f"Height: {self.selected_region['height']:.0f} px")
         self.lbl_region.setStyleSheet("color:green;")
         self.btn_start.setEnabled(True)
-# --------------------------------- Overlay Controls ---------------------------------
-#####overlay新代码#####
-# --------------------------------- Overlay Controls ---------------------------------
+
+    # -------------------- Overlay Controls ---------------------------------
     def _start_overlay(self):
-        # [修复] 使用新的统一指针 current_active_overlay
         if hasattr(self, 'current_active_overlay') and self.current_active_overlay:
-            
-            # 启动前，确保把当前 UI 上的参数喂给对应的后台
+        
             method = self.cmb_roi_method.currentText()
             if method == "Cluster":
                 self.current_active_overlay.patch_size = self.spin_patch.value()
@@ -2316,10 +1857,8 @@ class ImageClassificationApp(QMainWindow):
                 self.current_active_overlay.percentile = self.spin_percentile.value()
 
             self.current_active_overlay.start()
-            # >>> [绝妙修复] 如果当前主程序是停止状态（静态图），强制喂一次图给 Overlay！
             if (not self.thread or not self.thread.isRunning()) and self.latest_frame is not None:
                 self.current_active_overlay.process_frame(self.latest_frame)
-            # <<< [修复结束]
             self.btn_overlay_start.setEnabled(False)
             self.btn_overlay_pause.setEnabled(True)
             self.btn_overlay_stop.setEnabled(True)
@@ -2342,16 +1881,11 @@ class ImageClassificationApp(QMainWindow):
                 self.btn_overlay_stop.setEnabled(False)
                 self.btn_overlay_pause.setText("Pause")
                 
-    # >>> [关键新增] 停止时，清空小图缓存，并告诉放大窗口隐藏
                 self.latest_overlay_result = None 
                 if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
                     self.enlarged_window.hide_overlay()
-                # <<< [新增结束]
-    # ------------------------------------------------------------------------------------
-    #####overlay新代码#####
-    # ------------------------------------------------------------------------------------
 
-    # ------------------------------------- Thread------------------------------------------------------
+    # ------------------------Thread---------------------------
     def _start(self):
         # Display disclaimer if not suppressed by user settings
         if not self.settings.get("suppress_disclaimer", False):
@@ -2378,10 +1912,8 @@ class ImageClassificationApp(QMainWindow):
         else:
             self.using_gpu_icon.set_color("red")
 
-        # >>> overlay新代码[修改开始 2] Show the overlay when start is clicked >>>
         if hasattr(self, 'btn_overlay_start'):
             self.btn_overlay_start.setEnabled(True)
-        # <<< overlay新代码[修改结束 2] <<<
 
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -2395,10 +1927,8 @@ class ImageClassificationApp(QMainWindow):
             self.thread.stop()
             self.thread = None
 
-        # >>> overlay新代码[修改开始 3] Hide and reset the overlay when stopped >>>
         if hasattr(self, 'btn_overlay_start'):
-            self.btn_overlay_start.setEnabled(False) # Turn off until started again
-        # <<< overlay新代码[修改结束 3] <<<
+            self.btn_overlay_start.setEnabled(False) 
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.btn_chat.setEnabled(False)
@@ -2408,42 +1938,33 @@ class ImageClassificationApp(QMainWindow):
         self.btn_agg_start.setEnabled(False)
         self.btn_calib.setEnabled(True)
 
-    # ---------------------------------- Display----------------------------------
+    # ---------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
         self.latest_metrics = metrics
         self.latest_frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()  # annotated
         self.latest_original = metrics.get("orig_img", self.latest_frame).copy()
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).copy()
         h, w, c = frame_bgr.shape
-        # >>> [ATTENTION MAP OVERLAY START] >>>
-        # Find the config UI element dynamically
         attn_toggle = self.additional_config_inputs.get("Show ViT Attention Map")
         
-        # If it exists, is a checkbox, and is checked, apply the heatmap
         if attn_toggle and hasattr(attn_toggle, 'isChecked') and attn_toggle.isChecked():
             if "attention_map" in metrics:
                 attn_map = metrics["attention_map"]
                 heatmap = cv2.applyColorMap(np.uint8(255 * attn_map), cv2.COLORMAP_JET)
                 frame_bgr = cv2.addWeighted(heatmap, 0.4, frame_bgr, 0.6, 0)
-        # <<< [ATTENTION MAP OVERLAY END] <<<
 
         # CENTRAL 1/3 × 1/3  CALIBRATION BOX
         if self.show_calib_box:
             bx = int(w / 3);4
-            by = int(h / 3)  # Box Size
+            by = int(h / 3)  
             cx = (w - bx) // 2;
-            cy = (h - by) // 2  # Put it in the middle
+            cy = (h - by) // 2 
             p1, p2 = (cx, cy), (cx + bx, cy + by)
             bar = min(2, max(1, h // 140))
-
-            # Transparent
             overlay = frame_bgr.copy()
             cv2.rectangle(overlay, p1, p2, (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.18, frame_bgr, 0.82, 0, frame_bgr)
 
-            # 白描边 + 黑实线
-            # cv2.rectangle(frame_bgr, (p1[0]-1, p1[1]-1), (p2[0]+1, p2[1]+1),
-            #             (250, 250, 250), bar, lineType=cv2.LINE_AA)
             cv2.rectangle(frame_bgr, p1, p2, (250, 250, 250), bar, lineType=cv2.LINE_AA)
 
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -2453,38 +1974,27 @@ class ImageClassificationApp(QMainWindow):
             self.lbl_img.setPixmap(QPixmap.fromImage(qimg).scaled(225, 225, Qt.AspectRatioMode.KeepAspectRatio))
         else:
             self.lbl_img.setPixmap(QPixmap.fromImage(qimg).scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio))
-        #self.lbl_res.setText(f"Result: {txt}")
-        ############################################
-        # 修改新添加代码
-        ############################################
-        self.lbl_res.setTextFormat(Qt.TextFormat.RichText)  # 强制设置为 HTML 富文本渲染
-        self.lbl_res.setText(txt)  # 传入刚才生成的 HTML 代码
-        ############################################
-        ############################################
+        self.lbl_res.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_res.setText(txt) 
+
 
 
         
         self.latest_frame = frame_rgb.copy()
-
-        # >>> overlay新代码[修改开始 3.3] 喂给右上角小窗当前RGB画面 >>>
-# >>> [修复] 喂给当前激活的右上角小窗 RGB 画面 >>>
         if hasattr(self, 'current_active_overlay') and self.current_active_overlay:
             self.current_active_overlay.process_frame(self.latest_frame)
-        # <<< [修复结束] <<<
-        # <<< overlay新代码[修改结束 3.3] <<<
 
         self.last_result = txt
         self.btn_export.setEnabled(True)
 
-        # >>> [新增代码] 如果放大窗口开着，就实时更新它的画面 >>>
         if hasattr(self, 'btn_enlarge'):
             self.btn_enlarge.setEnabled(True)
         if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
             self.enlarged_window.set_image(self.latest_frame)
             if hasattr(self.enlarged_window, 'set_text'):
                 self.enlarged_window.set_text(txt)
-        # <<< [新增结束] <<<
-    # --------------------------------- Export------------------------------------------
+
+    # ---------------------------- Export------------------------------------------
     def _export(self):
         if self.latest_frame is None:
             QMessageBox.warning(self, "No data", "Nothing to export yet!")
@@ -2499,75 +2009,40 @@ class ImageClassificationApp(QMainWindow):
             fh.write("Result: " + self.last_result + "\n")
         QMessageBox.information(self, "Export", f"Saved to {save_path}")
 
-# >>> [修改代码] 动态打开放大弹窗 >>>
     def _open_enlarged_view(self):
         if self.latest_frame is None:
             return
         
-        # 如果窗口还没创建或者已经被关闭了，就新建一个
         if self.enlarged_window is None or not self.enlarged_window.isVisible():
             self.enlarged_window = ResizableImageDialog(None) 
             self.enlarged_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose) 
             self.enlarged_window.destroyed.connect(self._on_enlarged_window_closed)
             self.enlarged_window.show() 
             
-        # 传递当前帧并置顶窗口
         self.enlarged_window.set_image(self.latest_frame)
         if hasattr(self.enlarged_window, 'set_text'):
             self.enlarged_window.set_text(self.last_result)
             
-        # >>> [关键新增] 如果当前主界面正开着 Overlay，且我们有缓存，立刻发给放大窗口！
         if hasattr(self, 'current_active_overlay') and self.current_active_overlay and self.current_active_overlay.isVisible():
             if getattr(self, 'latest_overlay_result', None) is not None:
                 self.enlarged_window.set_overlay(self.latest_overlay_result)
-        # <<< [新增结束]
         
         self.enlarged_window.activateWindow()
 
     def _on_enlarged_window_closed(self):
         self.enlarged_window = None
-    # <<< [修改结束] <<<
-    # --------------------------------- Chat-------------------------------------------------
+
+    # ---------------------------- Chat-------------------------------------------------
     def _open_chat(self, llm_name, llm_precision):
         if self.latest_frame is None:
             return
 
-        #self._stop()  # frees GPU memory so that we can load LLM
         self.btn_chat.setEnabled(True)
 
         dlg = LLMChatDialog(self.latest_frame, settings.LLM_CATALOG[llm_name], llm_precision, self)
         dlg.exec()
 
-    # This is used for compact mode (instead of displaying on main GUI)
-    # def _open_llm_popup(self):
-    #     dialog = QDialog(self)
-    #     dialog.setWindowTitle("Select GPT Options")
 
-    #     layout = QVBoxLayout(dialog)
-    #     cmb_llm = QComboBox()
-    #     cmb_llm.addItems(settings.LLM_CATALOG.keys())
-    #     layout.addWidget(cmb_llm)
-
-    #     lbl_llm_precision = QLabel("Mode:")
-    #     cmb_llm_precision = QComboBox()
-    #     layout.addWidget(lbl_llm_precision)
-    #     layout.addWidget(cmb_llm_precision)
-
-    #     button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-    #     button_box.accepted.connect(
-    #         lambda: self._open_chat(cmb_llm.currentText(), cmb_llm_precision.currentData())
-    #     )
-    #     button_box.accepted.connect(dialog.accept)
-    #     button_box.rejected.connect(dialog.reject)
-    #     layout.addWidget(button_box)
-
-    #     # LLM add
-    #     cmb_llm.currentIndexChanged.connect(
-    #         lambda: self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
-    #     )
-    #     self._update_llm_options(cmb_llm, cmb_llm_precision, lbl_llm_precision)
-
-    #     dialog.exec()
 
     def _open_llm_popup(self):
         dialog = QDialog(self)
@@ -2594,7 +2069,6 @@ class ImageClassificationApp(QMainWindow):
     def _on_roi_method_changed(self, index):
             method = self.cmb_roi_method.currentText()
             
-            # 切换方法时，先停止当前图层
             self._stop_overlay()
             
             if method == "Hotspot":
@@ -2606,8 +2080,6 @@ class ImageClassificationApp(QMainWindow):
                 if hasattr(self, 'stacked_params'):
                     self.stacked_params.setCurrentIndex(1)
                     
-            # 🚀 [消除幽灵格子的核心魔法] 
-            # 把当前显示的卡片尺寸撑开，把不显示的卡片尺寸彻底忽略，强迫窗口收缩！
             if hasattr(self, 'stacked_params'):
                 for i in range(self.stacked_params.count()):
                     widget = self.stacked_params.widget(i)
@@ -2615,21 +2087,19 @@ class ImageClassificationApp(QMainWindow):
                         widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
                     else:
                         widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-                # 重新计算并收缩外框尺寸
                 self.stacked_params.adjustSize()
                 
-            # 强制刷新参数到当前的 Widget
+
             if hasattr(self, '_update_overlay_params'):
                 self._update_overlay_params()
 
     def _on_overlay_worker_finished(self, result_rgb):
-            """当后台计算好聚类/热力图时，同步刷新给放大窗口（使用高分辨率原图）"""
-            # >>> [关键新增] 存下最新的一帧，留给稍后可能打开的放大窗口用
+
             self.latest_overlay_result = result_rgb.copy() 
-            # <<< [新增结束]
             
             if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
                 self.enlarged_window.set_overlay(result_rgb)
+
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
         info = settings.MODEL_METADATA[self.cmb_model.currentText()].get("info", "No info.")
@@ -2651,16 +2121,14 @@ class ImageClassificationApp(QMainWindow):
         tile = meta["tile_size"]
         mpp = meta.get("mpp", 0.25)
         mag = math.ceil(0.25 / mpp * 40)
-        # >>> [修改开始] 升级为支持多倍数列表 >>>
-        # 如果 JSON 里配置了 "supported_mags": ["20x", "40x"] 就用配置的，否则默认使用算出来的单个倍数
+
         self.supported_mags = meta.get("supported_mags", [f"{mag}x"])
-        mag_display = " or ".join(self.supported_mags) # 用于 UI 显示，例如 "20x or 40x"
+        mag_display = " or ".join(self.supported_mags) 
         
         if hasattr(self, 'lbl_mag_warning'):
-            self.lbl_mag_warning.hide() # 切换模型时先隐藏警告
-        # <<< [修改结束] <<<
+            self.lbl_mag_warning.hide() 
         if not self.compact_mode:
-            self.lbl_cap_hint.setTextFormat(Qt.TextFormat.RichText) # For HTML rendering
+            self.lbl_cap_hint.setTextFormat(Qt.TextFormat.RichText) 
             self.lbl_cap_hint.setText(
                 f"""
                 <b>Recommended Capture Size:</b><br>
@@ -2672,7 +2140,6 @@ class ImageClassificationApp(QMainWindow):
                 """
             )
         else:
-            # Text takes up too much space. Shows as popup in compact mode
             pass
 
         # ------------------------------------Dynamic additional configs -------------------------------------
@@ -2685,16 +2152,12 @@ class ImageClassificationApp(QMainWindow):
                 if widget is not None:
                     widget.deleteLater()
                 elif child_layout is not None:
-                    clear_layout(child_layout)  # Recursively delete children
-
+                    clear_layout(child_layout)
         self.additional_config_inputs.clear()
-        # >>> [新增代码 1]：增加一个字典，用来存储每一行的 Widget 容器，方便稍后隐藏它 >>>
         self.additional_config_rows = {} 
-        # <<< [新增结束] <<<
         add_cfg = meta.get("additional_configs", {})
         self.grp_cfg.setVisible(bool(add_cfg))
 
-        # Clear existing widgets
         clear_layout(self.v_cfg)
 
         for k, v in add_cfg.items():
@@ -2703,118 +2166,67 @@ class ImageClassificationApp(QMainWindow):
             row_layout.setContentsMargins(0, 0, 0, 0)  # optional
             lbl = QLabel(k)
 
-            # #edt = QLineEdit(str(v))
-            # # >>> [修改开始 2] 动态判断渲染 QLineEdit 还是 QComboBox >>>
-            # if isinstance(v, list):
-            #     # 如果 settings 里传的是列表，就变成下拉菜单
-            #     edt = QComboBox()
-            #     edt.addItems([str(item) for item in v])
-            # else:
-            #     edt = QLineEdit(str(v))
-            # # <<< [修改结束 2] <<<
-            # # >>> [修改开始 2] 动态判断渲染 QLineEdit, QComboBox, 还是 QCheckBox >>>
-            # if isinstance(v, list):
-            #     # 列表变下拉菜单
-            #     edt = QComboBox()
-            #     edt.addItems([str(item) for item in v])
-            # elif isinstance(v, bool):
-            #     # 布尔值变勾选框 (Toggle)
-            #     edt = QCheckBox()
-            #     edt.setChecked(v)
-            # else:
-            #     # 其它变文本框
-            #     edt = QLineEdit(str(v))
-            # # <<< [修改结束 2] <<<
-            # >>> mpp[修改开始 2] 动态判断渲染控件并加载已保存的校准 MPP >>>
-            # if isinstance(v, list):
-            #     # 列表变下拉菜单
-            #     edt = QComboBox()
-            #     edt.addItems([str(item) for item in v])
-            # elif isinstance(v, bool):
-            # >>> [修改开始 2] 识别暗号并渲染打勾下拉菜单 >>>
-            # >>> [修改开始 2] 识别暗号并渲染打勾下拉菜单 >>>
             if "(Multi-Select)" in k and isinstance(v, list):
                 edt = CheckableComboBox()
-                # 🚀 关键修改：把 checked_by_default 改为 False，启动时就是全空状态
                 edt.addItems([str(item) for item in v], checked_by_default=False)
             elif isinstance(v, list):
                 edt = QComboBox()
                 edt.addItems([str(item) for item in v])
-            # <<< [修改结束 2] <<<
             elif isinstance(v, bool):
-            # <<< [修改结束 2] <<<
-                # 布尔值变勾选框 (Toggle)
                 edt = QCheckBox()
                 edt.setChecked(v)
             else:
-                # 其它变文本框，如果是 mpp 并且本地有校准记录，则优先加载校准记录
                 if k.lower() == "mpp" and self.calibrated_mpp is not None:
                     edt = QLineEdit(f"{self.calibrated_mpp:.5f}")
                 else:
                     edt = QLineEdit(str(v))
-            # <<< mpp[修改结束 2] <<<
 
 
             row_layout.addWidget(lbl)
             row_layout.addWidget(edt)
-            self.v_cfg.addWidget(row_widget)  # <-- add widget, not layout
+            self.v_cfg.addWidget(row_widget)  
             self.additional_config_inputs[k] = edt
-            # >>> [新增代码 2]：把当前这整行(包含Label和输入框)存起来 >>>
             self.additional_config_rows[k] = row_widget
-            # <<< [新增结束] <<<
-# >>> [核心新增代码 3]：动态显示/隐藏 Context Scale 和 Clusters (k) 联动逻辑 >>>
-# >>> [核心新增代码 3]：动态显示/隐藏 Context Scale 和 Clusters (k) 联动逻辑 >>>
-# app.py 约 1050 行左右，_on_model_changed 结尾处
 
-        # >>> [核心新增：实时级联聚类面板挂载] >>>
         if "Clustering Method" in self.additional_config_inputs:
             cmb_clustering = self.additional_config_inputs["Clustering Method"]
             
-            # 获取需要联动隐藏的行
             row_context_scale = self.additional_config_rows.get("Context Scale")
             row_k = self.additional_config_rows.get("Clusters (k)")
             row_img_type = self.additional_config_rows.get("Image Type")
             row_feat_he = self.additional_config_rows.get("H&E Features (Multi-Select)")
             row_feat_muscle = self.additional_config_rows.get("Muscle Features (Multi-Select)")
 
-            # 1. 准备所有可能的特征列表给级联组件
             he_feats = meta.get("additional_configs", {}).get("H&E Features (Multi-Select)", [])
             mu_feats = meta.get("additional_configs", {}).get("Muscle Features (Multi-Select)", [])
             
-            # 2. 实例化组件并塞入布局
             self.cascade_widget = CascadeClusteringWidget(he_feats)
             self.v_cfg.addSpacing(5)
             self.v_cfg.addWidget(self.cascade_widget)
-            self.cascade_widget.hide() # 默认隐藏
+            self.cascade_widget.hide() 
             
-            # 3. 变量初始化与数据同步
             self.current_cascade_pipeline = []
             self.cascade_widget.pipeline_updated.connect(lambda p: setattr(self, 'current_cascade_pipeline', p))
 
-            # 4. 定义 UI 刷新逻辑
             def update_clustering_ui():
                 method_text = cmb_clustering.currentText()
                 img_type_text = ""
                 if "Image Type" in self.additional_config_inputs:
                     img_type_text = self.additional_config_inputs["Image Type"].currentText()
 
-                # 原有控件隐藏逻辑
                 if row_context_scale:
                     row_context_scale.setVisible(method_text in ["Single Cell Clustering", "Region Clustering"])
                 if row_k:
-                    # 级联模式下不显示全局 k 值，因为每层都有独立的 k
                     row_k.setVisible(method_text not in ["None", "Hierarchical Gating"])
                 
-                # 控制 Customized Features 相关的子选项
                 is_custom = (method_text == "Customized Features")
                 if row_img_type: row_img_type.setVisible(is_custom)
                 if row_feat_he: row_feat_he.setVisible(is_custom and img_type_text == "H&E Cell Analysis")
                 if row_feat_muscle: row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
 
-                # 🚀 级联面板显示逻辑
                 if method_text == "Hierarchical Gating":
                     self.cascade_widget.show()
-                    self.cascade_widget.emit_pipeline() # 强制同步一次初始流水线
+                    self.cascade_widget.emit_pipeline() 
                 else:
                     self.cascade_widget.hide()
 
@@ -2824,13 +2236,7 @@ class ImageClassificationApp(QMainWindow):
                 self.additional_config_inputs["Image Type"].currentTextChanged.connect(lambda _: update_clustering_ui())
             
             update_clustering_ui()
-# <<< [核心新增结束] <<<
-# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
-# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
-# >>> [核心新增：Ki-67 Refine Positives 动态参数面板联动] >>>
-# >>> [精修版：Ki-67 Refine 动态联动逻辑] >>>
-# >>> [app.py 终极修复版：Ki-67 Refine 联动] >>>
-# >>> [app.py 终极防弹版：Ki-67 Refine 联动] >>>
+
         if "Refine Positives" in self.additional_config_inputs:
             cmb_refine = self.additional_config_inputs["Refine Positives"]
             
@@ -2844,7 +2250,6 @@ class ImageClassificationApp(QMainWindow):
             k_input = self.additional_config_inputs.get("K Clusters")
             target_cmb = self.additional_config_inputs.get("Select target groups (Multi-Select)")
 
-            # 🚀 让下拉框在初始化时就认识自己的身份，绝对不会显示错！
             if isinstance(target_cmb, CheckableComboBox):
                 target_cmb.placeholder_base = "groups"
 
@@ -2859,31 +2264,25 @@ class ImageClassificationApp(QMainWindow):
                     k_val = max(2, min(k_val, 15))
                     checked_items = target_cmb.get_checked_items()
                     
-                    # 🚀 加固锁：保证哪怕出错，信号锁定也必定会解除
                     target_cmb.blockSignals(True)
                     try:
-                        # 绝对不要用 target_cmb.clear()，使用我们新写的安全方法！
                         target_cmb.clear_items()
                         
                         new_items = [f"Group{i}" for i in range(k_val)]
                         target_cmb.addItems(new_items, checked_by_default=False)
                         
-                        # 恢复之前的选中状态
                         for i in range(target_cmb.model().rowCount()):
                             item = target_cmb.model().item(i)
                             if item and item.text() in checked_items:
                                 item.setCheckState(Qt.CheckState.Checked)
                     finally:
-                        # 无论成功失败，必须解锁，否则框永远点不开！
                         target_cmb.blockSignals(False)
                         if hasattr(target_cmb, '_update_display_text'):
                             target_cmb._update_display_text()
 
-                # 绑定信号
                 if hasattr(k_input, 'textChanged'):
                     k_input.textChanged.connect(lambda _: update_target_groups())
                 
-                # 初始调用，填入 Group0 和 Group1
                 update_target_groups()
 
             def update_refine_ui():
@@ -2899,113 +2298,14 @@ class ImageClassificationApp(QMainWindow):
 
             cmb_refine.currentTextChanged.connect(lambda _: update_refine_ui())
             update_refine_ui()
-        # <<< [结束] <<<
-        # <<< [新增结束：Ki-67 Refine Positives] <<<
-        # <<< [新增结束：Ki-67 Refine Positives] <<<
-        # <<< [新增结束：Ki-67 Refine Positives] <<<
-        # if "Clustering Method" in self.additional_config_inputs:
-        #     cmb_clustering = self.additional_config_inputs["Clustering Method"]
-            
-        #     # 获取需要控制的行容器
-        #     row_context_scale = self.additional_config_rows.get("Context Scale")
-        #     row_k = self.additional_config_rows.get("Clusters (k)")
-            
-        #     # 🚀 [新增] 获取 Image Type 行容器
-        #     row_img_type = self.additional_config_rows.get("Image Type")
-            
-        #     # 新增获取特征列表行
-        #     row_feat_he = self.additional_config_rows.get("H&E Features (Multi-Select)")
-        #     row_feat_muscle = self.additional_config_rows.get("Muscle Features (Multi-Select)")
-
-        #     def update_clustering_ui():
-        #         method_text = cmb_clustering.currentText()
-        #         img_type_text = ""
-                
-        #         # 如果有 Image Type 下拉菜单，获取它的值
-        #         if "Image Type" in self.additional_config_inputs:
-        #             img_type_text = self.additional_config_inputs["Image Type"].currentText()
-
-        #         # 逻辑 1：显示 Context Scale
-        #         if row_context_scale:
-        #             row_context_scale.setVisible(method_text in ["Single Cell Clustering", "Region Clustering"])
-                
-        #         # 逻辑 2：显示 Clusters (k)
-        #         if row_k:
-        #             row_k.setVisible(method_text != "None")
-                    
-        #         # 🚀 逻辑 3 [核心修复]：只有选了 Customized Features 时，才显示 Image Type 下拉菜单！
-        #         is_custom = (method_text == "Customized Features")
-        #         if row_img_type:
-        #             row_img_type.setVisible(is_custom)
-                    
-        #         # 逻辑 4：仅在选 Customized Features 时，根据 Image Type 显示对应的特征打勾框！
-        #         if row_feat_he:
-        #             row_feat_he.setVisible(is_custom and img_type_text == "H&E Cell Analysis")
-        #         if row_feat_muscle:
-        #             row_feat_muscle.setVisible(is_custom and img_type_text == "Muscle Fiber Typing")
-                    
-        #         # 逻辑 5：显存释放
-        #         if method_text not in ["Single Cell Clustering", "Region Clustering"]:
-        #             try:
-        #                 from utils_clustering import clear_cluster_models_cache
-        #                 clear_cluster_models_cache()
-        #             except ImportError: pass
-
-        #     # 绑定信号：当 Clustering Method 或 Image Type 改变时，都触发刷新！
-        #     cmb_clustering.currentTextChanged.connect(lambda _: update_clustering_ui())
-        #     if "Image Type" in self.additional_config_inputs:
-        #         self.additional_config_inputs["Image Type"].currentTextChanged.connect(lambda _: update_clustering_ui())
-            
-        #     # 初始化状态
-        #     update_clustering_ui()
-# <<< [核心新增结束] <<<
-# <<< [核心新增结束] <<<
-        # if "Clustering Method" in self.additional_config_inputs:
-        #     cmb_clustering = self.additional_config_inputs["Clustering Method"]
-            
-        #     # 获取需要控制的行容器
-        #     row_context_scale = self.additional_config_rows.get("Context Scale")
-        #     row_k = self.additional_config_rows.get("Clusters (k)")
-
-        #     # 定义统一的刷新函数
-        #     def update_clustering_ui(text):
-        #         # 逻辑 1：只有是 Single Cell Clustering 时才显示 Context Scale
-        #         if row_context_scale:
-        #             row_context_scale.setVisible(text in ["Single Cell Clustering", "Region Clustering"])
-                
-        #         # 逻辑 2：只要不是 None，就显示 Clusters (k)
-        #         if row_k:
-        #             row_k.setVisible(text != "None")
-                    
-        #         # >>> [新增逻辑 3]：如果切走的不是单细胞聚类，立刻释放模型！ >>>
-        #         if text == "Single Cell Clustering":
-        #             clear_cluster_models_cache(keep="lemon")  # 清理 Kaiko，保留 Lemon
-        #         elif text == "Region Clustering":
-        #             clear_cluster_models_cache(keep="kaiko")  # 清理 Lemon，保留 Kaiko
-        #         else:
-        #             clear_cluster_models_cache(keep=None)     # 选 Handcrafted 或 None 时，全清！
-        #         # <<< [新增结束] <<<
-
-        #     # 1. 绑定信号：当下拉菜单改变时，触发刷新
-        #     cmb_clustering.currentTextChanged.connect(update_clustering_ui)
-            
-        #     # 2. 初始化状态：确保刚加载模型时显示正确
-        #     update_clustering_ui(cmb_clustering.currentText())
-
-        
-# <<< [核心新增结束] <<<
-    # ------------------------------------------Close---------------------------------------------------------
-# ------------------------------------------Close---------------------------------------------------------
+      
+# -----------------------------Close----------------------------------------
     def closeEvent(self, e):
         self._stop()
-        
-        # +++ 退出时杀掉可能在运行的实时倍数探测线程 +++
         if hasattr(self, 'mag_widget'):
             self.mag_widget.close_threads()
         if hasattr(self, 'mag_widget_compact'):
             self.mag_widget_compact.close_threads()
-        # +++++++++++++++++++++++++++++++++++++++
-# 🚀【关键新增】：因为放大窗口现在独立了，主程序关闭时需要手动把它也关掉
         if getattr(self, 'enlarged_window', None):
             self.enlarged_window.close()
         e.accept()

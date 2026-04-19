@@ -1,3 +1,4 @@
+# Custom Overlay Widget for Attention Heatmap Visualization in OnSight Pathology
 import numpy as np
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -14,37 +15,10 @@ class OverlayWorker(QThread):
         self.frame = None
         self.is_busy = False
 
-    # def run(self):
-    #     self.is_busy = True
-    #     try:
-    #         tissue_mask = get_tissue_mask(self.frame)
-    #         deconv, imH, imE = get_he_deconvolution(self.frame)
-    #         score_map = compute_suspicious_score_map(self.frame, imH, imE, tissue_mask,sigma_region=1)
-            
-    #         # >>> [修改] 动态获取 percentile，默认给 80 >>>
-    #         p_val = getattr(self, 'percentile', 80)
-            
-    #         result = visualize_hotspot_overlay(self.frame, score_map, tissue_mask, percentile=p_val)
-    #         # <<< [修改结束] <<<
-            
-    #         self.finished.emit(result)
-    #     except Exception as e:
-    #         print(f"[Overlay Error]: {e}")
-    #     finally:
-    #         self.is_busy = False
 
     def run(self):
             self.is_busy = True
             try:
-                # >>> [防呆修复 1] 无论外界传进来什么，强制校验并转为真正的 RGB >>>
-                # 简单校验：判断图像的红色和蓝色通道均值，通常病理图偏红粉色(R>B)
-                # 如果发现 B > R，说明极大可能传错了，是个 BGR 图，我们把它翻转过来！
-                # mean_b = np.mean(self.frame[:, :, 2])
-                # mean_r = np.mean(self.frame[:, :, 0])
-                # if mean_b > mean_r:
-                #     print("[OverlayWorker] Detected BGR format, converting to RGB.")
-                #     self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
-                # # <<< [防呆修复结束] <<<
                 k_size = getattr(self, 'kernel_size', 5)
 
                 tissue_mask = get_tissue_mask(self.frame, kernel_size=k_size)

@@ -95,50 +95,10 @@ def process_region(region, **kwargs):
     # thickness = max(1, int(2 * scale_factor))
     font_scale = max(0.8, 1.3 * scale_factor)  
     thickness = max(2, int(3 * scale_factor))
-#############################################################  
-#Old
-#############################################################        
-    # Set up the annotator for drawing boxes
-    # annotator = Annotator(
-    #     frame,
-    #     line_width=THICK_LINE,
-    #     font_size=BIG_FONT,
-    #     font="Arial_Bold.ttf",
-    #     pil=False,
-    #     example="abc",
-    # )
 
-    # # Annotate detections that meet the confidence threshold
-    # for row in prediction:
-    #     if row[5] >= Cl:
-    #         # Choose color based on confidence
-    #         if row[5] > 0.7:
-    #             base_color = (0, 255, 0)
-    #         elif row[5] > 0.4:
-    #             base_color = (255, 0, 0)
-    #         else:
-    #             base_color = (0, 0, 255)
-    #         label_text = f'score {row[5]*100:.1f} %'
-    #         annotator.box_label(
-    #             row[:4],
-    #             label=label_text,
-    #             color=base_color,
-    #             txt_color=(255, 255, 255),
-    #             rotated=False,
-    #         )
 
-    # # Get frame dimensions
-    # frame_height, frame_width = frame.shape[:2]
-    # annotated_result = annotator.result()
-    # annotated_frame = annotated_result.astype(np.uint8)
-
-#############################################################  
-#New
-#############################################################  
     annotated_frame = frame.copy()
 
-    # --- Professional Annotation with OpenCV ---
-    # You can adjust these parameters for style
     font = cv2.FONT_HERSHEY_SIMPLEX
     # font_scale = 0.6
     # font_thickness = 1
@@ -146,7 +106,6 @@ def process_region(region, **kwargs):
 
     for row in prediction:
         if row[5] >= Cl: # Check against confidence threshold
-            # Define box color based on confidence score
             score = row[5]
             if score > 0.7:
                 box_color = (0, 255, 0)  # Green for high confidence

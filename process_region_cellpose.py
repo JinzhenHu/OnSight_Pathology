@@ -7,6 +7,8 @@ from numpy.linalg import LinAlgError
 from histomicstk.features import compute_nuclei_features
 from skimage.segmentation import clear_border
 from utils import extract_tiles
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 def _safe_float(value, default=0.1):
     try:
@@ -23,26 +25,24 @@ def fix_region(region, tile_size):
 
 def visualize_ki67_refined_overlay(img, masks, labels, base_pos_arr, final_pos_arr, alpha=0.4):
     """
-    三态高级渲染：
-    - 真正的阴性 (base=False) -> 蓝色
-    - 保留的阳性 (base=True, final=True) -> 红色
-    - 剔除的假阳 (base=True, final=False) -> 透明无色 (保持原图)
+    - negtive (base=False) -> blue
+    - positive (base=True, final=True) -> red
+    - removed false positive (base=True, final=False) 
     """
     overlay = img.copy()
     max_label = masks.max()
     
-    # 构建色彩查找表 (LUT) 加速渲染
     color_lut = np.zeros((max_label + 1, 3), dtype=np.uint8)
     paint_mask = np.zeros(max_label + 1, dtype=bool)
     
     for lab, is_base_pos, is_final_pos in zip(labels, base_pos_arr, final_pos_arr):
         if not is_base_pos:
-            color_lut[lab] = [255, 0, 0]  # OpenCV BGR: 蓝色
+            color_lut[lab] = [255, 0, 0]  # blue
             paint_mask[lab] = True
         elif is_base_pos and is_final_pos:
-            color_lut[lab] = [0, 0, 255]  # OpenCV BGR: 红色
+            color_lut[lab] = [0, 0, 255]  # red
             paint_mask[lab] = True
-        # 被剔除的假阳性 paint_mask 保持 False，不涂色！
+        # base positive but not final positive,  remain original color
             
     pixel_colors = color_lut[masks]
     pixel_paint = paint_mask[masks]
@@ -50,7 +50,6 @@ def visualize_ki67_refined_overlay(img, masks, labels, base_pos_arr, final_pos_a
     overlay[pixel_paint] = pixel_colors[pixel_paint]
     blended = cv2.addWeighted(img, 1 - alpha, overlay, alpha, 0)
     
-    # 保护背景不被染色
     bg_mask = (masks == 0)
     blended[bg_mask] = img[bg_mask]
     
@@ -77,7 +76,7 @@ def deconvolution_ihc_ki67_dynamic(img_rgb):
             img_rgb, W_custom, I_0
         )
     except (LinAlgError, IndexError, ValueError):
-        print("SVD did not converge. Using default stain matrix.")
+        #print("SVD did not converge. Using default stain matrix.")
         stains = ['hematoxylin', 'dab', 'null']
         W_custom = np.array([stain_color_map[st] for st in stains]).T
         deconv_result = htk.preprocessing.color_deconvolution.color_deconvolution(
@@ -114,35 +113,6 @@ def classify_ki67_labb_approach(img, masks, min_area=10, threshold=0):
     valid_labels, scores = compute_lab_b_signal(img, masks, labels, min_area)
 
     return valid_labels, scores > threshold
-# def classify_ki67_od_approach(im_hem, im_dab, masks, min_area=10, threshold=0.0):
-#     """
-#     使用光学密度 (Optical Density) 差值法判断 Ki-67 阴阳性。
-#     完美解决强阳性发黑导致漏检的问题。
-#     """
-#     scores = []
-#     valid_labels = []
-    
-#     labels = np.unique(masks)
-#     labels = labels[labels != 0]
-
-#     for lab_id in labels:
-#         region = (masks == lab_id)
-#         if region.sum() < min_area:
-#             continue
-            
-#         # 计算该细胞核区域的平均 DAB(棕) 和 Hem(蓝) 的光学密度
-#         mean_dab = float(im_dab[region].mean())
-#         mean_hem = float(im_hem[region].mean())
-        
-#         # 🚀 修复反转问题：把 mean_dab - mean_hem 改为 mean_hem - mean_dab
-#         # 既然提取出来的通道反了，我们就将错就错，用正确的数值去减
-#         score = mean_hem - mean_dab
-        
-#         scores.append(score)
-#         valid_labels.append(lab_id)
-
-#     # 只要 DAB 的信号相对大于 Hem (或者大于用户设定的 threshold)，即为阳性
-#     return np.array(valid_labels), np.array(scores) > threshold
 
 
 def um2_to_px(area_um2, mpp):
@@ -156,14 +126,12 @@ def process_region(region, **kwargs):
     tile_size = metadata.get('tile_size', 256)
     mpp = _safe_float(configs.get('mpp', metadata.get('mpp', 0.25)))
 
-    # 1. 🚀 [核心修复]：在函数最开始就初始化 metrics，防止任何位置提前退出导致的 UnboundLocalError
     metrics = {
         "mib_pos": 0, "mib_total": 0,
         "area_px": 0, "mpp": mpp,
         "orig_img": None
     }
 
-    # 1. 屏幕截图与推理
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
@@ -187,45 +155,30 @@ def process_region(region, **kwargs):
     )
     valid_labels = features_df['Label'].values.astype(int)
 
-    # 获取 UI 透明度参数
     raw_transparency = _safe_float(configs.get('mask_transparency', 0.5))
     _mask_alpha = max(0.0, min(1.0, 1.0 - (raw_transparency / 100.0 if raw_transparency > 1.0 else raw_transparency)))
     _positivity_thresh = _safe_float(configs.get('positivity_thresh', 0))
     _min_area_px = um2_to_px(_safe_float(configs.get('min_area_um2', 1)), mpp)
 
-    # 4. 基础分类初筛 (Lab 判定)
+
     base_labels, base_ki67_pos = classify_ki67_labb_approach(
         frame_rgb, masks, min_area=_min_area_px, threshold=_positivity_thresh
     )
-    # base_labels, base_ki67_pos = classify_ki67_od_approach(
-    #     im_hem=im_nuclei,         # 传入苏木精(蓝)的 OD 图
-    #     im_dab=im_cytoplasm,      # 传入 DAB(棕)的 OD 图
-    #     masks=masks, 
-    #     min_area=_min_area_px, 
-    #     threshold=_positivity_thresh
-    # )
+
     base_pos_dict = dict(zip(base_labels, base_ki67_pos))
     features_df['base_positive'] = features_df['Label'].map(base_pos_dict).fillna(False).astype(bool)
     
-    # 默认状态：最终结果等于基础结果
     final_pos_mask = features_df['base_positive'].copy()
-    
+
     # ====================================================================
-    # 5. 阳性细胞精细门控逻辑 (警告不中断流程版)
-    # ====================================================================
-# ====================================================================
-    # 5. 阳性细胞精细门控逻辑 (预览不中断版)
-    # ====================================================================
-# ====================================================================
-    # 5. 阳性细胞精细门控逻辑 (预览不中断版)
+    # Refinement step: K-Means clustering or simple thresholding based on user selection
     # ====================================================================
     refine_method = configs.get("Refine Positives", "None")
     show_preview = configs.get("Show Refinement Preview", True)
-    warning_html = "" # 用于存放底部警告
-    cluster_table_html = "" # 存放形态学表格
+    warning_html = "" 
+    cluster_table_html = "" 
     final_vis_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
     
-    # 🚀 新增一个渲染锁：只要画了彩色预览，就不允许后续再被基础红蓝色覆盖！
     preview_drawn = False 
 
     if refine_method == "K-Means" and features_df['base_positive'].sum() > 0:
@@ -241,8 +194,7 @@ def process_region(region, **kwargs):
             keep_indices = [int(g.replace("Group", "")) for g in keep_grps] if keep_grps else []
             
             if len(valid_feats) > 0 and len(pos_idx) >= k:
-                from sklearn.cluster import KMeans
-                from sklearn.preprocessing import StandardScaler
+
                 
                 X = features_df.loc[pos_idx, valid_feats].fillna(0).values
                 X_scaled = StandardScaler().fit_transform(X)
@@ -254,7 +206,6 @@ def process_region(region, **kwargs):
                     mapping = {old: new for new, old in enumerate(np.argsort(centers))}
                     sub_labels = np.array([mapping[l] for l in sub_labels])
 
-                # BGR色彩: 0是绿色, 1是红色 (完美对应GUI)
                 c_colors_bgr = [[0,255,0],[0,0,255]] if k==2 else [] 
                 c_colors_hex = ["#2ecc71", "#e74c3c"] if k==2 else []
                 if k > 2:
@@ -304,7 +255,6 @@ def process_region(region, **kwargs):
                     overlay[p_mask[masks]] = lut[masks][p_mask[masks]]
                     final_vis_bgr = cv2.addWeighted(final_vis_bgr, 1-_mask_alpha, overlay, _mask_alpha, 0)
                     
-                    # 🚀 告诉第6步：我已经画完预览图了，别再覆盖我了！
                     preview_drawn = True 
                 
                 if keep_grps:
@@ -327,9 +277,8 @@ def process_region(region, **kwargs):
                 cluster_table_html = f"<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>* Filtered out: {n_filtered} cells ({short_feat} < {cutoff})</div>"
 
     # ====================================================================
-    # 6. 最终统计与渲染
+    # final visualization and metrics calculation
     # ====================================================================
-    # 🚀 只要 preview_drawn 为 True，就跳过红蓝渲染器！
     if not preview_drawn:
         final_vis_bgr = visualize_ki67_refined_overlay(
             final_vis_bgr, masks, valid_labels,

@@ -1,4 +1,4 @@
-# custom_widgets/cascade_widget.py
+# Widget for Hierarchical Clustering of Single Cell Profiling Analysis
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QComboBox, 
                              QPushButton, QLabel, QSpinBox, QFrame, 
                              QStackedWidget, QDoubleSpinBox)
@@ -11,7 +11,7 @@ class CascadeRuleWidget(QFrame):
     def __init__(self, step_id, available_targets, available_features, parent=None):
         super().__init__(parent)
         self.step_id = step_id
-        self.available_features = available_features # 保存一份留给全选/全不选重置用
+        self.available_features = available_features 
         
         self.setStyleSheet("""
             CascadeRuleWidget {
@@ -34,7 +34,6 @@ class CascadeRuleWidget(QFrame):
         layout.setContentsMargins(6, 6, 6, 6) 
         layout.setSpacing(4) 
         
-        # --- 第一行：层级、目标与方法切换 ---
         row1 = QHBoxLayout()
         row1.setContentsMargins(0, 0, 0, 0)
         
@@ -56,10 +55,7 @@ class CascadeRuleWidget(QFrame):
         
         layout.addLayout(row1)
         
-        # --- 第二行：动态参数面板 ---
         self.stacked_params = QStackedWidget()
-        
-        # [卡片 1：K-Means 参数]
         self.page_kmeans = QWidget()
         layout_km = QHBoxLayout(self.page_kmeans)
         layout_km.setContentsMargins(0, 0, 0, 0)
@@ -71,21 +67,18 @@ class CascadeRuleWidget(QFrame):
         self.spin_k.valueChanged.connect(self.rule_changed.emit)
         layout_km.addWidget(self.spin_k)
         
-        # 全选/全不选 按钮
         self.btn_toggle_all = QPushButton("All/None")
         self.btn_toggle_all.setCheckable(True)
-        self.btn_toggle_all.setChecked(False) # 默认不选中
+        self.btn_toggle_all.setChecked(False)
         self.btn_toggle_all.setStyleSheet("QPushButton { font-size: 8pt; background-color: #E9ECEF; border-radius: 4px; padding: 2px 4px; } QPushButton:checked { background-color: #D0EBFF; color: #1971C2; }")
         self.btn_toggle_all.clicked.connect(self.toggle_features)
         layout_km.addWidget(self.btn_toggle_all)
         
         self.cb_features = CheckableComboBox()
-        # 🚀 初始时设置 checked_by_default=False，完美对应 0 features selected
         self.cb_features.addItems([str(f) for f in available_features], checked_by_default=False)
         self.cb_features.model().dataChanged.connect(self.rule_changed.emit)
         layout_km.addWidget(self.cb_features, 3)
         
-        # [卡片 2：Threshold 参数]
         self.page_thresh = QWidget()
         layout_th = QHBoxLayout(self.page_thresh)
         layout_th.setContentsMargins(0, 0, 0, 0)
@@ -116,17 +109,15 @@ class CascadeRuleWidget(QFrame):
         self.rule_changed.emit()
 
     def toggle_features(self, checked):
-        """🚀 完美修复UI不同步问题：利用重建列表强制刷新文本缓存"""
         try: self.cb_features.model().dataChanged.disconnect(self.rule_changed.emit)
         except Exception: pass
         
         self.cb_features.blockSignals(True)
-        self.cb_features.clear() # 清空旧元素，这会强制销毁旧的文字缓存
-        # 重新加入元素，checked_by_default 完全由 checked 变量控制！
+        self.cb_features.clear() # clear so that we can re-add with new checked_by_default
         self.cb_features.addItems([str(f) for f in self.available_features], checked_by_default=checked)
         self.cb_features.blockSignals(False)
         
-        # 重新挂载信号，并单次发送到后台
+        # send signal after updating the list to trigger any dependent updates
         self.cb_features.model().dataChanged.connect(self.rule_changed.emit)
         self.rule_changed.emit()
 
@@ -182,7 +173,6 @@ class CascadeClusteringWidget(QWidget):
         
         self.add_rule()
 
-    # 🚀 族谱树命名生成器 (C1, C2 -> C1.1, C1.2)
     def get_available_targets(self):
         leaves = ["All Cells"]
         for rule in self.rules:

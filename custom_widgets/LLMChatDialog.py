@@ -1,10 +1,10 @@
+# Custom LLM Chat Dialog with sleek white theme for OnSight Pathology
 import sys
 import time
 import json
 import numpy as np
 import gc
 import os
-
 import torch
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QDialog, QTextEdit, QWidget, QFrame, QGraphicsDropShadowEffect
@@ -24,13 +24,12 @@ class LLMChatDialog(QDialog):
         self.setWindowTitle("AI Copilot")
         self.resize(500, 750)
         self.BASE_FONT_SIZE = 12
-        
-        # ==========================================
-        # 1. 酷炫的全局亮色主题 (Apple / ChatGPT 风格)
-        # ==========================================
+        # =================================================================================
+        # 1. cool style sheet for the entire dialog
+        # ====================================================================
         self.setStyleSheet("""
             QDialog {
-                background-color: #FFFFFF; /* 纯白底色 */
+                background-color: #FFFFFF; /* pure white background */
             }
             QTextEdit {
                 background-color: #FFFFFF;
@@ -39,7 +38,7 @@ class LLMChatDialog(QDialog):
                 font-size: 13pt;
                 color: #2C3E50;
             }
-            /* 现代化的圆角输入框 */
+            /* Modern rounded input field */
             QLineEdit {
                 background-color: #F4F6F8;
                 border: 1px solid #E9ECEF;
@@ -52,7 +51,7 @@ class LLMChatDialog(QDialog):
                 border: 1px solid #339AF0;
                 background-color: #FFFFFF;
             }
-            /* 圆角发送按钮 */
+            /* Rounded send button */
             QPushButton#SendBtn {
                 background-color: #339AF0;
                 color: white;
@@ -67,7 +66,7 @@ class LLMChatDialog(QDialog):
             QPushButton#SendBtn:disabled {
                 background-color: #A5D8FF;
             }
-            /* 酷炫的 Update 图片按钮 */
+            /* Cool Update Image Button */
             QPushButton#UpdateBtn {
                 background-color: rgba(255, 255, 255, 200);
                 color: #495057;
@@ -98,13 +97,13 @@ class LLMChatDialog(QDialog):
             Image.fromarray(frame_rgb).save(self.temp_img_path)
 
         # ==========================================
-        # 2. GUI 布局重构
+        # 2. GUI layout reconstruction
         # ==========================================
         main_vbox = QVBoxLayout(self)
         main_vbox.setContentsMargins(20, 20, 20, 20)
         main_vbox.setSpacing(15)
 
-        # --- 顶部：图片预览区 (带悬浮感和按钮) ---
+        # --- Top: Image preview area (with floating effect and button) ---
         img_container = QWidget()
         img_layout = QVBoxLayout(img_container)
         img_layout.setContentsMargins(0, 0, 0, 0)
@@ -114,14 +113,14 @@ class LLMChatDialog(QDialog):
         self.lbl_img.setStyleSheet("border-radius: 10px; background-color: #F8F9FA;")
         self._set_preview_image(self.frame_rgb)
         
-        # Update 按钮悬浮在图片下方
+        # Update button floating below the image
         self.btn_update = QPushButton("📸 Refresh Vision")
         self.btn_update.setObjectName("UpdateBtn")
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.setAutoDefault(False)
         self.btn_update.clicked.connect(self.on_update_image)
         
-        # 将图片和按钮居中摆放
+        # Center the image and button
         h_img_center = QHBoxLayout()
         h_img_center.addStretch()
         h_img_center.addWidget(self.lbl_img)
@@ -136,24 +135,24 @@ class LLMChatDialog(QDialog):
         img_layout.addLayout(h_btn_center)
         main_vbox.addWidget(img_container)
 
-# --- 中间：无边框优雅聊天流 ---
+    # --- Middle: Borderless elegant chat flow ---
         self.txt_history = QTextEdit()
         self.txt_history.setReadOnly(True)
         self.txt_history.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # 🚀 [新增] 强制全局大号字体
+
         font = QFont("Segoe UI", self.BASE_FONT_SIZE)
         self.txt_history.setFont(font)
         
         main_vbox.addWidget(self.txt_history)
 
-        # --- 底部：现代化输入区 ---
+        # --- Bottom: Modern input area ---
         input_layout = QHBoxLayout()
         input_layout.setSpacing(10)
         
         self.inp = QLineEdit()
         self.inp.setPlaceholderText("Message AI Copilot...")
-        self.inp.setFont(font) # 🚀 [新增] 输入框也变大
+        self.inp.setFont(font)
         self.inp.returnPressed.connect(self.on_send)
         
         self.btn_send = QPushButton("Send")
@@ -166,7 +165,7 @@ class LLMChatDialog(QDialog):
         input_layout.addWidget(self.btn_send)
         main_vbox.addLayout(input_layout)
 
-        # 初始欢迎语
+        # welcome message
         welcome_html = """
         <div style='text-align: center; margin-top: 20px;'>
             <span style='color: #ADB5BD; font-size: 10pt;'>
@@ -185,14 +184,12 @@ class LLMChatDialog(QDialog):
         """Helper function to set and scale the preview image smoothly."""
         h, w, c = frame_rgb.shape
         qimg = QImage(frame_rgb.data, w, h, c * w, QImage.Format.Format_RGB888)
-        # 添加一点圆角效果 (由外层 QLabel 的样式控制)
         pixmap = QPixmap.fromImage(qimg).scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.lbl_img.setPixmap(pixmap)
 
     def on_update_image(self):
         if not self.parent.thread or not self.parent.thread.isRunning():
             from PyQt6.QtWidgets import QMessageBox
-            # 自定义弹窗样式
             msg = QMessageBox(self)
             msg.setWindowTitle("Tracker Paused")
             msg.setText("Real-time tracking is currently stopped.\nPlease start it in the main window to grab a new frame.")
@@ -205,7 +202,6 @@ class LLMChatDialog(QDialog):
             
         new_frame = self.parent.latest_frame.copy()
 
-        # 🚀 [核心修复 3] 像素级防抖：如果视野根本没动（新旧图一模一样），直接静默拦截！
         if np.array_equal(self.frame_rgb, new_frame):
             return
 
@@ -218,7 +214,7 @@ class LLMChatDialog(QDialog):
                 msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
                 self.process.write(msg.encode("utf-8"))
                 
-        # 优雅的灰色居中系统提示
+        # cool visual feedback for image update
         sys_html = """
         <table width="100%" cellspacing="0" cellpadding="0">
           <tr>
@@ -242,11 +238,9 @@ class LLMChatDialog(QDialog):
             self.llm_precision = "8bit"
 
         if getattr(sys, 'frozen', False):
-            # 🚀 生产环境：调用自己 (app.exe)，并传入特殊身份参数
             self.process.setProgram(sys.executable)
             self.process.setArguments(["--run-llm-worker", "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
         else:
-            # 👨‍💻 开发环境：正常调用 python.exe 运行脚本
             script_path = resource_path("llm_worker_process.py")
             self.process.setProgram(sys.executable)
             self.process.setArguments([script_path, "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
@@ -276,11 +270,10 @@ class LLMChatDialog(QDialog):
                     self.inp.setFocus()
 
                 elif msg_type == "chunk":
-                    # 接收流式文本
+                    # streaming response chunk from the LLM
                     cursor = self.txt_history.textCursor()
                     cursor.movePosition(QTextCursor.MoveOperation.End)
                     
-                    # 🚀 [核心修复] 强制锁定流式打字的大小和颜色！
                     fmt = cursor.charFormat()
                     fmt.setFontPointSize(self.BASE_FONT_SIZE)
                     fmt.setForeground(QColor("#2C3E50"))
@@ -288,14 +281,13 @@ class LLMChatDialog(QDialog):
                     
                     cursor.insertText(msg["text"])
                     self.txt_history.setTextCursor(cursor)
-                    # 自动滚到底部
                     self.txt_history.verticalScrollBar().setValue(self.txt_history.verticalScrollBar().maximum())
                     
                 elif msg_type == "stream_end":
                     self.inp.setEnabled(True)
                     self.btn_send.setEnabled(True)
                     self.inp.setFocus()
-                    self.txt_history.append("<br>") # 留点呼吸空间
+                    self.txt_history.append("<br>") # add spacing after each response
 
                 elif msg_type == "error":
                     self.txt_history.append(f"<b style='color:#FA5252;'>Error:</b> {msg['text']}<br>")
@@ -312,7 +304,7 @@ class LLMChatDialog(QDialog):
 
             self.inp.clear()
 
-            # 1. 用户的蓝色气泡 (字号改为 12pt)
+            # 1. User's blue bubble 
             user_html = f"""
             <table width="100%" cellspacing="0" cellpadding="0">
             <tr>
@@ -329,7 +321,7 @@ class LLMChatDialog(QDialog):
             """
             self.txt_history.append(user_html)
 
-            # 2. AI 的前缀 (去掉了 <br><br>，字号改为 12pt)
+            # 2. prefix 
             ai_start_html = """
             <table width="100%" cellspacing="0" cellpadding="0">
             <tr>

@@ -18,8 +18,7 @@ from utils_clustering import (
       extract_embeddings_lemon, fast_cluster_overlay,hand_crafted_clustering,perform_keamns, 
       cluster_embeddings_lemon, get_cached_kaiko, extract_embeddings_kaiko, custom_clustering
 )
-# 之前的辅助函数保持不变 (_safe_float, fix_region, visualize_overlay, get_tissue_mask_global)
-# get_tile_coordinates 已经不再需要了，可以保留也可以删除
+
 
 def _safe_float(value, default=0.2):
     try:
@@ -29,7 +28,6 @@ def _safe_float(value, default=0.2):
 
 def fix_region(region, tile_size):
     reg = region.copy()
-    # 即使不切片，保持一定的尺寸倍数通常对卷积神经网络也是好的（虽然这里主要为了防止报错）
     reg['width'] = max(reg['width'], tile_size)
     reg['height'] = max(reg['height'], tile_size)
     return reg
@@ -49,11 +47,6 @@ def get_tissue_mask_global(img_rgb):
     saturation = hsv[:, :, 1]
 
     tissue_mask = saturation > 0.05
-    # gray_image = color.rgb2gray(img_rgb)
-    # thresh = filters.threshold_otsu(gray_image)
-    # tissue_mask = gray_image < thresh*1.3
-    # tissue_mask = morphology.remove_small_objects(tissue_mask, max_size=500)  # 移除小于 500 像素的区域
-    # tissue_mask = morphology.remove_small_holes(tissue_mask,max_size=500 )  # 填充小于 500 像素的孔洞
     return tissue_mask
 
 def get_foreground_window_scale():
@@ -93,9 +86,7 @@ def get_foreground_window_scale():
             "dpi": dpiX.value,
             "scale_percent": scale_percent
         }
-
     info = get_scale_for_foreground_window()
-    print(f"当前前台窗口所在显示器: DPI={info['dpi']}, 缩放={info['scale_percent']:.0f}%")
     return info['scale_percent']/100
 
 def deconvolution_hema_eso(img_rgb):
@@ -118,7 +109,7 @@ def deconvolution_hema_eso(img_rgb):
             img_rgb, W_custom, I_0
         )
     except (LinAlgError, IndexError, ValueError):
-        print("SVD did not converge. Using default stain matrix.")
+        #print("SVD did not converge. Using default stain matrix.")
         stains = ['hematoxylin', 'eosin', 'null']
         W_custom = np.array([stain_color_map[st] for st in stains]).T
         deconv_result = htk.preprocessing.color_deconvolution.color_deconvolution(
@@ -153,7 +144,6 @@ def process_region(region, **kwargs):
         os_scale = get_foreground_window_scale()
         mpp = mpp / os_scale
         
-    # 1. 截图
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
@@ -175,16 +165,11 @@ def process_region(region, **kwargs):
             "area_px":frame.shape[0]*frame.shape[1],
             "mpp":mpp
         }
-
         text = "<b>No nuclei detected</b>"
 
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), text, metrics
-    
-
 
     
-    #masks = clear_border(masks)
-
     final_vis_img = None
     if cluster_method =="None":
             masks = clear_border(masks)
@@ -200,24 +185,21 @@ def process_region(region, **kwargs):
             haralick_features_flag=False
         )
     elif cluster_method != "None":
-            # === 新增：过滤掉面积最大的那个 mask ===
-            # 使用 np.bincount 快速统计每个 label 的像素数量（即面积）
-            bincounts = np.bincount(masks.ravel())
-            if len(bincounts) > 1:  # 确保至少有一个 mask (除了背景 0)
-                bincounts[0] = 0    # 忽略背景层 (Label 0)
-                largest_label = np.argmax(bincounts) # 找到面积最大的 Label
-                if largest_label > 0:
-                    masks[masks == largest_label] = 0  # 将其置为背景 0，从后续计算中剔除
-            #masks = relabel_and_filter_masks(masks, min_area=20, max_area=50000, min_solidity=0.80)
+            # filter out large objects
+            # bincounts = np.bincount(masks.ravel())
+            # if len(bincounts) > 1:  
+            #     bincounts[0] = 0  
+            #     largest_label = np.argmax(bincounts) 
+            #     if largest_label > 0:
+            #         masks[masks == largest_label] = 0 
             if cluster_method == "Customized Features":
-                                
+                         
                                 image_type = configs.get('Image Type', 'H&E Cell Analysis')
                                 
                                 if image_type == "H&E Cell Analysis":
                                     masks = clear_border(masks)
                                     selected_feats = configs.get('H&E Features (Multi-Select)', [])
                                     
-                                    # 🚀 Fix: Define a basic metrics dict before returning
                                     if len(selected_feats) == 0:
                                         err_txt = "<b style='color:#e74c3c;'>Error: No features selected!</b><br>Please select at least 1 feature in Additional Configs."
                                         blank_metrics = {
@@ -241,14 +223,13 @@ def process_region(region, **kwargs):
                                     df_cluster = custom_clustering(features_df, selected_features=selected_feats, use_pca=False)
                                     clusters = perform_keamns(df_cluster, n_clusters=k_clusters)
                                     features_df['Cluster'] = clusters 
-                                    features_df.to_csv("debug_he_features.csv", index=False)
+                                    #features_df.to_csv("debug_he_features.csv", index=False)
                                     final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, k_clusters, alpha=_overlay_alpha)
 
                                 elif image_type == "Muscle Fiber Typing":
                                     selected_feats = configs.get('Muscle Features (Multi-Select)', [])
-                                    print("Selected features from config:", selected_feats)
+                                   # print("Selected features from config:", selected_feats)
                                     
-                                    # 🚀 Fix: Define a basic metrics dict before returning
                                     if len(selected_feats) == 0:
                                         err_txt = "<b style='color:#e74c3c;'>Error: No features selected!</b><br>Please select at least 1 feature from feature list."
                                         blank_metrics = {
@@ -257,7 +238,7 @@ def process_region(region, **kwargs):
                                         }
                                         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), err_txt, blank_metrics
                                         
-                                    print("Selected features for clustering:", selected_feats)
+                                    #print("Selected features for clustering:", selected_feats)
                                     
 
                                     full_props = [
@@ -274,7 +255,7 @@ def process_region(region, **kwargs):
                                     features_df = pd.DataFrame(props_dict)
                                     rename_map = {'label': 'Label', 'area': 'Area', 'perimeter': 'Perimeter'}
                                     features_df.rename(columns=rename_map, inplace=True)
-                                    print("Extracted features columns:", features_df.columns.tolist())
+                                    #print("Extracted features columns:", features_df.columns.tolist())
                                     
                                     valid_labels = features_df['Label'].values.astype(int)
                                     
@@ -311,7 +292,7 @@ def process_region(region, **kwargs):
                 df_cluster = hand_crafted_clustering(features_df, use_pca=False)
                 clusters = perform_keamns(df_cluster, n_clusters=k_clusters)
                 features_df['Cluster'] = clusters #
-                features_df.to_csv("debug_he_features_handcrafted.csv", index=False)
+                #features_df.to_csv("debug_he_features_handcrafted.csv", index=False)
                 final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, k_clusters, alpha=_overlay_alpha)
             elif cluster_method == "Handcrafted Features(PCA)":
                 masks = clear_border(masks)
@@ -349,7 +330,7 @@ def process_region(region, **kwargs):
                     gradient_features_flag=False,
                     haralick_features_flag=False
                 )
-                print ("Using Lemon for region clustering with context scale:", context_scale)
+                #print ("Using Lemon for region clustering with context scale:", context_scale)
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 crops, df_meta = build_cell_crops(frame, masks, output_size=40, context_scale=context_scale, min_side=40,max_side=96)
                 lemon_model, lemon_transform, device = get_cached_lemon(device)
@@ -359,7 +340,7 @@ def process_region(region, **kwargs):
                 cluster_dict = dict(zip(df_meta['label'].values, clusters))
                 features_df['Cluster'] = features_df['Label'].map(cluster_dict)
                 final_vis_img = fast_cluster_overlay(frame, masks, df_meta['label'].values, clusters, k_clusters, alpha=_overlay_alpha)
-            # process_region_cpsam_cellfeatures.py
+            
             elif cluster_method == "Hierarchical Gating":
                 masks = clear_border(masks)
                 features_df = compute_nuclei_features(
@@ -393,11 +374,9 @@ def process_region(region, **kwargs):
                         mask = (features_df['Cluster_Path'] == target)
                         if mask.sum() == 0: continue
 
-                        # 🚀 统一族谱树命名 (与前端 UI 完全对应！)
                         prefix = "C" if target == "All Cells" else f"{target}."
                         new_names = [f"{prefix}{i+1}" for i in range(k)]
 
-                        # 引擎 A：无监督 K-Means 聚类
                         if method == "K-Means":
                             feats = step['features']
                             if mask.sum() >= k and len(feats) > 0:
@@ -418,7 +397,6 @@ def process_region(region, **kwargs):
                             else:
                                 features_df.loc[mask, 'Cluster_Path'] = new_names[0]
 
-                        # 引擎 B：绝对数值阈值门控 (Threshold)
                         elif method == "Threshold":
                             feat = step['feature']
                             thresh = step['threshold']
@@ -434,8 +412,7 @@ def process_region(region, **kwargs):
                             else:
                                 features_df.loc[mask, 'Cluster_Path'] = new_names[0]
                     
-                    # 排序：根据节点深度进行智能排序，例如 C1, C2, C1.1, C1.2
-                    # 【修复】：将原先的 list 返回值 [] 改成 tuple ()，同时加上类型判断防止空值报错
+
                     def sort_key(x):
                         if not isinstance(x, str) or not x.startswith('C'): return (999,)
                         return tuple(int(part) for part in x.replace('C', '').split('.'))
@@ -447,33 +424,6 @@ def process_region(region, **kwargs):
                     clusters = features_df['Cluster'].values
                     cluster_name_map = {i: p for p, i in path_to_id.items()}
 
-                    # =============== 【修改代码：保存包含所有特征的完整 DataFrame】 ===============
-                    # try:
-                    #     import os
-                    #     # 复制一份以防直接修改影响后续流程
-                    #     export_df = features_df.copy()
-                        
-                    #     # 借助 sort_key 对整个 DataFrame 按 Cluster_Path 排序，同一 Cluster 内按 Label (细胞ID) 排序
-                    #     export_df['Sort_Tuple'] = export_df['Cluster_Path'].apply(sort_key)
-                    #     export_df = export_df.sort_values(by=['Sort_Tuple', 'Label']).drop(columns=['Sort_Tuple'])
-                        
-                    #     # 将 Cluster_Path 和 Cluster 移到表格最前面，方便你在 Excel 里查看
-                    #     cols = export_df.columns.tolist()
-                    #     for col_name in ['Cluster', 'Cluster_Path', 'Label']:
-                    #         if col_name in cols:
-                    #             cols.insert(0, cols.pop(cols.index(col_name)))
-                    #     export_df = export_df[cols]
-                        
-                    #     # 保存到本地 CSV 文件 (包含 utf-8-sig 以防中文路径/乱码问题)
-                    #     save_path = "hierarchical_gating_full_features.csv"
-                    #     export_df.to_csv(save_path, index=False, encoding='utf-8-sig')
-                    #     print(f"Hierarchical Gating 完整细胞形态学特征已成功保存至: {os.path.abspath(save_path)}")
-                    # except Exception as e:
-                    #     print(f"保存完整特征数据失败: {e}")
-                    # ==================================================================================
-
-                final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
-                    # ==================================================================================
 
                 final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
 
@@ -504,30 +454,26 @@ def process_region(region, **kwargs):
             else:
                 final_vis_img = frame
 
-# =========================================================================
-    # 4. 特征统计与多列对比看板 (动态分发: Classic vs Pivot)
+    # =========================================================================
+    # Feature summarization
     # =========================================================================
     image_type = configs.get('Image Type', 'H&E Cell Analysis')
     display_category = configs.get('Feature Category', 'Nuclear Size')
 
-    # >>> [核心修改 1]：根据 Image Type 动态定义需要统计的特征池与表头显示名称 >>>
     if image_type == "Muscle Fiber Typing":
         categories = {
             "Nuclear Size": ['Area', 'Perimeter', 'axis_major_length', 'axis_minor_length', 'equivalent_diameter_area'],
             "Nuclear Shape": ['eccentricity', 'solidity'],
             "Intensity": ['intensity_mean', 'intensity_median', 'intensity_max', 'intensity_min', 'intensity_std']
         }
-        # 为了不改 settings.json 的选项名，我们在界面渲染时动态把 Nuclear 改为 Fiber
         display_title_map = {
             "Nuclear Size": "Fiber Size", 
             "Nuclear Shape": "Fiber Shape", 
             "Intensity": "Fiber Intensity"
         }
-        # 兼容不同写法的长度和面积特征，用于后续 MPP 换算
         linear_feats = ['axis_major_length', 'axis_minor_length', 'equivalent_diameter_area', 'Perimeter']
         area_feats = ['Area']
     else:
-        # 保持原有的 H&E 特征定义不变
         categories = {
             "Nuclear Size": ['Size.Area', 'Size.Perimeter', 'Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter'],
             "Nuclear Shape": ['Shape.Circularity', 'Shape.Eccentricity', 'Shape.Solidity', 'Shape.Extent'],
@@ -540,17 +486,14 @@ def process_region(region, **kwargs):
         }
         linear_feats = ['Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter', 'Size.Perimeter']
         area_feats = ['Size.Area']
-    # <<< [修改结束 1] <<<
 
     target_columns = [col for sublist in categories.values() for col in sublist]
     existing_cols = [c for c in target_columns if c in features_df.columns]
 
-    # --- A. 计算整体特征 (All Cells) 均值、标准差和中位数 ---
     report_mean_all = features_df[existing_cols].mean()
     report_std_all = features_df[existing_cols].std()
     report_median_all = features_df[existing_cols].median()
 
-    # >>> [核心修改 2]：物理单位 (MPP) 动态换算 >>>
     for feat in linear_feats:
         if feat in report_mean_all:
             report_mean_all[feat] *= mpp
@@ -562,9 +505,8 @@ def process_region(region, **kwargs):
             report_mean_all[feat] *= (mpp ** 2)
             report_std_all[feat] *= (mpp ** 2)
             report_median_all[feat] *= (mpp ** 2)
-    # <<< [修改结束 2] <<<
 
-    # --- B. 计算 Cluster 细分特征 (仅在开启聚类时) ---
+
     actual_k = 0
     cluster_hex_colors = []
     cluster_stats = {}
@@ -575,17 +517,13 @@ def process_region(region, **kwargs):
         cmap = plt.get_cmap('gist_rainbow')
         
         for i in range(actual_k):
-            # 🚀 核心修复：原来错写成了 max(1, k_clusters - 1)，必须改成 actual_k
-            # rgba = cmap(i / max(1, actual_k - 1)) 
-            # hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
-            # cluster_hex_colors.append(hex_color)
+
             if actual_k == 2:
                 if i == 0:
-                    hex_color = "#ff0000"  # C0: 红色
+                    hex_color = "#ff0000"  # C0: red
                 else:
-                    hex_color = "#00ff00"  # C1: 绿色
+                    hex_color = "#00ff00"  # C1: green
             else:
-                # 其他数量的 Cluster 继续使用彩虹色
                 rgba = cmap(i / max(1, actual_k - 1)) 
                 hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
             
@@ -595,7 +533,6 @@ def process_region(region, **kwargs):
             c_mean = cdf[existing_cols].mean()
             c_med = cdf[existing_cols].median()
             
-            # 物理单位转换 (兼容双路)
             for feat in linear_feats:
                 if feat in c_mean: 
                     c_mean[feat] *= mpp
@@ -607,11 +544,10 @@ def process_region(region, **kwargs):
                 
             cluster_stats[i] = {'mean': c_mean, 'median': c_med, 'count': len(cdf)}
 
-    # --- C. 计算整体占比与 Metrics 封装 ---
+
     tissue_mask = get_tissue_mask_global(frame)
     tissue_area_px = np.sum(tissue_mask)
-    #tissue_area_px = h * w 
-    print(f"Tissue area (px): {tissue_area_px}, Total area (px): {area_px}")
+    #print(f"Tissue area (px): {tissue_area_px}, Total area (px): {area_px}")
     nuclei_area_px = np.sum((masks > 0) & tissue_mask)
     cellularity_score = (nuclei_area_px / tissue_area_px) if tissue_area_px > 0 else 0
 
@@ -632,39 +568,34 @@ def process_region(region, **kwargs):
         "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
         "mpp": mpp
     }
-# >>> [关键修复]：将所有提取出的特征统计值打包进 metrics，供 Export 导出 CSV >>>
-    # 1. 导出整体 (All Cells) 的特征
+
     for col in existing_cols:
         if col in report_mean_all:
             metrics[f"{col}_mean"] = float(report_mean_all[col]) if not np.isnan(report_mean_all[col]) else 0.0
             metrics[f"{col}_std"] = float(report_std_all[col]) if not np.isnan(report_std_all[col]) else 0.0
             metrics[f"{col}_median"] = float(report_median_all[col]) if not np.isnan(report_median_all[col]) else 0.0
             
-    # 2. 如果开启了聚类，把各个 Cluster (C0, C1...) 的细分特征也导出来
+
     if actual_k > 0:
         for i in range(actual_k):
             c_mean = cluster_stats[i]['mean']
             c_med = cluster_stats[i]['median']
-            metrics[f"C{i}_cell_count"] = cluster_stats[i]['count'] # 记录这个 Cluster 有多少细胞
+            metrics[f"C{i}_cell_count"] = cluster_stats[i]['count'] 
             
             for col in existing_cols:
                 if col in c_mean:
                     metrics[f"C{i}_{col}_mean"] = float(c_mean[col]) if not np.isnan(c_mean[col]) else 0.0
                     metrics[f"C{i}_{col}_median"] = float(c_med[col]) if not np.isnan(c_med[col]) else 0.0
-    # <<< [修复结束] <<<
-    # 获取动态表头标题
+
     display_title = display_title_map.get(display_category, display_category)
     
     val_fmt = ".2f" if display_category in ["Nuclear Shape", "Intensity"] else ".1f"
     
     # =========================================================================
-    # D. 动态生成 HTML (两种完全不同的视图，且兼容 H&E 与 Muscle)
+    # HTML
     # =========================================================================
     
     if cluster_method == "None":
-        # ---------------------------------------------------------
-        # 视图 1：经典无聚类视图 (Mean ± Std | Median)
-        # ---------------------------------------------------------
         def make_row_classic(name, key, unit=""):
             m_val = report_mean_all.get(key, 0)
             s_val = report_std_all.get(key, 0)
@@ -700,7 +631,6 @@ def process_region(region, **kwargs):
                 </tr>
         """
         
-        # >>> [核心修改 3]：根据 Image Type 决定加载哪个 Row Block >>>
         if image_type == "Muscle Fiber Typing":
             if display_category == "Nuclear Size":
                 html_text += make_row_classic("Area", "Area", "μm²")
@@ -718,7 +648,6 @@ def process_region(region, **kwargs):
                 html_text += make_row_classic("Intensity (Min)", "intensity_min")
                 html_text += make_row_classic("Intensity (Std)", "intensity_std")
         else:
-            # 原版 H&E
             if display_category == "Nuclear Size":
                 html_text += make_row_classic("Area", "Size.Area", "μm²")
                 html_text += make_row_classic("Perimeter", "Size.Perimeter", "μm")
@@ -736,14 +665,10 @@ def process_region(region, **kwargs):
                 html_text += make_row_classic("Intensity (IQR)", "Nucleus.Intensity.IQR")
                 html_text += make_row_classic("Intensity (Entropy)", "Nucleus.Intensity.HistEntropy")
                 html_text += make_row_classic("Intensity (Energy)", "Nucleus.Intensity.HistEnergy")
-        # <<< [修改结束 3] <<<
 
         html_text += "</table></div>" 
         
     else:
-        # ---------------------------------------------------------
-        # 视图 2：聚类后的多列高级透视表 (智能排布 Mean 和 Median)
-        # ---------------------------------------------------------
         html_text = f"""
         <div style="font-family: 'Segoe UI', Arial, sans-serif;">
             <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #1abc9c;">
@@ -790,7 +715,6 @@ def process_region(region, **kwargs):
             row_html += "</tr>"
             return row_html
 
-        # >>> [核心修改 4]：透视表模式同样区分 H&E 和 Muscle >>>
         if image_type == "Muscle Fiber Typing":
             if display_category == "Nuclear Size":
                 html_text += make_row_pivot("Area", "Area", "μm²")
@@ -808,7 +732,6 @@ def process_region(region, **kwargs):
                 html_text += make_row_pivot("Intensity (Min)", "intensity_min")
                 html_text += make_row_pivot("Intensity (Std)", "intensity_std")
         else:
-            # 原版 H&E
             if display_category == "Nuclear Size":
                 html_text += make_row_pivot("Area", "Size.Area", "μm²")
                 html_text += make_row_pivot("Perimeter", "Size.Perimeter", "μm")
@@ -826,12 +749,9 @@ def process_region(region, **kwargs):
                 html_text += make_row_pivot("Intensity (IQR)", "Nucleus.Intensity.IQR")
                 html_text += make_row_pivot("Intensity (Entropy)", "Nucleus.Intensity.HistEntropy")
                 html_text += make_row_pivot("Intensity (Energy)", "Nucleus.Intensity.HistEnergy")
-        # <<< [修改结束 4] <<<
 
         html_text += "</table></div>" 
 
     text = html_text 
-    # =========================================================================
 
     return cv2.cvtColor(final_vis_img, cv2.COLOR_RGB2BGR).astype(np.uint8), text, metrics
-    # ==================================================================================================================================================

@@ -1,3 +1,4 @@
+# Custom Disclaimer Dialog for OnSight Pathology
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QHBoxLayout, QFrame, QDialog,
     QCheckBox, QStyle, QDialogButtonBox

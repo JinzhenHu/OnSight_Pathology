@@ -12,18 +12,16 @@ from utils import resource_path
 
 class AgentMemoryBot:
     """
-    高级单图记忆系统：
-    1. 首图永久保留
-    2. 近期滑动窗口无损保留
-    3. 远期记忆调用 LLM 生成智能摘要
-    4. 具备换图状态感知与防复读机功能
+    Agent memory management 
+    - Maintains a dialogue history with roles (user/assistant) and content (text/image
+    - Implements a memory summarization mechanism to condense old dialogue into a short summary when token limits are exceeded.
+    - Provides a streaming chat interface that can handle new images and prompts, and generates responses incrementally.
     """
     def __init__(self, config_path: str, precision: str = "16bit"):
         with open(resource_path(config_path), "r", encoding="utf-8") as fh:
             self.cfg = json.load(fh)
 
         model_id = self.cfg["repo"]
-        # 🚀 修复：将普通日志输出到 stderr，防止污染 stdout 的 JSON 通道
         print(f"[System] Loading model: {model_id}", file=sys.stderr)
 
         self.processor = AutoProcessor.from_pretrained(model_id)
@@ -50,7 +48,7 @@ class AgentMemoryBot:
         ).eval()
 
         # =========================
-        # 记忆体状态与参数读取
+        # Memory Management Attributes
         # =========================
         self.history: List[Dict[str, Any]] = []
         self.memory_summary: str = ""
@@ -72,7 +70,7 @@ class AgentMemoryBot:
         print("[System] AgentMemoryBot initialized successfully.", file=sys.stderr)
 
     # =========================
-    # 对外聊天接口 (Stream API)
+    # Core Chat Function with Streaming and Memory Management
     # =========================
     def chat_stream(self, prompt: str, pil_img=None, streamer_callback=None, has_new_image=False):
         
@@ -284,163 +282,3 @@ class AgentMemoryBot:
         thread.join()
         return raw_reply
     
-
-
-# # llm_manager.py
-# import os
-# import json, torch
-# from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig,AutoModelForCausalLM, TextIteratorStreamer
-# import torchvision.transforms as T
-# from torchvision.transforms.functional import InterpolationMode
-# from lemon import model
-# from utils import resource_path
-# import tempfile
-# from threading import Thread
-# from contextlib import contextmanager
-# from qwen_vl_utils import process_vision_info 
-# #########################################################################################################
-# #Loading LLM 
-# #########################################################################################################
-# #@lru_cache(maxsize=None) This allows the model stays in cache but will makes the software stuck if the user didn't have a large ARM GPU
-# def load_llm(config_path: str, precision: str = "8bit"):
-#     """
-#     Return (model, tokenizer, cfg) — cached by config_path.
-#     """
-#     with open(resource_path(config_path), "r", encoding="utf-8") as fh:
-#         cfg = json.load(fh)
-        
-#     # ---------- HuatuoGPT-Vision & Lingshu-7B ----------------
-#     repo_lower = cfg["repo"].lower()
-#     # ---------- HuatuoGPT‑Vision‑7B‑Qwen2.5VL & Lingshu-7B ---------------------------
-#     if repo_lower.endswith("huatuogpt-vision-7b-qwen2.5vl") or repo_lower.endswith("lingshu-7b"):
-#         from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-        
-#         model_kwargs = {
-#             "device_map": "auto",
-#             "trust_remote_code": True,
-#         }
-
-#         if precision == "4bit":
-#             # For 4-bit
-#             model_kwargs["quantization_config"] = BitsAndBytesConfig(
-#                 load_in_4bit=True,
-#                 bnb_4bit_compute_dtype=torch.bfloat16,
-#                 bnb_4bit_quant_type="nf4",
-#                 bnb_4bit_use_double_quant=True,
-#             )
-#         elif precision == "16bit":
-#             # For 16-bit
-#             model_kwargs["torch_dtype"] = torch.bfloat16
-#         else: # Default to 8bit
-#             # For 8-bit
-#             model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-
-#         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-#             cfg["repo"],
-#             **model_kwargs,
-#         ).eval()
-        
-#         tokenizer = AutoProcessor.from_pretrained(cfg["repo"])
-#         return model, tokenizer, cfg
-
-
-# #########################################################################################################
-# # Chat with LLM
-# #########################################################################################################
-# # 提示：之前的 _compress_memory 函数可以直接整块删除了，不再需要。
-
-# def stream_reply(model, tokenizer, llm_config, pil_img, prompt, history, streamer_callback=None, has_new_image=False):
-#     """
-#     Returns (assistant_reply_text, updated_history)
-#     """
-#     repo_lower = llm_config["repo"].lower()
-    
-#     if repo_lower.endswith("huatuogpt-vision-7b-qwen2.5vl") or repo_lower.endswith("lingshu-7b"):
-#         MAX_TURNS = 5 
-
-#         # ==========================================
-#         # 1. 换图清空上下文逻辑
-#         # ==========================================
-#         if has_new_image:
-#             history.clear() # 🚀 新图进来，彻底清空之前的对话
-#             if streamer_callback: # <--- 必须缩进在 if has_new_image 的里面！
-#                 streamer_callback("\n<i style='color:gray;'>[System: Vision updated, previous context cleared.]</i><br>\n")
-
-#         # ==========================================
-#         # 2. 构建增量 History (Visual Anchoring)
-#         # ==========================================
-#         if len(history) == 0:
-#             history.append({
-#                 "role": "user",
-#                 "content": [
-#                     {"type": "image", "image": pil_img}, # 必须在第一轮塞入图片
-#                     {"type": "text",  "text": prompt},
-#                 ],
-#             })
-#         else:
-#             history.append({
-#                 "role": "user",
-#                 "content": [{"type": "text", "text": prompt}],
-#             })
-
-#         # ==========================================
-#         # 3. 滚动截断记忆 (保留首图 + 最近的 N-1 轮)
-#         # ==========================================
-#         # 一轮对话 = 1 user + 1 assistant (2个 message)。
-#         # 当 MAX_TURNS=5 时，发送给模型前最多允许 9 条记录 (第一轮 user + 中间 3 轮完整对话 (6条) + 最新的 1 个 user = 8条。不，是 4轮完整的 = 8 + 最新 1条 = 9条)
-#         # 如果长度超出，我们永远保留 history[0] (带图的那条)，并只取最后面的 8 条。
-#         if len(history) > (MAX_TURNS * 2) - 1:
-#             # 🚀 截断历史，保留带有 image 的首轮，并拼接上最近的 4 轮对话
-#             history = [history[0]] + history[-(MAX_TURNS * 2 - 2):]
-
-#         # ==========================================
-#         # 4. 准备模型推理
-#         # ==========================================
-#         text = tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True)
-#         image_inputs, video_inputs = process_vision_info(history)
-
-#         inputs = tokenizer(
-#             text=[text],
-#             images=image_inputs,
-#             videos=video_inputs,
-#             padding=True,
-#             return_tensors="pt",
-#         ).to(model.device)
-
-#         streamer = TextIteratorStreamer(tokenizer.tokenizer, skip_prompt=True, skip_special_tokens=True)
-
-#         generation_kwargs = dict(
-#             **inputs,
-#             streamer=streamer,
-#             max_new_tokens=256,
-#             eos_token_id=tokenizer.tokenizer.eos_token_id,
-            
-#             # 🚀 [核心修复：打破复读机魔咒]
-#             do_sample=True,          # 开启采样（不再是死板的贪婪匹配）
-#             temperature=0.5,         # 温度适中：0.5既能保证医学严谨性，又不会死板
-#             top_p=0.9,               # 核心采样：避免胡言乱语
-#             repetition_penalty=1.1   # 重复惩罚：强烈阻止它连续输出一模一样的句子！
-#         )
-        
-#         txt = ""
-#         thread = Thread(target=model.generate, kwargs=generation_kwargs)
-#         thread.start()
-
-#         # 实时推流给前端
-#         for new_text in streamer:
-#             formatted_text = new_text.replace("\n", "<br>")
-#             if streamer_callback:
-#                 streamer_callback(formatted_text)
-#             txt += formatted_text
-        
-#         thread.join() 
-        
-#         # ==========================================
-#         # 5. 保存助手回复并返回
-#         # ==========================================
-#         history.append({
-#             "role": "assistant",
-#             "content": [{"type": "text", "text": txt}]
-#         })
-        
-#         return txt, history

@@ -1,3 +1,4 @@
+# Custom Collapsible GroupBox Widget
 from PyQt6.QtWidgets import (
     QGroupBox, QVBoxLayout, QPushButton, QWidget, QStyleOptionGroupBox, QStyle
 )

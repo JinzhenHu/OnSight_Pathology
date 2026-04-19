@@ -26,14 +26,12 @@ try:
     with Image.open(args.image) as img:
         image_pil = img.convert("RGB")
 
-    # 🚀 1. 直接实例化我们的记忆管家
+    # load model in the worker process
     bot = AgentMemoryBot(config_path=args.cfg, precision=args.precision)
     
-    # 初始化成功，给前端发送 Ready 信号
     print(json.dumps({"type": "ready"}), flush=True)
 
 except Exception as e:
-    # 🚨 核心修复：如果模型加载崩溃（如 OOM、代码错误），将报错详情直接发给前端 UI！
     error_msg = f"Model Initialization Failed:\n{traceback.format_exc()}"
     print(json.dumps({"type": "error", "text": error_msg}), flush=True)
     sys.exit(1)
@@ -69,18 +67,3 @@ while True:
     except Exception as e:
         error_msg = f"Runtime Error:\n{traceback.format_exc()}"
         print(json.dumps({"type": "error", "text": error_msg}), flush=True)
-# while True:
-#     line = sys.stdin.readline()
-#     if not line:
-#         break
-#     try:
-#         msg = json.loads(line)
-#         if msg["type"] == "prompt":
-#             reply, msgs = stream_reply(
-#                 model, tokenizer, cfg,
-#                 image_pil, msg["text"], msgs,
-#                 streamer_callback=streamer_callback
-#             )
-#             print(json.dumps({"type": "stream_end"}), flush=True)
-#     except Exception as e:
-#         print(json.dumps({"type": "error", "text": str(e)}), flush=True)

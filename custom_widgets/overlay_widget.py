@@ -1,3 +1,4 @@
+# Custom Overlay Widget for Clustering Visualization in OnSight Pathology
 import cv2
 import numpy as np
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QGraphicsDropShadowEffect
@@ -6,28 +7,6 @@ from PyQt6.QtGui import QImage, QPixmap, QColor
 
 from utils import find_clusters
 
-# class OverlayWorker(QThread):
-#     """Background thread to process the overlay."""
-#     finished = pyqtSignal(np.ndarray)
-
-#     def __init__(self):
-#         super().__init__()
-#         self.frame = None
-#         self.is_busy = False
-
-#     def run(self):
-#         self.is_busy = True
-#         try:
-#             # tissue_mask = get_tissue_mask(self.frame)
-#             # deconv, imH, imE = get_he_deconvolution(self.frame)
-#             # score_map = compute_suspicious_score_map(self.frame, imH, imE, tissue_mask)
-#             # result = visualize_hotspot_overlay(self.frame, score_map, tissue_mask)
-#             _, _, result = find_hotspots_with_histomicstk(self.frame)
-#             self.finished.emit(result)
-#         except Exception as e:
-#             print(f"[Overlay Error]: {e}")
-#         finally:
-#             self.is_busy = False
 
 from torchvision import transforms
 import torch
@@ -35,7 +14,7 @@ import timm
 from timm.data.transforms_factory import create_transform
 from timm.data import resolve_data_config
 class OverlayWorker(QThread):
-    """Background thread to process the overlay using DINOv2 clustering."""
+    """Background thread to process the overlay using clustering."""
     finished = pyqtSignal(np.ndarray)
 
     def __init__(self):
@@ -45,16 +24,13 @@ class OverlayWorker(QThread):
 
         # 1. Initialize Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Initializing DINOv2 OverlayWorker on: {self.device}")
+        #print(f"Initializing OverlayWorker on: {self.device}")
 
         # 2. Load Model ONCE
-        # Using dinov2_vits14 as requested. 
         self.model = timm.create_model('mobilenetv3_small_100.lamb_in1k', pretrained=True, features_only=True, out_indices=(1, 2, 3, 4))
-        #self.model = timm.create_model('tinynet_e.in1k', pretrained=True, num_classes=0)
         self.model.eval().to(self.device)
 
         # 3. Create Standard Transform
-        # DINOv2 works best with inputs normalized to ImageNet standards
         self.config = resolve_data_config({}, model=self.model)
         self.transform = create_transform(**self.config)
 
@@ -67,9 +43,8 @@ class OverlayWorker(QThread):
                     model=self.model, 
                     transform=self.transform, 
                     device=self.device,
-                    patch_size=getattr(self, 'patch_size', 48),  # Dynamic
-                    n_clusters=getattr(self, 'n_clusters', 5),   # Dynamic
-                    # 🚀 [新增动态提取这三个参数]
+                    patch_size=getattr(self, 'patch_size', 48), 
+                    n_clusters=getattr(self, 'n_clusters', 5),   
                     sat_thresh=getattr(self, 'sat_thresh', 10), 
                     val_thresh=getattr(self, 'val_thresh', 250),
                     tissue_threshold=getattr(self, 'tissue_thresh', 0.95),
@@ -87,7 +62,7 @@ class OverlayWidget(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        # Modern, clean styling for a white background environment
+        # Clean styling for a white background environment
         self.setStyleSheet("""
             OverlayWidget {
                 background-color: rgba(255, 255, 255, 240); /* Slightly transparent white */
@@ -96,11 +71,10 @@ class OverlayWidget(QFrame):
             }
         """)
         
-        # Add a subtle drop shadow to make it "float"
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(15)
-        shadow.setColor(QColor(0, 0, 0, 40)) # Soft 15% opacity black shadow
-        shadow.setOffset(0, 4) # Cast the shadow slightly downwards
+        shadow.setColor(QColor(0, 0, 0, 40)) 
+        shadow.setOffset(0, 4) 
         self.setGraphicsEffect(shadow)
         
         self.state = "STOPPED"
@@ -108,13 +82,11 @@ class OverlayWidget(QFrame):
         self.worker.finished.connect(self._on_worker_finished)
 
         self.layout = QVBoxLayout(self)
-        # 4px padding so the image breathes and doesn't clip the rounded borders
         self.layout.setContentsMargins(4, 4, 4, 4)
         
         self.lbl_thumbnail = QLabel()
         self.lbl_thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Transparent background for the image itself, with rounded inner corners
         self.lbl_thumbnail.setStyleSheet("""
             QLabel {
                 background-color: transparent; 
@@ -126,7 +98,6 @@ class OverlayWidget(QFrame):
         self.layout.addWidget(self.lbl_thumbnail)
 
     def update_size(self):
-        """Dynamically scale to ~1/4 the size of the parent inference window."""
         if self.parent():
             pw, ph = self.parent().width(), self.parent().height()
             if pw < 50 or ph < 50:
@@ -149,13 +120,9 @@ class OverlayWidget(QFrame):
         self.hide()
         self.lbl_thumbnail.clear()
 
-    # def process_frame(self, frame_rgb):
-    #     if self.state == "RUNNING" and not self.worker.is_busy:
-    #         self.worker.frame = frame_rgb.copy()
-    #         self.worker.start()
 
     ############################################################################
-    #clustering新代码
+    #clustering
     ############################################################################
     def process_frame(self, frame_rgb):
             if self.state == "RUNNING" and not self.worker.is_busy:
@@ -170,7 +137,7 @@ class OverlayWidget(QFrame):
                 
                 self.worker.start()
     ############################################################################
-    #clustering新代码
+    #clustering
     ############################################################################
 
     def _on_worker_finished(self, result_rgb):

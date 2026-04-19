@@ -40,8 +40,6 @@ def pad_to_multiple(img_np, multiple=256):
     return img_pad, h, w
 
 def preprocess_image(img, mean, std, device):
-    #img = Image.open(img_path).convert("RGB")
-    #img_np = np.array(img)
 
     img_pad, orig_h, orig_w = pad_to_multiple(img, multiple=256)
 
@@ -119,25 +117,21 @@ def draw_contours_on_image(image_rgb, instance_dict, type_id_to_name):
 
         cx, cy = info["centroid"]
         
-        # 1. 获取基础类别名称
         base_label = type_id_to_name.get(t, str(t))
         
-        # 2. 安全提取置信度，并格式化为百分比 (例如 0.953 -> 95%)
         prob = info.get("type_prob")
         if prob is not None:
-            # 你也可以用 f"{base_label} {prob:.2f}" 显示为 0.95
             label = f"{base_label} {prob*100:.0f}%" 
         else:
             label = base_label
 
-        # 为了防止文字挡住细胞中心，稍微把文字往右上方偏移一点点
         text_x = int(cx) - 10
         text_y = int(cy) - 5
 
         cv2.putText(
             vis,
             label,
-            (max(0, text_x), max(0, text_y)), # 防止坐标变成负数跑到屏幕外
+            (max(0, text_x), max(0, text_y)), 
             cv2.FONT_HERSHEY_SIMPLEX,
             0.35,
             color,
@@ -153,14 +147,13 @@ def process_region(region, **kwargs):
     
     tile_size = metadata.get('tile_size', 256) 
 
-    # 1. 截图
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
     frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
-    #Image.fromarray(frame).save("debug_cellvit_input.png")
+
     h, w = frame.shape[:2]
     model, mean, std, type_id_to_name, tissue_id_to_name, device = model_list
     img_np, img_pad, x, orig_h, orig_w = preprocess_image(frame, mean, std, device)
@@ -191,22 +184,19 @@ def process_region(region, **kwargs):
     instance_map = instance_map_tensor[0].cpu().numpy().astype(np.int32)
     instance_map = clear_border(instance_map)
     instance_dict = instance_type_list[0]
-# ==================== 【关键修复：同步过滤字典】 ====================
-    # 获取清除边缘后，矩阵里还剩下哪些细胞 ID (排除背景 0)
+
     remaining_ids = set(np.unique(instance_map))
-    
-    # 创建一个新的字典，只把存活的细胞放进去
+
     filtered_instance_dict = {}
     for inst_id, info in instance_dict.items():
-        # 注意：这里强转一下 int，防止字典的 key 是字符串格式
+
         if int(inst_id) in remaining_ids and int(inst_id) != 0:
             filtered_instance_dict[inst_id] = info
-    # ====================================================================
+
     instance_color = colorize_instance_map(instance_map)
     overlay = draw_contours_on_image(img_np, filtered_instance_dict, type_id_to_name)
 
     final_vis_img_bgr = cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR)
-    # 将 4 个指标存入 metrics 传给 GUI
     metrics = {
         "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
         "area_px": frame.shape[0] * frame.shape[1],

@@ -26,19 +26,17 @@ def generate_tiles_nopad(img_h: int,
                          tile: int = 1024,
                          stride: int | None = None):
     if stride is None:
-        stride = tile     # 没重叠
+        stride = tile     
     assert stride <= tile, "stride ≤ tile_size"
 
-    # 1. 行起点
     y_starts = list(range(0, max(img_h - tile, 0), stride))
     if not y_starts or y_starts[-1] != img_h - tile:
-        y_starts.append(img_h - tile)   # 把最后一块顶到下边缘
-    # 2. 列起点
+        y_starts.append(img_h - tile)  
+
     x_starts = list(range(0, max(img_w - tile, 0), stride))
     if not x_starts or x_starts[-1] != img_w - tile:
-        x_starts.append(img_w - tile)   # 顶到右边缘
+        x_starts.append(img_w - tile)  
 
-    # 3. 组合 slice
     return [(slice(y, y + tile), slice(x, x + tile))
             for y in y_starts
             for x in x_starts]
@@ -74,7 +72,7 @@ def process_region(region, **kwargs):
     h, w = frame.shape[:2]
 
     tile_size = metadata['tile_size']         # 1024
-    stride     = tile_size               # 可调：无重叠 = tile_size
+    stride     = tile_size             
     tile_slices = generate_tiles_nopad(h, w, tile_size, stride)
 
     result = []
@@ -95,7 +93,6 @@ def process_region(region, **kwargs):
                 result.append(prob)
                 tile_conf = prob.max().item() 
             
-            # 🚀 改进 3：条件触发，极大提速 inference 
             if show_cam:
                 grayscale_cam = cam(input_tensor=tile_tensor, targets=None)
                 cam_map = grayscale_cam[0]
@@ -104,19 +101,14 @@ def process_region(region, **kwargs):
                 tile_w = cs.stop - cs.start
                 cam_map_resized = cv2.resize(cam_map, (tile_w, tile_h))
                 
-                # 放弃高斯窗口矩阵。直接按 tile 置信度缩放，保留高亮度
                 weighted_cam = cam_map_resized * tile_conf
                 
-                # 使用 np.maximum 覆盖，防止最后一行/一列强制裁剪叠加时造成的异常黑块
                 full_cam[rs, cs] = np.maximum(full_cam[rs, cs], weighted_cam)
 
-        # 🚀 改进 4：使用大核全局高斯模糊彻底“融化”切块的硬边缘
     if show_cam:
-        # 自适应模糊核大小：随切块大小成比例放大，并确保为奇数
         blur_kernel = max(15, (tile_size // 8) | 1) 
         full_cam = cv2.GaussianBlur(full_cam, (blur_kernel, blur_kernel), 0)
 
-        # 最终的 0.0 - 1.0 全局归一化
         if full_cam.max() > 0:
             full_cam = (full_cam - full_cam.min()) / (full_cam.max() - full_cam.min() + 1e-8)
 
@@ -148,48 +140,8 @@ def process_region(region, **kwargs):
         "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
     }
 
-    # 只有开关打开时，才会向主 UI 吐出 attention_map 数据
     if show_cam:
         metrics["attention_map"] = full_cam
         
     return frame, res, metrics
-    # for rs, cs in tile_slices:
-    #     tile_img = Image.fromarray(frame[rs, cs])
-    #     tile_tensor = preprocessing(tile_img).unsqueeze(0).to(device)
-    #     with torch.no_grad():
-    #         out = model(tile_tensor)
-    #         result.append(F.softmax(out, dim=1))
-
-
-
-    # result_tensor = torch.vstack(result)
-    # final_prob= torch.mean(result_tensor, dim=0)
-    # final_prob_numpy = torch.mean(result_tensor, dim=0).cpu().detach().numpy()
-    # top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
-    # top_3_idx = top_3_idx[:1]
-    # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    # probs_dict = {cls: float(p) for cls, p
-    #             in zip(metadata['classes'], final_prob_numpy)}
-    # ###Max
-    # # result_tensor = torch.vstack(result)
-    # # final_prob, _ = torch.max(result_tensor, dim=0)
-    # # final_prob_numpy = final_prob.cpu().detach().numpy()
-    # # top_3_idx = torch.argsort(final_prob, descending=True).cpu().detach().numpy()
-    # # top_3_idx = top_3_idx[:1]
-    # # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-    # res = ''
-    # for idx in top_3_idx:
-    #     res += '{}: {:.4f}\n'.format(metadata['classes'][idx], final_prob_numpy[idx])
-    # final_conf = float(final_prob_numpy[top_3_idx[0]])
-    # top_1 = top_3_idx[0] 
-    # metrics = {
-    #     "conf":      final_conf,
-    #     "pred_cls":  metadata['classes'][top_1],  
-    #     "probs":      probs_dict,
-    #     "area_px":   frame.shape[0] * frame.shape[1],
-    #     "mpp":       metadata.get("mpp", 0.25),
-    #     "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
-    # }
-    # return frame, res, metrics
-
+   

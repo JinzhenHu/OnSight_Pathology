@@ -31,7 +31,7 @@ MODEL_CATELOG = [
         #{'name': "Glioma Subtype (VIT)", 'info_file': 'metadata/glioma_vit.json'},
         #{'name': "Glioma Subtype (VIT_Kaiko)", 'info_file': 'metadata/glioma_mutant.json'},
         {'name': "Glioma Subtype (VIT_midnight)", 'info_file': 'metadata/glioma_midnight.json'},
-        {'name': "Magnification (VIT)", 'info_file': 'metadata/mag_detector.json'},
+        #{'name': "Magnification (VIT)", 'info_file': 'metadata/mag_detector.json'},
         
     ]),
     ("▶️ Segmentation Models", [
@@ -53,3 +53,6 @@ for _, _v in MODEL_CATELOG:
     for __v in _v:
         with open(resource_path(__v['info_file'])) as f:
             MODEL_METADATA[__v['name']] = json.load(f)
+
+with open(resource_path('metadata/mag_detector.json')) as f:
+    MODEL_METADATA["Magnification (VIT)"] = json.load(f)
