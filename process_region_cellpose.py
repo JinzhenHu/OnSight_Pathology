@@ -100,7 +100,10 @@ def classify_ki67_labb_approach(img, masks, min_area=10, threshold=0):
             region = masks == lab_id
             if region.sum() < min_area:
                 continue
-            scores.append(float(b_channel[region].mean()))
+            if lab[..., 0][region].mean() < 40:
+                scores.append(999)
+            else:
+                scores.append(float(b_channel[region].mean()))
             valid_labels.append(lab_id)
 
         return np.array(valid_labels), np.array(scores)
@@ -111,6 +114,36 @@ def classify_ki67_labb_approach(img, masks, min_area=10, threshold=0):
     valid_labels, scores = compute_lab_b_signal(img, masks, labels, min_area)
 
     return valid_labels, scores > threshold
+# def classify_ki67_od_approach(im_hem, im_dab, masks, min_area=10, threshold=0.0):
+#     """
+#     使用光学密度 (Optical Density) 差值法判断 Ki-67 阴阳性。
+#     完美解决强阳性发黑导致漏检的问题。
+#     """
+#     scores = []
+#     valid_labels = []
+    
+#     labels = np.unique(masks)
+#     labels = labels[labels != 0]
+
+#     for lab_id in labels:
+#         region = (masks == lab_id)
+#         if region.sum() < min_area:
+#             continue
+            
+#         # 计算该细胞核区域的平均 DAB(棕) 和 Hem(蓝) 的光学密度
+#         mean_dab = float(im_dab[region].mean())
+#         mean_hem = float(im_hem[region].mean())
+        
+#         # 🚀 修复反转问题：把 mean_dab - mean_hem 改为 mean_hem - mean_dab
+#         # 既然提取出来的通道反了，我们就将错就错，用正确的数值去减
+#         score = mean_hem - mean_dab
+        
+#         scores.append(score)
+#         valid_labels.append(lab_id)
+
+#     # 只要 DAB 的信号相对大于 Hem (或者大于用户设定的 threshold)，即为阳性
+#     return np.array(valid_labels), np.array(scores) > threshold
+
 
 def um2_to_px(area_um2, mpp):
         return area_um2 / (mpp ** 2)
@@ -164,6 +197,13 @@ def process_region(region, **kwargs):
     base_labels, base_ki67_pos = classify_ki67_labb_approach(
         frame_rgb, masks, min_area=_min_area_px, threshold=_positivity_thresh
     )
+    # base_labels, base_ki67_pos = classify_ki67_od_approach(
+    #     im_hem=im_nuclei,         # 传入苏木精(蓝)的 OD 图
+    #     im_dab=im_cytoplasm,      # 传入 DAB(棕)的 OD 图
+    #     masks=masks, 
+    #     min_area=_min_area_px, 
+    #     threshold=_positivity_thresh
+    # )
     base_pos_dict = dict(zip(base_labels, base_ki67_pos))
     features_df['base_positive'] = features_df['Label'].map(base_pos_dict).fillna(False).astype(bool)
     

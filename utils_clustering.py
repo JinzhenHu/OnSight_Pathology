@@ -293,31 +293,6 @@ def perform_keamns(df_ready_for_cluster, n_clusters):
     clusters = km.fit_predict(X)
     return clusters
 
-def fast_cluster_overlay(img, masks, labels, clusters, n_clusters, alpha=0.6):
-    """Vectorized PyQt-compatible mask overlay (Replaces plt.show)"""
-    
-    max_label = masks.max()
-    cluster_lut = np.full(max_label + 1, -1, dtype=np.int32)
-    cluster_lut[labels] = clusters
-    cluster_map = cluster_lut[masks]
-
-    # Create Color LUT
-    color_lut = np.zeros((n_clusters + 1, 3), dtype=np.uint8)
-    cmap = plt.get_cmap('gist_rainbow')
-    for i in range(n_clusters):
-        rgba = cmap(i / max(1, n_clusters - 1))
-        # Convert RGB to BGR for OpenCV
-        color_lut[i] = [int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255)]
-    
-    color_lut[-1] = [0, 0, 0] # Transparent background
-    colored_mask = color_lut[cluster_map]
-    
-    # Fast Alpha Blending
-    overlay = img.copy()
-    mask_fg = cluster_map != -1
-    overlay[mask_fg] = cv2.addWeighted(overlay[mask_fg], 1 - alpha, colored_mask[mask_fg], alpha, 0)
-    
-    return overlay
 # def fast_cluster_overlay(img, masks, labels, clusters, n_clusters, alpha=0.6):
 #     """Vectorized PyQt-compatible mask overlay (Replaces plt.show)"""
     
@@ -329,25 +304,10 @@ def fast_cluster_overlay(img, masks, labels, clusters, n_clusters, alpha=0.6):
 #     # Create Color LUT
 #     color_lut = np.zeros((n_clusters + 1, 3), dtype=np.uint8)
 #     cmap = plt.get_cmap('gist_rainbow')
-    
-#     # 🚀 [新增核心]：硬编码前几个 Cluster 的专属 RGB 颜色
-#     # 0=纯红, 1=纯绿, 2=纯蓝, 3=纯黄, 4=品红
-#     preset_colors_rgb = [
-#         [0, 255, 0],   # C1: 绿色
-#         [255, 0, 0],   # C0: 红色
-#         [0, 0, 255],   # C2: 蓝色
-#         [255, 255, 0], # C3: 黄色
-#         [255, 0, 255]  # C4: 品红
-#     ]
-    
 #     for i in range(n_clusters):
-#         # 如果在预设颜色范围内，优先使用预设颜色
-#         if i < len(preset_colors_rgb):
-#             color_lut[i] = preset_colors_rgb[i]
-#         else:
-#             # 超过了预设范围（比如 k=6），则继续使用彩虹色生成兜底
-#             rgba = cmap(i / max(1, n_clusters - 1))
-#             color_lut[i] = [int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255)]
+#         rgba = cmap(i / max(1, n_clusters - 1))
+#         # Convert RGB to BGR for OpenCV
+#         color_lut[i] = [int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255)]
     
 #     color_lut[-1] = [0, 0, 0] # Transparent background
 #     colored_mask = color_lut[cluster_map]
@@ -358,9 +318,39 @@ def fast_cluster_overlay(img, masks, labels, clusters, n_clusters, alpha=0.6):
 #     overlay[mask_fg] = cv2.addWeighted(overlay[mask_fg], 1 - alpha, colored_mask[mask_fg], alpha, 0)
     
 #     return overlay
-# from lemon import vits
-# # 过滤掉以双下划线开头的系统内置属性，只看模型名字
-# print([k for k in vits.__dict__.keys() if not k.startswith('__')])
+def fast_cluster_overlay(img, masks, labels, clusters, n_clusters, alpha=0.6):
+    """Vectorized PyQt-compatible mask overlay (Replaces plt.show)"""
+    
+    max_label = masks.max()
+    cluster_lut = np.full(max_label + 1, -1, dtype=np.int32)
+    cluster_lut[labels] = clusters
+    cluster_map = cluster_lut[masks]
+
+    # Create Color LUT
+    color_lut = np.zeros((n_clusters + 1, 3), dtype=np.uint8)
+    
+    # 🚀 核心修改：如果是 2 个 Cluster，强制使用红绿配色
+    if n_clusters == 2:
+        # 因为传入的 img 是 RGB 格式，所以颜色数组也按 [R, G, B] 排列
+        color_lut[0] = [255, 0, 0]  # Cluster 0: 红色
+        #color_lut[1] = [52, 152, 219]  # Cluster 1: 蓝色
+        color_lut[1] = [0, 255, 0]  # Cluster 1: 绿色
+    else:
+        # 否则使用原本的 gist_rainbow 渐变色
+        cmap = plt.get_cmap('gist_rainbow')
+        for i in range(n_clusters):
+            rgba = cmap(i / max(1, n_clusters - 1))
+            color_lut[i] = [int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255)]
+    
+    color_lut[-1] = [0, 0, 0] # Transparent background
+    colored_mask = color_lut[cluster_map]
+    
+    # Fast Alpha Blending
+    overlay = img.copy()
+    mask_fg = cluster_map != -1
+    overlay[mask_fg] = cv2.addWeighted(overlay[mask_fg], 1 - alpha, colored_mask[mask_fg], alpha, 0)
+    
+    return overlay
 
 
 def custom_clustering(features_df, selected_features=None, use_pca=False):

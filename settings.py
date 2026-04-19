@@ -29,8 +29,8 @@ MODEL_CATELOG = [
     ("▶️ Classification Models", [
         {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
         #{'name': "Glioma Subtype (VIT)", 'info_file': 'metadata/glioma_vit.json'},
-        {'name': "Glioma Subtype (VIT_Kaiko)", 'info_file': 'metadata/glioma_mutant.json'},
-        #{'name': "Glioma Subtype (VIT_midnight)", 'info_file': 'metadata/glioma_midnight.json'},
+        #{'name': "Glioma Subtype (VIT_Kaiko)", 'info_file': 'metadata/glioma_mutant.json'},
+        {'name': "Glioma Subtype (VIT_midnight)", 'info_file': 'metadata/glioma_midnight.json'},
         {'name': "Magnification (VIT)", 'info_file': 'metadata/mag_detector.json'},
         
     ]),

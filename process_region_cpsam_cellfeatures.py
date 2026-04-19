@@ -200,6 +200,14 @@ def process_region(region, **kwargs):
             haralick_features_flag=False
         )
     elif cluster_method != "None":
+            # === 新增：过滤掉面积最大的那个 mask ===
+            # 使用 np.bincount 快速统计每个 label 的像素数量（即面积）
+            bincounts = np.bincount(masks.ravel())
+            if len(bincounts) > 1:  # 确保至少有一个 mask (除了背景 0)
+                bincounts[0] = 0    # 忽略背景层 (Label 0)
+                largest_label = np.argmax(bincounts) # 找到面积最大的 Label
+                if largest_label > 0:
+                    masks[masks == largest_label] = 0  # 将其置为背景 0，从后续计算中剔除
             #masks = relabel_and_filter_masks(masks, min_area=20, max_area=50000, min_solidity=0.80)
             if cluster_method == "Customized Features":
                                 
@@ -221,17 +229,19 @@ def process_region(region, **kwargs):
                                     features_df = compute_nuclei_features(
                                         im_label=masks,
                                         im_nuclei=im_nuclei,          
-                                        im_cytoplasm=im_cytoplasm,     
+                                        #im_cytoplasm=im_cytoplasm,     
                                         morphometry_features_flag=True,
                                         fsd_features_flag=False,
                                         intensity_features_flag=True,
                                         gradient_features_flag=False,
                                         haralick_features_flag=False
                                     )
+
                                     valid_labels = features_df['Label'].values.astype(int)
                                     df_cluster = custom_clustering(features_df, selected_features=selected_feats, use_pca=False)
                                     clusters = perform_keamns(df_cluster, n_clusters=k_clusters)
                                     features_df['Cluster'] = clusters 
+                                    features_df.to_csv("debug_he_features.csv", index=False)
                                     final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, k_clusters, alpha=_overlay_alpha)
 
                                 elif image_type == "Muscle Fiber Typing":
@@ -272,6 +282,7 @@ def process_region(region, **kwargs):
                                     clusters = perform_keamns(df_cluster, n_clusters=k_clusters)
                                     
                                     features_df['Cluster'] = clusters 
+                                    #features_df.to_csv("debug_muscle_features.csv", index=False)
                                     final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, k_clusters, alpha=_overlay_alpha)
 
 
@@ -281,14 +292,17 @@ def process_region(region, **kwargs):
                 features_df = compute_nuclei_features(
                 im_label=masks,
                 im_nuclei=im_nuclei,          
-                im_cytoplasm=im_cytoplasm,     
+                #im_cytoplasm=im_cytoplasm,     
                 morphometry_features_flag=True,
                 fsd_features_flag=False,
                 intensity_features_flag=True,
                 gradient_features_flag=True,
                 haralick_features_flag=True
                 )
+                cols_to_drop = [c for c in features_df.columns if c.startswith('Identifier.')]
+                features_df = features_df.drop(columns=[c for c in cols_to_drop if c in features_df.columns])
                 valid_labels = features_df['Label'].values.astype(int)
+                
                 # Extract numbers, scale, and cluster
                 # feat_cols = [c for c in features_df.columns if c not in ['Label']]
                 # X = features_df[feat_cols].fillna(0).values
@@ -297,19 +311,22 @@ def process_region(region, **kwargs):
                 df_cluster = hand_crafted_clustering(features_df, use_pca=False)
                 clusters = perform_keamns(df_cluster, n_clusters=k_clusters)
                 features_df['Cluster'] = clusters #
+                features_df.to_csv("debug_he_features_handcrafted.csv", index=False)
                 final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, k_clusters, alpha=_overlay_alpha)
             elif cluster_method == "Handcrafted Features(PCA)":
                 masks = clear_border(masks)
                 features_df = compute_nuclei_features(
                 im_label=masks,
                 im_nuclei=im_nuclei,          
-                im_cytoplasm=im_cytoplasm,     
+                #im_cytoplasm=im_cytoplasm,     
                 morphometry_features_flag=True,
                 fsd_features_flag=False,
                 intensity_features_flag=True,
                 gradient_features_flag=True,
                 haralick_features_flag=True
                 )
+                cols_to_drop = [c for c in features_df.columns if c.startswith('Identifier.')]
+                features_df = features_df.drop(columns=[c for c in cols_to_drop if c in features_df.columns])
                 valid_labels = features_df['Label'].values.astype(int)
                 # Extract numbers, scale, and cluster
                 # feat_cols = [c for c in features_df.columns if c not in ['Label']]
@@ -342,8 +359,7 @@ def process_region(region, **kwargs):
                 cluster_dict = dict(zip(df_meta['label'].values, clusters))
                 features_df['Cluster'] = features_df['Label'].map(cluster_dict)
                 final_vis_img = fast_cluster_overlay(frame, masks, df_meta['label'].values, clusters, k_clusters, alpha=_overlay_alpha)
-# process_region_cpsam_cellfeatures.py
-# process_region_cpsam_cellfeatures.py
+            # process_region_cpsam_cellfeatures.py
             elif cluster_method == "Hierarchical Gating":
                 masks = clear_border(masks)
                 features_df = compute_nuclei_features(
@@ -419,9 +435,10 @@ def process_region(region, **kwargs):
                                 features_df.loc[mask, 'Cluster_Path'] = new_names[0]
                     
                     # 排序：根据节点深度进行智能排序，例如 C1, C2, C1.1, C1.2
+                    # 【修复】：将原先的 list 返回值 [] 改成 tuple ()，同时加上类型判断防止空值报错
                     def sort_key(x):
-                        if not x.startswith('C'): return [999]
-                        return [int(part) for part in x.replace('C', '').split('.')]
+                        if not isinstance(x, str) or not x.startswith('C'): return (999,)
+                        return tuple(int(part) for part in x.replace('C', '').split('.'))
                     
                     unique_paths = sorted(features_df['Cluster_Path'].unique(), key=sort_key)
                     path_to_id = {p: i for i, p in enumerate(unique_paths)}
@@ -429,6 +446,34 @@ def process_region(region, **kwargs):
                     actual_k = len(unique_paths)
                     clusters = features_df['Cluster'].values
                     cluster_name_map = {i: p for p, i in path_to_id.items()}
+
+                    # =============== 【修改代码：保存包含所有特征的完整 DataFrame】 ===============
+                    # try:
+                    #     import os
+                    #     # 复制一份以防直接修改影响后续流程
+                    #     export_df = features_df.copy()
+                        
+                    #     # 借助 sort_key 对整个 DataFrame 按 Cluster_Path 排序，同一 Cluster 内按 Label (细胞ID) 排序
+                    #     export_df['Sort_Tuple'] = export_df['Cluster_Path'].apply(sort_key)
+                    #     export_df = export_df.sort_values(by=['Sort_Tuple', 'Label']).drop(columns=['Sort_Tuple'])
+                        
+                    #     # 将 Cluster_Path 和 Cluster 移到表格最前面，方便你在 Excel 里查看
+                    #     cols = export_df.columns.tolist()
+                    #     for col_name in ['Cluster', 'Cluster_Path', 'Label']:
+                    #         if col_name in cols:
+                    #             cols.insert(0, cols.pop(cols.index(col_name)))
+                    #     export_df = export_df[cols]
+                        
+                    #     # 保存到本地 CSV 文件 (包含 utf-8-sig 以防中文路径/乱码问题)
+                    #     save_path = "hierarchical_gating_full_features.csv"
+                    #     export_df.to_csv(save_path, index=False, encoding='utf-8-sig')
+                    #     print(f"Hierarchical Gating 完整细胞形态学特征已成功保存至: {os.path.abspath(save_path)}")
+                    # except Exception as e:
+                    #     print(f"保存完整特征数据失败: {e}")
+                    # ==================================================================================
+
+                final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
+                    # ==================================================================================
 
                 final_vis_img = fast_cluster_overlay(frame, masks, valid_labels, clusters, actual_k, alpha=_overlay_alpha)
 
@@ -531,8 +576,19 @@ def process_region(region, **kwargs):
         
         for i in range(actual_k):
             # 🚀 核心修复：原来错写成了 max(1, k_clusters - 1)，必须改成 actual_k
-            rgba = cmap(i / max(1, actual_k - 1)) 
-            hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
+            # rgba = cmap(i / max(1, actual_k - 1)) 
+            # hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
+            # cluster_hex_colors.append(hex_color)
+            if actual_k == 2:
+                if i == 0:
+                    hex_color = "#ff0000"  # C0: 红色
+                else:
+                    hex_color = "#00ff00"  # C1: 绿色
+            else:
+                # 其他数量的 Cluster 继续使用彩虹色
+                rgba = cmap(i / max(1, actual_k - 1)) 
+                hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
+            
             cluster_hex_colors.append(hex_color)
             
             cdf = features_df[features_df['Cluster'] == i]
@@ -779,575 +835,3 @@ def process_region(region, **kwargs):
 
     return cv2.cvtColor(final_vis_img, cv2.COLOR_RGB2BGR).astype(np.uint8), text, metrics
     # ==================================================================================================================================================
-# dynamic dashboard with intelligent feature selection, automatic unit conversion, and dual-mode display (classic vs pivot) based on user configs and image type. The code is structured to be easily extensible for future feature categories and image types without hardcoding, ensuring a robust and user-friendly experience.
-   # ==================================================================================================================================================
-# # =========================================================================
-#     # 4. 特征统计与多列对比看板 (完全动态化，从 JSON 提取)
-#     # =========================================================================
-#     image_type = configs.get('Image Type', 'H&E Cell Analysis')
-#     display_category = configs.get('Feature Category', 'Nuclear Size')
-    
-#     # 动态表头替换 (把 Nuclear 换成 Fiber)
-#     display_title = display_category.replace("Nuclear", "Fiber") if image_type == "Muscle Fiber Typing" else display_category
-
-#     # >>> [核心改进 1] 直接从原始 metadata 读取全量特征列表，拒绝 Hardcode >>>
-#     if image_type == "Muscle Fiber Typing":
-#         all_possible_feats = metadata.get('additional_configs', {}).get('Muscle Features (Multi-Select)', [])
-#     else:
-#         all_possible_feats = metadata.get('additional_configs', {}).get('H&E Features (Multi-Select)', [])
-#     # <<< [改进结束] <<<
-
-#     # >>> [核心改进 2] 智能关键字分类器：根据用户选的 Category 自动挑出对应的特征 >>>
-#     target_columns = []
-#     for feat in all_possible_feats:
-#         f_low = feat.lower()
-#         if "size" in display_category.lower():
-#             if any(k in f_low for k in ['area', 'perimeter', 'length', 'diameter']): target_columns.append(feat)
-#         elif "shape" in display_category.lower():
-#             if any(k in f_low for k in ['circularity', 'eccentricity', 'solidity', 'extent']): target_columns.append(feat)
-#         elif "intensity" in display_category.lower():
-#             if any(k in f_low for k in ['intensity', 'entropy', 'energy', 'std', 'iqr', 'mean', 'max', 'min']): target_columns.append(feat)
-
-#     # 如果智能分类没挑出任何东西，就兜底显示全部特征
-#     if not target_columns: 
-#         target_columns = all_possible_feats
-
-#     existing_cols = [c for c in target_columns if c in features_df.columns]
-
-#     # --- A. 计算整体特征 (All Cells) 均值、标准差和中位数 ---
-#     report_mean_all = features_df[existing_cols].mean()
-#     report_std_all = features_df[existing_cols].std()
-#     report_median_all = features_df[existing_cols].median()
-
-#     # >>> [核心改进 3] 智能单位推断与自动 MPP 换算 >>>
-#     feat_units = {}
-#     feat_multipliers = {}
-#     for feat in existing_cols:
-#         f_low = feat.lower()
-#         if 'area' in f_low:
-#             feat_multipliers[feat] = mpp ** 2
-#             feat_units[feat] = "μm²"
-#         elif any(k in f_low for k in ['perimeter', 'length', 'diameter']):
-#             feat_multipliers[feat] = mpp
-#             feat_units[feat] = "μm"
-#         else:
-#             feat_multipliers[feat] = 1.0
-#             feat_units[feat] = ""
-
-#         # 应用换算
-#         if feat in report_mean_all:
-#             report_mean_all[feat] *= feat_multipliers[feat]
-#             report_std_all[feat] *= feat_multipliers[feat]
-#             report_median_all[feat] *= feat_multipliers[feat]
-#     # <<< [改进结束] <<<
-
-#     # --- B. 计算 Cluster 细分特征 ---
-#     actual_k = 0
-#     cluster_hex_colors = []
-#     cluster_stats = {}
-
-#     if cluster_method != "None" and 'Cluster' in features_df.columns:
-#         actual_k = int(features_df['Cluster'].max() + 1)
-#         import matplotlib.pyplot as plt
-#         cmap = plt.get_cmap('gist_rainbow')
-        
-#         for i in range(actual_k):
-#             rgba = cmap(i / max(1, k_clusters - 1)) 
-#             cluster_hex_colors.append("#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255)))
-            
-#             cdf = features_df[features_df['Cluster'] == i]
-#             c_mean = cdf[existing_cols].mean()
-#             c_med = cdf[existing_cols].median()
-            
-#             # 对各 Cluster 应用动态 MPP 换算
-#             for feat in existing_cols:
-#                 if feat in c_mean:
-#                     c_mean[feat] *= feat_multipliers[feat]
-#                     c_med[feat] *= feat_multipliers[feat]
-                
-#             cluster_stats[i] = {'mean': c_mean, 'median': c_med, 'count': len(cdf)}
-
-#     # --- C. 计算整体占比与 Metrics 封装 ---
-#     tissue_mask = get_tissue_mask_global(frame)
-#     tissue_area_px = np.sum(tissue_mask)
-#     nuclei_area_px = np.sum((masks > 0) & tissue_mask)
-#     cellularity_score = (nuclei_area_px / tissue_area_px) if tissue_area_px > 0 else 0
-
-#     metrics = {
-#         "cell_count": int(len(features_df)),
-#         "cellularity_percent": float(cellularity_score * 100),
-#         "area_px": frame.shape[0] * frame.shape[1],
-#         "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
-#         "mpp": mpp
-#     }
-
-#     val_fmt = ".2f" if display_category in ["Nuclear Shape", "Intensity"] else ".1f"
-    
-#     # 动态美化特征显示名称 (比如 Nucleus.Intensity.Mean 变成 Mean, axis_major_length 变成 Axis Major Length)
-#     def pretty_name(f_name):
-#         return f_name.split('.')[-1].replace('_', ' ').title()
-
-#     # =========================================================================
-#     # D. 动态生成 HTML (利用循环，消灭全部 Hardcode)
-#     # =========================================================================
-#     if cluster_method == "None":
-#         def make_row_classic(name, key, unit=""):
-#             m_val = report_mean_all.get(key, 0)
-#             s_val = report_std_all.get(key, 0)
-#             med_val = report_median_all.get(key, 0)
-#             unit_str = f"&nbsp;<span style='color:#777777; font-size:9pt;'>{unit}</span>" if unit else ""
-#             return f"""
-#             <tr bgcolor="#ffffff">
-#                 <td style="padding: 6px;"><b style="color:#000000;">{name}</b></td>
-#                 <td align="right" style="padding: 6px;"><span style="color:#000000; font-size:11pt; font-weight:bold;">{m_val:{val_fmt}}</span> <span style="color:#555555; font-size:9pt;">±{s_val:{val_fmt}}</span>{unit_str}</td>
-#                 <td align="right" style="padding: 6px;"><span style="color:#f39c12; font-size:11pt; font-weight:bold;">{med_val:{val_fmt}}</span>{unit_str}</td>
-#             </tr>"""
-            
-#         html_text = f"""
-#         <div style="font-family: 'Segoe UI', Arial, sans-serif;">
-#             <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #1abc9c;">
-#                 <span style="color: #555555; font-size: 10pt;">Count:</span> <span style="color: #000000; font-size: 12pt; font-weight: bold; margin-right: 20px;">{metrics['cell_count']}</span>
-#                 <span style="color: #555555; font-size: 10pt;">Density/Ratio:</span> <span style="color: #1abc9c; font-size: 12pt; font-weight: bold;">{metrics['cellularity_percent']:.2f}%</span>
-#             </div>
-#             <table width="100%" cellpadding="0" cellspacing="1" bgcolor="#f2f2f2" style="margin-top: 5px;">
-#                 <tr bgcolor="#ffffff">
-#                     <th align="left" style="padding: 8px; color: #3498db; font-size: 10pt;">{display_title}</th>
-#                     <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Mean ± Std</th>
-#                     <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Median</th>
-#                 </tr>
-#         """
-#         # >>> 一行代码搞定所有特征渲染！<<<
-#         for feat in existing_cols:
-#             html_text += make_row_classic(pretty_name(feat), feat, feat_units[feat])
-#         html_text += "</table></div>" 
-        
-#     else:
-#         html_text = f"""
-#         <div style="font-family: 'Segoe UI', Arial, sans-serif;">
-#             <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #1abc9c;">
-#                 <span style="color: #555555; font-size: 10pt;">Total Count:</span> <span style="color: #000000; font-size: 12pt; font-weight: bold; margin-right: 20px;">{metrics['cell_count']}</span>
-#                 <span style="color: #555555; font-size: 10pt;">Density/Ratio:</span> <span style="color: #1abc9c; font-size: 12pt; font-weight: bold;">{metrics['cellularity_percent']:.2f}%</span>
-#             </div>
-#             <table width="100%" cellpadding="0" cellspacing="0" style="text-align: center; background-color: #ffffff; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0;">
-#                 <tr style="background-color: #f8f9fa;">
-#                     <th align="left" style="padding: 8px; color: #333; font-size: 10pt; border-bottom: 2px solid #ccc;">{display_title}</th>
-#                     <th align="right" style="padding: 8px; color: #333; font-size: 10pt; border-bottom: 2px solid #ccc;">All Data</th>
-#         """
-#         for i in range(actual_k):
-#             count = cluster_stats[i]["count"]
-#             html_text += f'<th align="right" style="padding: 8px; border-bottom: 2px solid #ccc; font-size: 10pt;"><span style="color:{cluster_hex_colors[i]}; font-size:13pt; vertical-align:middle;">■</span> C{i}<br><span style="font-size:8pt; color:#888; font-weight:normal;">n={count}</span></th>'
-#         html_text += "</tr>"
-
-#         def make_row_pivot(name, key, unit=""):
-#             m_all = report_mean_all.get(key, 0)
-#             s_all = report_std_all.get(key, 0)
-#             med_all = report_median_all.get(key, 0)
-#             unit_str = f" <span style='color:#999; font-size:8pt;'>{unit}</span>" if unit else ""
-            
-#             row_html = f"""
-#             <tr>
-#                 <td align="left" style="padding: 8px; border-bottom: 1px solid #eee;"><b style="color:#444;">{name}</b>{unit_str}</td>
-#                 <td align="right" style="padding: 8px; border-bottom: 1px solid #eee;">
-#                     <div style="color:#000; font-size:10pt; font-weight:bold;">{m_all:{val_fmt}} <span style="color:#888; font-size:8pt; font-weight:normal;">±{s_all:{val_fmt}}</span></div>
-#                     <div style="color:#f39c12; font-size:9pt; font-weight:bold; margin-top:2px;">M: {med_all:{val_fmt}}</div>
-#                 </td>
-#             """
-#             for i in range(actual_k):
-#                 c_mean = cluster_stats[i]['mean'].get(key, 0)
-#                 c_med = cluster_stats[i]['median'].get(key, 0)
-#                 row_html += f"""
-#                 <td align="right" style="padding: 8px; border-bottom: 1px solid #eee;">
-#                     <div style="color:#111; font-weight:600; font-size:10pt;">{c_mean:{val_fmt}}</div>
-#                     <div style="color:#f39c12; font-size:9pt; font-weight:bold; margin-top:2px;">M: {c_med:{val_fmt}}</div>
-#                 </td>
-#                 """
-#             row_html += "</tr>"
-#             return row_html
-
-#         # >>> 一行代码搞定所有透视表特征渲染！<<<
-#         for feat in existing_cols:
-#             html_text += make_row_pivot(pretty_name(feat), feat, feat_units[feat])
-
-#         html_text += "</table></div>" 
-
-#     text = html_text 
-#     # =========================================================================
-
-#     return cv2.cvtColor(final_vis_img, cv2.COLOR_RGB2BGR).astype(np.uint8), text, metrics
-
-    # ==================================================================================================================================================
-# dynamic dashboard with intelligent feature selection, automatic unit conversion, and dual-mode display (classic vs pivot) based on user configs and image type. The code is structured to be easily extensible for future feature categories and image types without hardcoding, ensuring a robust and user-friendly experience.
-   # ==================================================================================================================================================
-
-# # =========================================================================
-#     # 4. 特征统计与多列对比看板 (动态分发: Classic vs Pivot)
-#     # =========================================================================
-#     categories = {
-#         "Nuclear Size": ['Size.Area', 'Size.Perimeter', 'Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter'],
-#         "Nuclear Shape": ['Shape.Circularity', 'Shape.Eccentricity', 'Shape.Solidity', 'Shape.Extent'],
-#         "Intensity": ['Nucleus.Intensity.Mean', 'Nucleus.Intensity.Std', 'Nucleus.Intensity.IQR', 'Nucleus.Intensity.HistEntropy', 'Nucleus.Intensity.HistEnergy']
-#     }
-#     target_columns = [col for sublist in categories.values() for col in sublist]
-#     existing_cols = [c for c in target_columns if c in features_df.columns]
-
-#     # --- A. 计算整体特征 (All Cells) 均值、标准差和中位数 ---
-#     report_mean_all = features_df[existing_cols].mean()
-#     report_std_all = features_df[existing_cols].std()
-#     report_median_all = features_df[existing_cols].median()
-
-#     linear_feats = ['Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter', 'Size.Perimeter']
-#     for feat in linear_feats:
-#         if feat in report_mean_all:
-#             report_mean_all[feat] *= mpp
-#             report_std_all[feat] *= mpp
-#             report_median_all[feat] *= mpp
-#     if 'Size.Area' in report_mean_all:
-#         report_mean_all['Size.Area'] *= (mpp ** 2)
-#         report_std_all['Size.Area'] *= (mpp ** 2)
-#         report_median_all['Size.Area'] *= (mpp ** 2)
-
-#     # --- B. 计算 Cluster 细分特征 (仅在开启聚类时) ---
-#     actual_k = 0
-#     cluster_hex_colors = []
-#     cluster_stats = {}
-
-#     if cluster_method != "None" and 'Cluster' in features_df.columns:
-#         actual_k = int(features_df['Cluster'].max() + 1)
-#         import matplotlib.pyplot as plt
-#         cmap = plt.get_cmap('gist_rainbow')
-        
-#         for i in range(actual_k):
-#             rgba = cmap(i / max(1, k_clusters - 1)) 
-#             hex_color = "#{:02x}{:02x}{:02x}".format(int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255))
-#             cluster_hex_colors.append(hex_color)
-            
-#             cdf = features_df[features_df['Cluster'] == i]
-#             c_mean = cdf[existing_cols].mean()
-#             c_med = cdf[existing_cols].median()
-            
-#             # 物理单位转换
-#             for feat in linear_feats:
-#                 if feat in c_mean: 
-#                     c_mean[feat] *= mpp
-#                     c_med[feat] *= mpp
-#             if 'Size.Area' in c_mean: 
-#                 c_mean['Size.Area'] *= (mpp ** 2)
-#                 c_med['Size.Area'] *= (mpp ** 2)
-                
-#             cluster_stats[i] = {'mean': c_mean, 'median': c_med, 'count': len(cdf)}
-
-#     # --- C. 计算整体占比与 Metrics 封装 ---
-#     tissue_mask = get_tissue_mask_global(frame)
-#     tissue_area_px = np.sum(tissue_mask)
-#     nuclei_area_px = np.sum((masks > 0) & tissue_mask)
-#     cellularity_score = (nuclei_area_px / tissue_area_px) if tissue_area_px > 0 else 0
-
-#     metrics = {
-#         "cell_count": int(len(features_df)),
-#         "cellularity_percent": float(cellularity_score * 100),
-#         "area_px": frame.shape[0] * frame.shape[1],
-#         "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
-#         "mpp": mpp
-#     }
-
-#     display_category = configs.get('Feature Category', 'Nuclear Size')
-    
-#     # >>> [精度控制]：根据当前显示的特征类别，动态决定小数位数 >>>
-#     # Shape 特征极其微小（0~1之间），必须保留 2 位小数
-#     # Size 和 Intensity 数值较大，保留 1 位能让透视表更加紧凑美观
-#     val_fmt = ".2f" if display_category in ["Nuclear Shape", "Intensity"] else ".1f"
-#     # <<< [精度控制] <<<
-    
-#     # =========================================================================
-#     # D. 动态生成 HTML (两种完全不同的视图)
-#     # =========================================================================
-    
-#     if cluster_method == "None":
-#         # ---------------------------------------------------------
-#         # 视图 1：经典无聚类视图 (Mean ± Std | Median)
-#         # ---------------------------------------------------------
-#         def make_row_classic(name, key, unit=""):
-#             m_val = report_mean_all.get(key, 0)
-#             s_val = report_std_all.get(key, 0)
-#             med_val = report_median_all.get(key, 0)
-#             unit_str = f"&nbsp;<span style='color:#777777; font-size:9pt;'>{unit}</span>" if unit else ""
-            
-#             # 注意这里使用了 {m_val:{val_fmt}} 来动态应用 .1f 或 .2f
-#             return f"""
-#             <tr bgcolor="#ffffff">
-#                 <td style="padding: 6px;"><b style="color:#000000;">{name}</b></td>
-#                 <td align="right" style="padding: 6px;">
-#                     <span style="color:#000000; font-size:11pt; font-weight:bold;">{m_val:{val_fmt}}</span> 
-#                     <span style="color:#555555; font-size:9pt;">±{s_val:{val_fmt}}</span>{unit_str}
-#                 </td>
-#                 <td align="right" style="padding: 6px;">
-#                     <span style="color:#f39c12; font-size:11pt; font-weight:bold;">{med_val:{val_fmt}}</span>{unit_str}
-#                 </td>
-#             </tr>
-#             """
-            
-#         html_text = f"""
-#         <div style="font-family: 'Segoe UI', Arial, sans-serif;">
-#             <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #1abc9c;">
-#                 <span style="color: #555555; font-size: 10pt;">Cell Count:</span> 
-#                 <span style="color: #000000; font-size: 12pt; font-weight: bold; margin-right: 20px;">{metrics['cell_count']}</span>
-#                 <span style="color: #555555; font-size: 10pt;">Cellularity:</span> 
-#                 <span style="color: #1abc9c; font-size: 12pt; font-weight: bold;">{metrics['cellularity_percent']:.2f}%</span>
-#             </div>
-#             <table width="100%" cellpadding="0" cellspacing="1" bgcolor="#f2f2f2" style="margin-top: 5px;">
-#                 <tr bgcolor="#ffffff">
-#                     <th align="left" style="padding: 8px; color: #3498db; font-size: 10pt;">{display_category}</th>
-#                     <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Mean ± Std</th>
-#                     <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Median</th>
-#                 </tr>
-#         """
-        
-#         if display_category == "Nuclear Size":
-#             html_text += make_row_classic("Area", "Size.Area", "μm²")
-#             html_text += make_row_classic("Perimeter", "Size.Perimeter", "μm")
-#             html_text += make_row_classic("Major Axis", "Size.MajorAxisLength", "μm")
-#             html_text += make_row_classic("Minor Axis", "Size.MinorAxisLength", "μm")
-#             html_text += make_row_classic("Eq. Diameter", "Shape.EquivalentDiameter", "μm")
-#         elif display_category == "Nuclear Shape":
-#             html_text += make_row_classic("Circularity", "Shape.Circularity")
-#             html_text += make_row_classic("Eccentricity", "Shape.Eccentricity")
-#             html_text += make_row_classic("Solidity", "Shape.Solidity")
-#             html_text += make_row_classic("Extent", "Shape.Extent")
-#         elif display_category == "Intensity":
-#             html_text += make_row_classic("Intensity (Mean)", "Nucleus.Intensity.Mean")
-#             html_text += make_row_classic("Intensity (Std)", "Nucleus.Intensity.Std")
-#             html_text += make_row_classic("Intensity (IQR)", "Nucleus.Intensity.IQR")
-#             html_text += make_row_classic("Intensity (Entropy)", "Nucleus.Intensity.HistEntropy")
-#             html_text += make_row_classic("Intensity (Energy)", "Nucleus.Intensity.HistEnergy")
-#         else:
-#             html_text += make_row_classic("Area", "Size.Area", "μm²")
-
-#         html_text += "</table></div>" 
-        
-#     else:
-#         # ---------------------------------------------------------
-#         # 视图 2：聚类后的多列高级透视表 (智能排布 Mean 和 Median)
-#         # ---------------------------------------------------------
-#         html_text = f"""
-#         <div style="font-family: 'Segoe UI', Arial, sans-serif;">
-#             <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #1abc9c;">
-#                 <span style="color: #555555; font-size: 10pt;">Total Cells:</span> 
-#                 <span style="color: #000000; font-size: 12pt; font-weight: bold; margin-right: 20px;">{metrics['cell_count']}</span>
-#                 <span style="color: #555555; font-size: 10pt;">Cellularity:</span> 
-#                 <span style="color: #1abc9c; font-size: 12pt; font-weight: bold;">{metrics['cellularity_percent']:.2f}%</span>
-#             </div>
-            
-#             <table width="100%" cellpadding="0" cellspacing="0" style="text-align: center; background-color: #ffffff; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0;">
-#                 <tr style="background-color: #f8f9fa;">
-#                     <th align="left" style="padding: 8px; color: #333; font-size: 10pt; border-bottom: 2px solid #ccc;">{display_category}</th>
-#                     <th align="right" style="padding: 8px; color: #333; font-size: 10pt; border-bottom: 2px solid #ccc;">All Cells</th>
-#         """
-#         for i in range(actual_k):
-#             count = cluster_stats[i]["count"]
-#             html_text += f'<th align="right" style="padding: 8px; border-bottom: 2px solid #ccc; font-size: 10pt;"><span style="color:{cluster_hex_colors[i]}; font-size:13pt; vertical-align:middle;">■</span> C{i}<br><span style="font-size:8pt; color:#888; font-weight:normal;">n={count}</span></th>'
-#         html_text += "</tr>"
-
-#         def make_row_pivot(name, key, unit=""):
-#             m_all = report_mean_all.get(key, 0)
-#             s_all = report_std_all.get(key, 0)
-#             med_all = report_median_all.get(key, 0)
-#             unit_str = f" <span style='color:#999; font-size:8pt;'>{unit}</span>" if unit else ""
-            
-#             # 动态应用 {val_fmt}
-#             row_html = f"""
-#             <tr>
-#                 <td align="left" style="padding: 8px; border-bottom: 1px solid #eee;"><b style="color:#444;">{name}</b>{unit_str}</td>
-#                 <td align="right" style="padding: 8px; border-bottom: 1px solid #eee;">
-#                     <div style="color:#000; font-size:10pt; font-weight:bold;">{m_all:{val_fmt}} <span style="color:#888; font-size:8pt; font-weight:normal;">±{s_all:{val_fmt}}</span></div>
-#                     <div style="color:#f39c12; font-size:9pt; font-weight:bold; margin-top:2px;">M: {med_all:{val_fmt}}</div>
-#                 </td>
-#             """
-            
-#             for i in range(actual_k):
-#                 c_mean = cluster_stats[i]['mean'].get(key, 0)
-#                 c_med = cluster_stats[i]['median'].get(key, 0)
-#                 row_html += f"""
-#                 <td align="right" style="padding: 8px; border-bottom: 1px solid #eee;">
-#                     <div style="color:#111; font-weight:600; font-size:10pt;">{c_mean:{val_fmt}}</div>
-#                     <div style="color:#f39c12; font-size:9pt; font-weight:bold; margin-top:2px;">M: {c_med:{val_fmt}}</div>
-#                 </td>
-#                 """
-#             row_html += "</tr>"
-#             return row_html
-
-#         if display_category == "Nuclear Size":
-#             html_text += make_row_pivot("Area", "Size.Area", "μm²")
-#             html_text += make_row_pivot("Perimeter", "Size.Perimeter", "μm")
-#             html_text += make_row_pivot("Major Axis", "Size.MajorAxisLength", "μm")
-#             html_text += make_row_pivot("Minor Axis", "Size.MinorAxisLength", "μm")
-#             html_text += make_row_pivot("Eq. Diameter", "Shape.EquivalentDiameter", "μm")
-#         elif display_category == "Nuclear Shape":
-#             html_text += make_row_pivot("Circularity", "Shape.Circularity")
-#             html_text += make_row_pivot("Eccentricity", "Shape.Eccentricity")
-#             html_text += make_row_pivot("Solidity", "Shape.Solidity")
-#             html_text += make_row_pivot("Extent", "Shape.Extent")
-#         elif display_category == "Intensity":
-#             html_text += make_row_pivot("Intensity (Mean)", "Nucleus.Intensity.Mean")
-#             html_text += make_row_pivot("Intensity (Std)", "Nucleus.Intensity.Std")
-#             html_text += make_row_pivot("Intensity (IQR)", "Nucleus.Intensity.IQR")
-#             html_text += make_row_pivot("Intensity (Entropy)", "Nucleus.Intensity.HistEntropy")
-#             html_text += make_row_pivot("Intensity (Energy)", "Nucleus.Intensity.HistEnergy")
-#         else:
-#             html_text += make_row_pivot("Area", "Size.Area", "μm²")
-
-#         html_text += "</table></div>" 
-
-#     text = html_text 
-#     # =========================================================================
-
-#     return cv2.cvtColor(final_vis_img, cv2.COLOR_RGB2BGR).astype(np.uint8), text, metrics
-# # 4. 定义需要存入 metrics 的特征组
-#     categories = {
-#         "Nuclear Size": [
-#     'Size.Area',
-#     'Size.Perimeter',
-#     'Size.MajorAxisLength',
-#     'Size.MinorAxisLength',
-#     'Shape.EquivalentDiameter',],
-
-#         "Nuclear Shape": [    
-#     'Shape.Circularity',
-#     'Shape.Eccentricity',
-#     'Shape.Solidity',
-#     'Shape.Extent',],
-
-#         "Intensity": [    
-#     'Nucleus.Intensity.Mean',
-#     'Nucleus.Intensity.Std',
-#     'Nucleus.Intensity.IQR',
-#     'Nucleus.Intensity.HistEntropy',
-#     'Nucleus.Intensity.HistEnergy']
-#     }
-    
-#     # 展平所有列名用于提取
-#     target_columns = [col for sublist in categories.values() for col in sublist]
-#     existing_cols = [c for c in target_columns if c in features_df.columns]
-    
-#     # >>> [修改开始] 同时计算均值、标准差和中位数 >>>
-#     report_mean = features_df[existing_cols].mean()
-#     report_std = features_df[existing_cols].std()
-#     report_median = features_df[existing_cols].median() # <--- 新增计算中位数
-#     print("frame shape:", frame.shape)
-#     print("mpp used for conversion:", mpp)
-#     print("Size of Area mean:", report_mean.get('Size.Area', 'N/A'))
-
-
-    
-#     # 物理转换 (微米) - 均值、标准差和中位数都要按相同比例转换
-#     linear_feats = ['Size.MajorAxisLength', 'Size.MinorAxisLength', 'Shape.EquivalentDiameter', 'Size.Perimeter']
-#     for feat in linear_feats:
-#         if feat in report_mean:
-#             report_mean[feat] *= mpp
-#             report_std[feat] *= mpp
-#             report_median[feat] *= mpp
-#     if 'Size.Area' in report_mean:
-#         report_mean['Size.Area'] *= (mpp ** 2)
-#         report_std['Size.Area'] *= (mpp ** 2)
-#         report_median['Size.Area'] *= (mpp ** 2)
-
-#     # 5. 计算 Cellularity
-#     tissue_mask = get_tissue_mask_global(frame)
-#     tissue_area_px = np.sum(tissue_mask)
-#     nuclei_area_px = np.sum((masks > 0) & tissue_mask)
-#     cellularity_score = (nuclei_area_px / tissue_area_px) if tissue_area_px > 0 else 0
-
-#     # 6. 构建最终的 metrics 字典 (包含所有请求的特征)
-#     metrics = {
-#         "cell_count": int(len(features_df)),
-#         "area_px":   frame.shape[0] * frame.shape[1],
-#         "cellularity_percent": float(cellularity_score * 100),
-#         "area_px": frame.shape[0] * frame.shape[1],
-#         "orig_img":  cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
-#         "mpp": mpp
-#     }
-    
-#     # 将均值、标准差和中位数分别存入 metrics
-#     for col in existing_cols:
-#         metrics[f"{col}_mean"] = float(report_mean[col]) if not np.isnan(report_mean[col]) else 0.0
-#         metrics[f"{col}_std"] = float(report_std[col]) if not np.isnan(report_std[col]) else 0.0
-#         metrics[f"{col}_median"] = float(report_median[col]) if not np.isnan(report_median[col]) else 0.0
-#     # <<< [修改结束] <<<
-
-# # 7. 准备可视化和输出文本
-#     # if show_overlay:
-#     #     final_vis_img = visualize_overlay(frame, masks, alpha=_overlay_alpha)
-#     # else:
-#     #     final_vis_img = frame
-
-# # >>> [修改开始 3] 酷炫的 HTML 数据仪表盘显示 (适配白色背景) >>>
-#     display_category = configs.get('Feature Category', 'Nuclear Size')
-
-#     # 定义一个辅助函数来生成 HTML 表格行，适配白色背景主题
-#     def make_row(name, key_prefix, unit=""):
-#         mean_val = metrics.get(f"{key_prefix}_mean", 0)
-#         std_val = metrics.get(f"{key_prefix}_std", 0)
-#         med_val = metrics.get(f"{key_prefix}_median", 0)
-        
-#         # 单位使用灰色小号字体
-#         unit_str = f"&nbsp;<span style='color:#777777; font-size:9pt;'>{unit}</span>" if unit else ""
-        
-#         return f"""
-#         <tr bgcolor="#ffffff">
-#             <td style="padding: 6px;"><b style="color:#000000;">{name}</b></td>
-#             <td align="right" style="padding: 6px;">
-#                 <span style="color:#000000; font-size:11pt; font-weight:bold;">{mean_val:.2f}</span> 
-#                 <span style="color:#555555; font-size:9pt;">±{std_val:.2f}</span>{unit_str}
-#             </td>
-#             <td align="right" style="padding: 6px;">
-#                 <span style="color:#f39c12; font-size:11pt; font-weight:bold;">{med_val:.2f}</span>{unit_str}
-#             </td>
-#         </tr>
-#         """
-
-#     # 构建头部：总数和细胞密度卡片 (使用动态数据 metrics)
-#     html_text = f"""
-#     <div style="font-family: 'Segoe UI', Arial, sans-serif;">
-#         <div style="background-color: #ffffff; padding: 10px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #1abc9c;">
-#             <span style="color: #555555; font-size: 10pt;">Cell Count:</span> 
-#             <span style="color: #000000; font-size: 12pt; font-weight: bold; margin-right: 20px;">{metrics['cell_count']}</span>
-            
-#             <span style="color: #555555; font-size: 10pt;">Cellularity:</span> 
-#             <span style="color: #1abc9c; font-size: 12pt; font-weight: bold;">{metrics['cellularity_percent']:.2f}%</span>
-#         </div>
-        
-#         <table width="100%" cellpadding="0" cellspacing="1" bgcolor="#f2f2f2" style="margin-top: 5px;">
-#             <tr bgcolor="#ffffff">
-#                 <th align="left" style="padding: 8px; color: #3498db; font-size: 10pt;">{display_category}</th>
-#                 <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Mean ± Std</th>
-#                 <th align="right" style="padding: 8px; color: #3498db; font-size: 10pt;">Median</th>
-#             </tr>
-#     """
-
-#     # 根据下拉菜单动态插入表格数据行
-#     if display_category == "Nuclear Size":
-#         html_text += make_row("Area", "Size.Area", "μm²")
-#         html_text += make_row("Perimeter", "Size.Perimeter", "μm")
-#         html_text += make_row("Major Axis", "Size.MajorAxisLength", "μm")
-#         html_text += make_row("Minor Axis", "Size.MinorAxisLength", "μm")
-#         html_text += make_row("Eq. Diameter", "Shape.EquivalentDiameter", "μm")
-        
-#     elif display_category == "Nuclear Shape":
-#         html_text += make_row("Circularity", "Shape.Circularity")
-#         html_text += make_row("Eccentricity", "Shape.Eccentricity")
-#         html_text += make_row("Solidity", "Shape.Solidity")
-#         html_text += make_row("Extent", "Shape.Extent")
-#     elif display_category == "Intensity":
-#         html_text += make_row("Intensity (Mean)", "Nucleus.Intensity.Mean")
-#         html_text += make_row("Intensity (Std)", "Nucleus.Intensity.Std")
-#         html_text += make_row("Intensity (IQR)", "Nucleus.Intensity.IQR")
-#         html_text += make_row("Intensity (Entropy)", "Nucleus.Intensity.HistEntropy")
-#         html_text += make_row("Intensity (Energy)", "Nucleus.Intensity.HistEnergy")
-#     else:
-#         html_text += make_row(" Area", "Size.Area", "μm²")
-
-#     # 闭合 HTML 标签
-#     html_text += "</table></div>" 
-#     text = html_text 
-#     # <<< [修改结束 3] <<<
-
-#     return cv2.cvtColor(final_vis_img, cv2.COLOR_RGB2BGR).astype(np.uint8), text, metrics

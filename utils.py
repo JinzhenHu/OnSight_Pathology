@@ -87,17 +87,18 @@ def load_nulite_weights(ckpt_path, device):
     return model, mean, std, type_id_to_name, tissue_id_to_name, device
 
 class MidnightClassifier(nn.Module):
-    def __init__(self, model_name="kaiko-ai/midnight", num_classes=2, dropout=0.3):
+    def __init__(self, model_name="kaiko-ai/midnight", num_classes=3, dropout=0.3):
         super().__init__()
         self.backbone = AutoModel.from_pretrained(model_name)
         hidden_size = self.backbone.config.hidden_size  # 1536
 
         self.head = nn.Sequential(
-            nn.Linear(hidden_size * 2, num_classes),
-            # nn.GELU(),
-            # nn.Dropout(dropout),
-            # nn.Linear(512, num_classes)
-        )
+        #     nn.Linear(hidden_size * 2, 512),
+        #     nn.GELU(),
+        #     nn.Dropout(dropout),
+        #     nn.Linear(512, num_classes)
+        # )
+            nn.Linear(hidden_size * 2, num_classes))
 
     def forward(self, x):
         outputs = self.backbone(pixel_values=x)
@@ -107,6 +108,8 @@ class MidnightClassifier(nn.Module):
         feat = torch.cat([cls_token, patch_mean], dim=1)  # [B, 3072]
         logits = self.head(feat)
         return logits
+
+
     
 def load_model(model_info):
     res = {
@@ -285,14 +288,14 @@ def load_model(model_info):
         ##############################################################################
         if model_info['model'] == 'Midnight_Glioma':
             from huggingface_hub import hf_hub_download
-            model_path = r"D:\UofT\2025fall\OnSight\Revisions\Glioma_Subtype\best_model_mutant_binary_kaiko.pth"
-            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_model.pth")
+            model_path = r"D:\UofT\2025fall\OnSight\Revisions\Glioma_Subtype\best_model_mutant_binary_midnight.pth"
+            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="GBM_Oligos.pth")
 
             
             import timm
             import torch
             import torch.nn as nn
-            from process_region_VIT_midnight import process_region
+            from process_region_VIT_glioma import process_region
             # Create Model
             #model = timm.create_model("hf_hub:prov-gigapath/prov-gigapath", pretrained=True)
             # model = timm.create_model(
@@ -301,19 +304,19 @@ def load_model(model_info):
             # pretrained=True,
             # ).eval()
             num_classes = 2
-            #model = MidnightClassifier(num_classes=num_classes)
-            model = timm.create_model("hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False)
+            model = MidnightClassifier(num_classes=num_classes)
+           # model = timm.create_model("hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False)
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            num_features = model.num_features
+            # num_features = model.num_features
 
-            model.head = nn.Sequential(
-                nn.Linear(num_features, num_classes),
-                # nn.GELU(),
-                # nn.Dropout(0.3),
-                # nn.Linear(512, num_classes)
-            )
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            # model.head = nn.Sequential(
+            #     nn.Linear(num_features, num_classes),
+            #     # nn.GELU(),
+            #     # nn.Dropout(0.3),
+            #     # nn.Linear(512, num_classes)
+            # )
+            # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             #num_features = model.num_features
             
             # model.head = nn.Sequential(

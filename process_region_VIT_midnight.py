@@ -64,9 +64,9 @@ def process_region(region, **kwargs):
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             #v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            #transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-            v2.Normalize(mean=(0.707223, 0.578729, 0.703617), 
-        std=(0.211883, 0.230117, 0.177517))
+            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            #v2.Normalize(mean=(0.707223, 0.578729, 0.703617), 
+        #std=(0.211883, 0.230117, 0.177517))
         ]
     )
 
