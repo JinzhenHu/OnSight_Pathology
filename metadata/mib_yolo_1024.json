@@ -1,7 +1,7 @@
 {
   "repo": "diamandislabii/MIB_1024",
   "repo_src": "HuggingFace",
-  "info": "YOLO model used for segmentation",
+  "info": "YOLO model used for mib segmentation",
   "mpp": 0.504,
   "model": "YOLO",
   "tile_size": 1024,

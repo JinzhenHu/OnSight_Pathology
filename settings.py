@@ -8,7 +8,7 @@ from utils import resource_path
 
 LLM_CATALOG = {
     "Lingshu-7b": "metadata/lingshu.json",
-    "Huatuo-7b": "metadata/huatuo.json",
+    #"Huatuo-7b": "metadata/huatuo.json",
 }
 
 LLM_METADATA = {}
@@ -28,9 +28,8 @@ PRECISION_DISPLAY_MAP = {
 MODEL_CATELOG = [
     ("▶️ Classification Models", [
         {'name': "Tumor 4-Class (VIT)", 'info_file': 'metadata/tumor_compact_kaiko_vit.json'},
-        #{'name': "Glioma Subtype (VIT)", 'info_file': 'metadata/glioma_vit.json'},
-        #{'name': "Glioma Subtype (VIT_Kaiko)", 'info_file': 'metadata/glioma_mutant.json'},
-        {'name': "Glioma Subtype (VIT_midnight)", 'info_file': 'metadata/glioma_midnight.json'},
+        #{'name': "Glioma Subtype (VIT_midnight_tcga)", 'info_file': 'metadata/glioma_midnight_tcga.json'},
+        #{'name': "Glioma Subtype (VIT_midnight_local)", 'info_file': 'metadata/glioma_midnight_local.json'},
         #{'name': "Magnification (VIT)", 'info_file': 'metadata/mag_detector.json'},
         
     ]),
@@ -40,7 +39,7 @@ MODEL_CATELOG = [
         #{'name': "Cellularity (InstanSeg)", 'info_file': 'metadata/instanseg.json'},
         # {'name': "Cellularity (CPSAM)", 'info_file': 'metadata/CPSAM.json'},
         {'name': "Cellular Features (Cellpose-SAM)", 'info_file': 'metadata/CPSAM_profiler.json'},
-        #{'name': "CellVIT (NuLite-H)", 'info_file': 'metadata/nulight.json'},
+        {'name': "CellVIT (NuLite-H)", 'info_file': 'metadata/nulight.json'},
 
     ]),
     ("▶️ Object Detection Models", [

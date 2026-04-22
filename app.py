@@ -97,6 +97,7 @@ def run_llm_worker_if_requested() -> None:
 
 def configure_runtime_environment() -> None:
     """Set runtime environment flags."""
+    os.environ["QT_SCALE_FACTOR"] = "0.9"
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     os.environ["TQDM_DISABLE"] = "1"
 
@@ -2231,7 +2232,6 @@ class ImageClassificationApp(QMainWindow):
                 else:
                     self.cascade_widget.hide()
 
-            # 5. 绑定切换信号并执行初始化
             cmb_clustering.currentTextChanged.connect(lambda _: update_clustering_ui())
             if "Image Type" in self.additional_config_inputs:
                 self.additional_config_inputs["Image Type"].currentTextChanged.connect(lambda _: update_clustering_ui())
@@ -2241,7 +2241,7 @@ class ImageClassificationApp(QMainWindow):
         if "Refine Positives" in self.additional_config_inputs:
             cmb_refine = self.additional_config_inputs["Refine Positives"]
             
-            row_refine_preview = self.additional_config_rows.get("Show Refinement Preview")
+            row_refine_preview = self.additional_config_rows.get("Show Positives Only")
             row_refine_feats_multi = self.additional_config_rows.get("Refine Features (Multi-Select)")
             row_refine_feat_single = self.additional_config_rows.get("Refine Feature")
             row_refine_k = self.additional_config_rows.get("K Clusters")

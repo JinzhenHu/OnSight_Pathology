@@ -1,7 +1,7 @@
 {
   "repo": "",
   "repo_src": "HuggingFace",
-  "info": "Cellpose-SAM",
+  "info": "Cellpose-SAM for mib segmentation",
   "mpp": 0.504,
   "model": "Cellpose-SAM",
   "tile_size": 256,

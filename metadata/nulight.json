@@ -1,7 +1,7 @@
 {
   "repo": "NuLight",
   "repo_src": "HuggingFace",
-  "info": "NuLight (Nuclei Segmentation & Classification)",
+  "info": "NuLight (Nuclei Segmentation & Classification) for H&E images. This model was trained using CellViT",
   "mpp": 0.25,
   "model": "CellViT",
   "tile_size": 256,

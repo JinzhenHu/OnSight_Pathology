@@ -293,9 +293,9 @@ def process_region(region, **kwargs):
     index_label = "Refined Ki-67 Index" if is_actually_refined else "Ki-67 Index"
 
     text = (
-        f"<b style='color:#3498db;'>{index_label}:</b> {pos_percent:.2f}%<br>"
+        f"<b style='color:#9b59b6;'>{index_label}:</b> {pos_percent:.2f}%<br>"  
         f"<span style='color:#e74c3c;'>True Positives: {num_pos}</span><br>"
-        f"<span style='color:#2ecc71;'>Negatives: {num_total - num_pos}</span>"
+        f"<span style='color:#3498db;'>Negatives: {num_total - num_pos}</span>" 
     )
     
     text += warning_html

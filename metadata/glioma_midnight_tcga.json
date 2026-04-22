@@ -1,0 +1,16 @@
+{
+  "repo": "diamandislabii/Glioma_Subtype",
+  "repo_src": "HuggingFace",
+  "info": "This H&E Oligos/Glioblastoma classifier was developed using transfer learning on a Vision Transformer(Midnight) pretrained on WSIs",
+  "mpp": 0.504,
+  "model": "Midnight_Glioma_tcga",
+  "tile_size": 512,
+  "aggregate_type": "classification",
+  "additional_configs": {
+      "Show ViT Attention Map": false
+  },
+  "classes": [
+      "Oligos/Astros",
+       "Glioblastoma"
+  ]
+}

@@ -120,6 +120,7 @@ def load_model(model_info):
         if model_info['model'] == 'VITtumor_kaiko':
             from huggingface_hub import hf_hub_download
             model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_kaikuo_20000image.pth")
+            #model_path = r"D:\UofT\2025fall\OnSight\Revisions\4_Class_Tumor_VIT\best_model_tumor_4class.pth"
             import timm
             import torch
             import torch.nn as nn
@@ -184,13 +185,16 @@ def load_model(model_info):
             res['using_gpu'] = torch.cuda.is_available()
       
 
-       ##############################################################################
-        # VIT-Glioa-Midnight
-        ##############################################################################
-        if model_info['model'] == 'Midnight_Glioma':
+    #    ##############################################################################
+    #     # VIT-Glioma-Midnight-mixup-tcga
+    #     ##############################################################################
+        if model_info['model'] == 'Midnight_Glioma_tcga':
             from huggingface_hub import hf_hub_download
-            model_path = r"D:\UofT\2025fall\OnSight\Revisions\Glioma_Subtype\best_model_mutant_binary_midnight.pth"
+            model_path = r"D:\UofT\2025fall\OnSight\Revisions\Glioma_Subtype\tcga_mutant.pth"
+            #Linear Probing
             #model_path = hf_hub_download(repo_id=model_info['repo'], filename="GBM_Oligos.pth")
+            #Finetune
+            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_model_binary_midnight.pth")
 
             
             import timm
@@ -200,7 +204,16 @@ def load_model(model_info):
 
             num_classes = 2
             model = MidnightClassifier(num_classes=num_classes)
-           # model = timm.create_model("hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False)
+            # model = timm.create_model(
+            #     model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            #     pretrained=True,
+            #     ).eval()
+
+            # num_features = model.num_features
+
+            # model.head = nn.Sequential(
+            #     nn.Linear(num_features, num_classes))
+
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
             state_dict = torch.load(model_path, map_location=device)
@@ -208,8 +221,44 @@ def load_model(model_info):
             model.to(device)
             res['model'] = model
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()        
+            res['using_gpu'] = torch.cuda.is_available()         
+       ##############################################################################
+        # VIT-Glioma-Midnight
+        ##############################################################################
+        if model_info['model'] == 'Midnight_Glioma_local':
+            from huggingface_hub import hf_hub_download
+            model_path = r"D:\UofT\2025fall\OnSight\Revisions\4_Class_Tumor_VIT\local_idh.pth"
+            #Linear Probing
+            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="GBM_Oligos.pth")
+            #Finetune
+            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_model_binary_midnight.pth")
 
+            
+            import timm
+            import torch
+            import torch.nn as nn
+            from process_region_VIT_glioma import process_region
+
+            num_classes = 2
+            model = MidnightClassifier(num_classes=num_classes)
+            # model = timm.create_model(
+            #     model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            #     pretrained=True,
+            #     ).eval()
+
+            # num_features = model.num_features
+
+            # model.head = nn.Sequential(
+            #     nn.Linear(num_features, num_classes))
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            res['model'] = model
+            res['process_region_func'] = process_region
+            res['using_gpu'] = torch.cuda.is_available()     
         ##############################################################################
         # CellViT
         ##############################################################################
