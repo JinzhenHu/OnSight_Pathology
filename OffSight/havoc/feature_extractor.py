@@ -17,17 +17,11 @@ class FeatureExtractor:
         else:
             self.device = torch.device(device)
 
-        import os
-
-        local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        cache_dir = os.path.join(local_appdata, "OffSightPathology", "gigapath_cache")
-
         # --- Model ---
         # Executing the first time creates a local cache of the model
         self.model = timm.create_model(
             model_name='hf_hub:prov-gigapath/prov-gigapath',
             pretrained=True,
-            cache_dir=cache_dir
         ).to(self.device).eval()
 
         self.num_features = self.model.num_features

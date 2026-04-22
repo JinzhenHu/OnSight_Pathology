@@ -179,13 +179,6 @@ def validate_hf_token(token: str) -> tuple[bool, str]:
     except Exception:
         return False, "network"
 
-def get_havoc_model_download_folder():
-    local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    cache_dir = os.path.join(local_appdata, "OffSightPathology", "gigapath_cache")
-    os.makedirs(cache_dir, exist_ok=True)
-
-    return cache_dir
-
 def is_havoc_model_downloaded(token: str) -> bool:
     from huggingface_hub import snapshot_download
 
@@ -194,7 +187,7 @@ def is_havoc_model_downloaded(token: str) -> bool:
             repo_id=HF_REPO_ID,
             token=token,
             local_files_only=True,
-            cache_dir=get_havoc_model_download_folder(),
+            allow_patterns=["config.json", "pytorch_model.bin"], # same as timm
         )
         return True
     except Exception:
@@ -911,7 +904,7 @@ class HuggingFaceDownloadWorker(QThread):
                 repo_id=HF_REPO_ID,
                 token=self.token,
                 resume_download=True,
-                cache_dir=get_havoc_model_download_folder(),
+                allow_patterns=["config.json", "pytorch_model.bin"], # same as timm
             )
             self.status.emit("Download complete.")
             self.download_finished.emit()
