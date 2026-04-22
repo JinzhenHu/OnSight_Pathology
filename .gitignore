@@ -4,7 +4,6 @@ runs/
 logs/
 .ipynb_checkpoints/
 build/
-NuLite/
 lemon/
 MEDIAR/
 celltest/
