@@ -1,0 +1,35 @@
+Metadata-Version: 2.1
+Name: cellprofiler-core
+Version: 4.2.8
+Home-page: https://github.com/CellProfiler/core
+Author: Allen Goodman
+Author-email: allen.goodman@icloud.com
+License: BSD
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Requires-Python: >=3.8
+License-File: LICENSE
+Requires-Dist: boto3 >=1.12.28
+Requires-Dist: centrosome <1.3,>=1.2.3
+Requires-Dist: docutils ==0.15.2
+Requires-Dist: h5py ~=3.6.0
+Requires-Dist: matplotlib >=3.1.3
+Requires-Dist: numpy >=1.18.2
+Requires-Dist: prokaryote ==2.4.4
+Requires-Dist: psutil >=5.7.0
+Requires-Dist: python-bioformats <5,>=4.0.7
+Requires-Dist: python-javabridge <5,>=4.0.3
+Requires-Dist: pyzmq ~=22.3
+Requires-Dist: scikit-image ==0.18.3
+Requires-Dist: scipy >=1.4.1
+Provides-Extra: dev
+Requires-Dist: sphinx ==3.1.2 ; extra == 'dev'
+Requires-Dist: twine ==3.1.1 ; extra == 'dev'
+Provides-Extra: test
+Requires-Dist: pytest ~=7.4.1 ; extra == 'test'
+Provides-Extra: wx
+Requires-Dist: wxPython ==4.1.0 ; extra == 'wx'
+

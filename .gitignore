@@ -1,0 +1,27 @@
+# linux gitignore
+.venv/
+runs/
+logs/
+.ipynb_checkpoints/
+build/
+lemon/
+MEDIAR/
+celltest/
+dist/
+
+
+data/
+datasets/
+
+
+*.pth
+*.exe
+*.mp4
+*.zip
+*.pkl
+*.h5
+*.png
+*.h5ad
+*.csv
+checkpoint/
+github/

@@ -1,0 +1,12 @@
+# 1. i ran the json2yolo script -> gives txt label files for each image
+# 2. organize into train/test sets under a dataset folder (step3.py)
+
+path: C:\Users\Shadow\Downloads\out_train.tar\out_train # NOTE: dataset root dir (from step3.py) <---
+train: images\train # train images (relative to 'path') # note: dont need to change
+val: images\test # val images (relative to 'path') # note: dont need to change
+test: # test images (optional)
+
+
+names:
+    0: positive #  <---
+    1: negative #  <---

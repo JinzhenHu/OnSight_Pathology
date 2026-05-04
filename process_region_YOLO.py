@@ -1,0 +1,148 @@
+import mss
+import numpy as np
+import cv2
+
+from utils import extract_tiles
+def fix_region(region, tile_size):
+    reg = region.copy()
+    reg['width']  = max(reg['width'],  tile_size)
+    reg['height'] = max(reg['height'], tile_size)
+    return reg
+
+def um2_to_px(area_um2, mpp):
+    return area_um2 / (mpp ** 2)
+
+def process_region(region, **kwargs):
+
+    metadata = kwargs['metadata']
+    model = kwargs['model']
+
+    ###
+
+    tile_size = metadata['tile_size']
+
+    with mss.mss() as sct:
+        region = fix_region(region, tile_size)
+        screenshot = sct.grab(region)
+
+    frame_orig = np.array(screenshot, dtype=np.uint8)
+    frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2BGR)
+    frame = frame[:max((frame.shape[0]//tile_size)*tile_size, tile_size), :max((frame.shape[1]//tile_size)*tile_size, tile_size), :]
+
+    slices = extract_tiles(frame, tile_size)
+
+    # Detect and render
+
+    try:
+        _conf = float(kwargs['additional_configs'].get('specificity', 0.6))
+    except:
+        _conf = 0.6
+
+    results = model(slices, conf=_conf)
+
+    from ultralytics.utils.plotting import Annotator
+    from ultralytics.data.augment import LetterBox
+    import torch
+
+    try:
+        _mask_alpha = 1-float(kwargs['additional_configs'].get('mask_transparency', 0.5))
+        _min_area = float(kwargs['additional_configs'].get('min_area_um2', 1))
+    except:
+        _mask_alpha = 0.5
+        _min_area = 1
+
+    # NOTE: Default µm² area will be using 20x
+    _min_area = um2_to_px(_min_area, 0.504)
+
+    tile_size_y = tile_size_x = tile_size
+    if frame.shape[0] < tile_size:
+        tile_size_y = frame.shape[0]
+    if frame.shape[1] < tile_size:
+        tile_size_x = frame.shape[1]
+
+    num_pos = 0
+    num_pos_neg = 0
+    seg_mask = np.zeros(frame.shape)
+    k = 0
+    for i in range(frame.shape[0] // tile_size_y):
+        for j in range(frame.shape[1] // tile_size_x):
+            # need to override so that i can choose mask colors...
+            if results[k].masks is not None and results[k].masks.shape[0] != 0:
+                annotator = Annotator(
+                    np.ascontiguousarray(results[k].orig_img),
+                    line_width=None,
+                    font_size=None,
+                    font="Arial.ttf",
+                    pil=False,
+                    example=results[0].names,
+                )
+                img = LetterBox(results[k].masks.shape[1:])(image=annotator.result())
+                im_gpu = (
+                        torch.as_tensor(img, dtype=torch.float16, device=results[k].masks.data.device)
+                        .permute(2, 0, 1)
+                        .flip(0)
+                        .contiguous()
+                        / 255
+                )
+                colors = {
+                    0: (0, 0, 255),  # positive. red
+                    1: (255, 0, 0),  # negative. blue
+                    2: (0, 255, 0),  # misc. green
+                }
+
+                masks = results[k].masks.data  # (N, H, W)
+
+
+                mask_areas = masks.sum(dim=(1, 2))  # pixels per mask
+                keep = mask_areas >= _min_area
+
+                if keep.any():
+                    filtered_masks = masks[keep]
+                    filtered_classes = results[k].boxes.cls[keep].to(torch.int64).cpu().numpy()
+
+                    annotator.masks(
+                        filtered_masks,
+                        colors=[colors[int(x)] for x in filtered_classes],
+                        im_gpu=im_gpu,
+                        alpha=_mask_alpha,
+                    )
+
+                    num_pos += (filtered_classes == 0).sum()
+                    num_pos_neg += len(filtered_classes == 0)
+
+                # annotator.masks(results[k].masks.data,
+                #                 colors=[colors[x] for x in results[k].boxes.cls.cpu().numpy()], im_gpu=im_gpu,
+                #                 alpha=_mask_alpha)
+
+                seg_mask[
+                (i * tile_size):((i * tile_size) + tile_size),
+                (j * tile_size):((j * tile_size) + tile_size),
+                :
+                # ] = results[k].plot(labels=False, boxes=False)
+                ] = annotator.result()
+
+            else:
+                # no masks found
+                seg_mask[
+                (i * tile_size):((i * tile_size) + tile_size),
+                (j * tile_size):((j * tile_size) + tile_size),
+                :
+                ] = frame[
+                    (i * tile_size):((i * tile_size) + tile_size),
+                    (j * tile_size):((j * tile_size) + tile_size),
+                    :
+                    ]
+
+            k += 1
+
+    text = '(+) {:.2f} %\n'.format(num_pos / num_pos_neg * 100 if num_pos_neg > 0 else 0)
+    text += '(+) cells: {}\n'.format(num_pos)
+    text += '(-) cells: {}\n'.format(num_pos_neg - num_pos)
+    metrics = {
+        "mib_pos":   int(num_pos),
+        "mib_total": int(num_pos_neg),
+        "area_px":   frame.shape[0] * frame.shape[1],
+        "mpp":       metadata.get("mpp", 0.25),
+        "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB)
+    }
+    return seg_mask.astype(np.uint8), text, metrics
