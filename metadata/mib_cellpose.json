@@ -1,0 +1,34 @@
+{
+  "repo": "",
+  "repo_src": "HuggingFace",
+  "info": "Cellpose-SAM",
+  "mpp": 0.504,
+  "model": "Cellpose-SAM",
+  "tile_size": 256,
+  "aggregate_type": "mib",
+  "supported_mags": ["20x", "40x"],
+  "classes": [
+    "Positive",
+    "Negative"
+  ],
+"additional_configs": {
+    "mask_transparency": 0.5,
+    "positivity_thresh": 0,
+    "Refine Cell Subpopulations": ["None", "K-Means", "Threshold"],
+    "Show Refinement Preview": true,
+    "Refine Features (Multi-Select)": [
+      "Size.Area", "Size.Perimeter", "Size.MajorAxisLength", "Size.MinorAxisLength", "Shape.EquivalentDiameter", 
+      "Shape.Circularity", "Shape.Eccentricity", "Shape.Solidity", "Shape.Extent", 
+      "Nucleus.Intensity.Mean", "Nucleus.Intensity.Std", "Nucleus.Intensity.IQR", "Nucleus.Intensity.HistEntropy", "Nucleus.Intensity.HistEnergy"
+    ],
+    "Refine Feature": [
+      "Size.Area", "Size.Perimeter", "Size.MajorAxisLength", "Size.MinorAxisLength", "Shape.EquivalentDiameter", 
+      "Shape.Circularity", "Shape.Eccentricity", "Shape.Solidity", "Shape.Extent", 
+      "Nucleus.Intensity.Mean", "Nucleus.Intensity.Std", "Nucleus.Intensity.IQR", "Nucleus.Intensity.HistEntropy", "Nucleus.Intensity.HistEnergy"
+    ],
+    "Threshold Cutoff": 0.0,
+    "K Clusters": 2,
+    "Select target groups (Multi-Select)": ["Group0", "Group1", "Group2", "Group3", "Group4"]
+  },
+  "notes:": ""
+}

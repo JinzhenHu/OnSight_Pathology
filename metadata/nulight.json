@@ -1,0 +1,17 @@
+{
+  "repo": "NuLight",
+  "repo_src": "HuggingFace",
+  "info": "NuLight (Nuclei Segmentation & Classification)",
+  "mpp": 0.25,
+  "model": "CellViT",
+  "tile_size": 256,
+  "aggregate_type": "cell_profiler",
+  "classes": [
+    "Neoplastic", "Inflammatory", "Connective", "Dead", "Epithelial"
+  ],
+  "additional_configs": {
+    "magnification": 40,
+    "mask_transparency": 0.5,
+    "mpp": 0.25
+  }
+}

@@ -1,0 +1,11 @@
+1.conda isntall skimage(conda install -c conda-forge "libblas=*=*accelerate")
+2.处理好skimage否则deconvolution会爆炸
+2.K-means algorithm set to algorithm='lloyd'
+3.强制禁用 SSL 证书验证（解决 Mac 上的下载失败问题）import ssl
+4.线程爆炸
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+5.改cuda成mps
