@@ -9,6 +9,7 @@ MEDIAR/
 celltest/
 dist/
 output-gpu/
+NuLite/
 
 # 排除数据集
 data/
