@@ -7,6 +7,8 @@ build/
 lemon/
 MEDIAR/
 celltest/
+dist/
+output-gpu/
 
 # 排除数据集
 data/
@@ -24,3 +26,7 @@ datasets/
 *.csv
 checkpoint/
 github/
+*.bin
+
+###git reset --soft HEAD~2
+###git rm --cached output-gpu/*.bin

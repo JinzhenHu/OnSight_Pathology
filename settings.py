@@ -39,7 +39,7 @@ MODEL_CATELOG = [
         #{'name': "Cellularity (InstanSeg)", 'info_file': 'metadata/instanseg.json'},
         # {'name': "Cellularity (CPSAM)", 'info_file': 'metadata/CPSAM.json'},
         {'name': "Cellular Features (Cellpose-SAM)", 'info_file': 'metadata/CPSAM_profiler.json'},
-        {'name': "CellVIT (NuLite-H)", 'info_file': 'metadata/nulight.json'},
+        {'name': "PanNuke (CellViT-SAM-H)", 'info_file': 'metadata/cell_vit.json'},
 
     ]),
     ("▶️ Object Detection Models", [

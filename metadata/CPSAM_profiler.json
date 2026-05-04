@@ -14,7 +14,7 @@
     "mask_transparency": 0.1,
     "mpp": 0.25,
     "Feature Category": ["Nuclear Size", "Nuclear Shape", "Intensity"],
-    "Clustering Method": ["None", "Customized Features", "Handcrafted Features", "Single Cell Clustering", "Hierarchical Gating"],
+    "Clustering Method": ["None", "Customized Features", "Handcrafted Features", "Hierarchical Gating"],
     "Image Type": ["H&E Cell Analysis", "Muscle Fiber Typing"],
     "H&E Features (Multi-Select)": [
         "Size.Area", "Size.Perimeter", "Size.MajorAxisLength", "Size.MinorAxisLength", "Shape.EquivalentDiameter",

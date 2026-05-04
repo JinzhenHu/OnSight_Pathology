@@ -8,11 +8,11 @@ import cv2
 import numpy as np
 import histomicstk as htk
 from transformers import AutoModel
-from NuLite.models.nulite import NuLite
 from PIL import Image
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import normalize
-from NuLite.models.nulite import NuLite
+from CellViT.models.segmentation.cell_segmentation.cellvit import CellViTSAM
+from CellViT.models.segmentation.cell_segmentation.cellvit_shared import CellViTSAMShared
 
 # Always use this for accessing any local path
 def resource_path(relative_path):
@@ -48,41 +48,6 @@ def extract_tiles(frame, tile_size):
 
     return slices
 
-def load_nulite_weights(ckpt_path, device):
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-
-    if "config" in ckpt:
-        run_conf = ckpt["config"]
-
-        backbone = run_conf["model.backbone"]
-        num_nuclei_classes = run_conf["data.num_nuclei_classes"]
-        num_tissue_classes = run_conf["data.num_tissue_classes"]
-        mean = run_conf.get("transformations.normalize.mean", [0.5, 0.5, 0.5])
-        std = run_conf.get("transformations.normalize.std", [0.5, 0.5, 0.5])
-        nuclei_types = run_conf.get(
-            "dataset_config.nuclei_types",
-            {
-                "Background": 0, "Neoplastic": 1, "Inflammatory": 2,
-                "Connective": 3, "Dead": 4, "Epithelial": 5,
-            },
-        )
-        tissue_types = run_conf.get("dataset_config.tissue_types", None)
-
-    
-    model = NuLite(
-        num_nuclei_classes=num_nuclei_classes,
-        num_tissue_classes=num_tissue_classes,
-        vit_structure=backbone,
-    )
-
-    model.load_state_dict(ckpt["model_state_dict"], strict=True)
-    model.eval()
-    model.to(device)
-
-    type_id_to_name = {v: k for k, v in nuclei_types.items()}
-    tissue_id_to_name = {v: k for k, v in tissue_types.items()} if tissue_types else None
-
-    return model, mean, std, type_id_to_name, tissue_id_to_name, device
 
 class MidnightClassifier(nn.Module):
     def __init__(self, model_name="kaiko-ai/midnight", num_classes=3, dropout=0.3):
@@ -183,102 +148,116 @@ def load_model(model_info):
             res['model'] = model
             res['process_region_func'] = process_region
             res['using_gpu'] = torch.cuda.is_available()
-      
+       
 
-    #    ##############################################################################
-    #     # VIT-Glioma-Midnight-mixup-tcga
-    #     ##############################################################################
-        if model_info['model'] == 'Midnight_Glioma_tcga':
-            from huggingface_hub import hf_hub_download
-            model_path = r"D:\UofT\2025fall\OnSight\Revisions\Glioma_Subtype\tcga_mutant.pth"
-            #Linear Probing
-            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="GBM_Oligos.pth")
-            #Finetune
-            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_model_binary_midnight.pth")
-
-            
-            import timm
-            import torch
-            import torch.nn as nn
-            from process_region_VIT_glioma import process_region
-
-            num_classes = 2
-            model = MidnightClassifier(num_classes=num_classes)
-            # model = timm.create_model(
-            #     model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
-            #     pretrained=True,
-            #     ).eval()
-
-            # num_features = model.num_features
-
-            # model.head = nn.Sequential(
-            #     nn.Linear(num_features, num_classes))
-
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model.to(device)
-            res['model'] = model
-            res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()         
-       ##############################################################################
-        # VIT-Glioma-Midnight
         ##############################################################################
-        if model_info['model'] == 'Midnight_Glioma_local':
-            from huggingface_hub import hf_hub_download
-            model_path = r"D:\UofT\2025fall\OnSight\Revisions\4_Class_Tumor_VIT\local_idh.pth"
-            #Linear Probing
-            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="GBM_Oligos.pth")
-            #Finetune
-            #model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_model_binary_midnight.pth")
-
-            
-            import timm
-            import torch
-            import torch.nn as nn
-            from process_region_VIT_glioma import process_region
-
-            num_classes = 2
-            model = MidnightClassifier(num_classes=num_classes)
-            # model = timm.create_model(
-            #     model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
-            #     pretrained=True,
-            #     ).eval()
-
-            # num_features = model.num_features
-
-            # model.head = nn.Sequential(
-            #     nn.Linear(num_features, num_classes))
-
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model.to(device)
-            res['model'] = model
-            res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()     
-        ##############################################################################
-        # CellViT
+        # CellViT SAM-H
         ##############################################################################
         if model_info['model'] == 'CellViT':
             import torch
-            from NuLite.models.nulite import NuLite
-            from huggingface_hub import hf_hub_download
             from process_region_cellvit import process_region
+            from huggingface_hub import hf_hub_download
+
+            def _unflatten_dict(flat_dict, sep="."):
+                result = {}
+                for key, value in flat_dict.items():
+                    parts = key.split(sep)
+                    d = result
+                    for p in parts[:-1]:
+                        if p not in d:
+                            d[p] = {}
+                        d = d[p]
+                    d[parts[-1]] = value
+                return result
+
+            def _clean_state_dict(state_dict):
+                cleaned = {}
+                for k, v in state_dict.items():
+                    nk = k
+                    if nk.startswith("module."):
+                        nk = nk[len("module."):]
+                    if nk.startswith("model."):
+                        nk = nk[len("model."):]
+                    cleaned[nk] = v
+                return cleaned
+
+            def load_cellvit_sam_weights(ckpt_path, device):
+                ckpt = torch.load(ckpt_path, map_location="cpu")
+
+                run_conf_flat = ckpt["config"]
+                run_conf = _unflatten_dict(run_conf_flat, ".")
+                arch = ckpt["arch"]
+
+                #print("CellViT checkpoint arch:", arch)
+                #print("CellViT backbone:", run_conf["model"].get("backbone", None))
+
+
+                model = CellViTSAM(
+                    model_path=None,
+                    num_nuclei_classes=run_conf["data"]["num_nuclei_classes"],
+                    num_tissue_classes=run_conf["data"]["num_tissue_classes"],
+                    vit_structure=run_conf["model"]["backbone"],
+                    regression_loss=run_conf["model"].get("regression_loss", False),
+                )
+
+                state_dict = ckpt.get("model_state_dict", ckpt.get("state_dict", None))
+                msg = model.load_state_dict(_clean_state_dict(state_dict), strict=False)
+                #print("CellViT SAM load_state_dict:", msg)
+
+                model.eval()
+                model.to(device)
+
+                mean = run_conf_flat.get("transformations.normalize.mean", [0.5, 0.5, 0.5])
+                std = run_conf_flat.get("transformations.normalize.std", [0.5, 0.5, 0.5])
+
+                nuclei_types = {}
+                tissue_types = {}
+
+                for k, v in run_conf_flat.items():
+                    if k.startswith("dataset_config.nuclei_types."):
+                        name = k.replace("dataset_config.nuclei_types.", "")
+                        nuclei_types[name] = int(v)
+
+                    if k.startswith("dataset_config.tissue_types."):
+                        name = k.replace("dataset_config.tissue_types.", "")
+                        tissue_types[name] = int(v)
+
+
+                nuclei_types = {
+                    "Background": 0,
+                    "Neoplastic": 1,
+                    "Inflammatory": 2,
+                    "Connective": 3,
+                    "Dead": 4,
+                    "Epithelial": 5,
+                }
+
+                type_id_to_name = {v: k for k, v in nuclei_types.items()}
+                tissue_id_to_name = {v: k for k, v in tissue_types.items()} if tissue_types else None
+
+                return model, mean, std, type_id_to_name, tissue_id_to_name, device
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model_path = r"D:\Downloads\NuLite-H-Weights.pth"
-            model_file, mean, std, type_id_to_name, tissue_id_to_name, device = load_nulite_weights(model_path, device)
-            model = [model_file, mean, std, type_id_to_name, tissue_id_to_name, device]
 
+            model_path = hf_hub_download(repo_id=model_info['repo'], filename="CellViT-SAM-H-x40.pth")
 
+            model_file, mean, std, type_id_to_name, tissue_id_to_name, device = load_cellvit_sam_weights(
+                model_path,
+                device,
+            )
+
+            model = [
+                model_file,
+                mean,
+                std,
+                type_id_to_name,
+                tissue_id_to_name,
+                device,
+            ]
 
             res['model'] = model
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()     
-
+            res['using_gpu'] = torch.cuda.is_available()
 
         ##############################################################################
         # Retinanet
@@ -359,7 +338,6 @@ def load_model(model_info):
         from process_region_cpsam_cellfeatures import process_region
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        # InstanSeg 自动管理下载，不需要 HuggingFace Hub Download
         model = models.CellposeModel(gpu=True)
         
         res['model'] = model

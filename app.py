@@ -2238,8 +2238,8 @@ class ImageClassificationApp(QMainWindow):
             
             update_clustering_ui()
 
-        if "Refine Positives" in self.additional_config_inputs:
-            cmb_refine = self.additional_config_inputs["Refine Positives"]
+        if "Refine Cell Subpopulations" in self.additional_config_inputs:
+            cmb_refine = self.additional_config_inputs["Refine Cell Subpopulations"]
             
             row_refine_preview = self.additional_config_rows.get("Show Positives Only")
             row_refine_feats_multi = self.additional_config_rows.get("Refine Features (Multi-Select)")

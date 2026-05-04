@@ -14,7 +14,7 @@
 "additional_configs": {
     "mask_transparency": 0.5,
     "positivity_thresh": 0,
-    "Refine Positives": ["None", "K-Means", "Threshold"],
+    "Refine Cell Subpopulations": ["None", "K-Means", "Threshold"],
     "Show Refinement Preview": true,
     "Refine Features (Multi-Select)": [
       "Size.Area", "Size.Perimeter", "Size.MajorAxisLength", "Size.MinorAxisLength", "Shape.EquivalentDiameter", 

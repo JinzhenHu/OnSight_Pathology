@@ -23,26 +23,21 @@ def fix_region(region, tile_size):
     return reg
 
 
-def visualize_ki67_refined_overlay(img, masks, labels, base_pos_arr, final_pos_arr, alpha=0.4):
-    """
-    - negtive (base=False) -> blue
-    - positive (base=True, final=True) -> red
-    - removed false positive (base=True, final=False) 
-    """
+def visualize_ki67_refined_overlay(img, masks, labels, is_kept_arr, is_pos_arr, alpha=0.4):
+
     overlay = img.copy()
     max_label = masks.max()
     
     color_lut = np.zeros((max_label + 1, 3), dtype=np.uint8)
     paint_mask = np.zeros(max_label + 1, dtype=bool)
     
-    for lab, is_base_pos, is_final_pos in zip(labels, base_pos_arr, final_pos_arr):
-        if not is_base_pos:
-            color_lut[lab] = [255, 0, 0]  # blue
+    for lab, is_kept, is_pos in zip(labels, is_kept_arr, is_pos_arr):
+        if is_kept:
+            if is_pos:
+                color_lut[lab] = [0, 0, 255]  
+            else:
+                color_lut[lab] = [255, 0, 0]  
             paint_mask[lab] = True
-        elif is_base_pos and is_final_pos:
-            color_lut[lab] = [0, 0, 255]  # red
-            paint_mask[lab] = True
-        # base positive but not final positive,  remain original color
             
     pixel_colors = color_lut[masks]
     pixel_paint = paint_mask[masks]
@@ -161,19 +156,18 @@ def process_region(region, **kwargs):
     _min_area_px = um2_to_px(_safe_float(configs.get('min_area_um2', 1)), mpp)
 
 
+   
     base_labels, base_ki67_pos = classify_ki67_labb_approach(
         frame_rgb, masks, min_area=_min_area_px, threshold=_positivity_thresh
     )
 
     base_pos_dict = dict(zip(base_labels, base_ki67_pos))
-    features_df['base_positive'] = features_df['Label'].map(base_pos_dict).fillna(False).astype(bool)
-    
-    final_pos_mask = features_df['base_positive'].copy()
-
+    features_df['is_positive'] = features_df['Label'].map(base_pos_dict).fillna(False).astype(bool)
+    features_df['is_kept'] = True 
     # ====================================================================
-    # Refinement step: K-Means clustering or simple thresholding based on user selection
-    # ====================================================================
-    refine_method = configs.get("Refine Positives", "None")
+    # Refine ALL Cells
+    # ===================================================================
+    refine_method = configs.get("Refine Cell Subpopulations", "None") 
     show_preview = configs.get("Show Refinement Preview", True)
     warning_html = "" 
     cluster_table_html = "" 
@@ -181,8 +175,8 @@ def process_region(region, **kwargs):
     
     preview_drawn = False 
 
-    if refine_method == "K-Means" and features_df['base_positive'].sum() > 0:
-        pos_idx = features_df.index[features_df['base_positive']]
+    if refine_method == "K-Means" and len(features_df) > 0:
+        all_idx = features_df.index 
         selected_feats = configs.get("Refine Features (Multi-Select)", [])
         keep_grps = configs.get("Select target groups (Multi-Select)", [])
         
@@ -193,16 +187,17 @@ def process_region(region, **kwargs):
             valid_feats = [f for f in selected_feats if f in features_df.columns]
             keep_indices = [int(g.replace("Group", "")) for g in keep_grps] if keep_grps else []
             
-            if len(valid_feats) > 0 and len(pos_idx) >= k:
-
+            if len(valid_feats) > 0 and len(all_idx) >= k:
+                from sklearn.cluster import KMeans
+                from sklearn.preprocessing import StandardScaler
                 
-                X = features_df.loc[pos_idx, valid_feats].fillna(0).values
+                X = features_df.loc[all_idx, valid_feats].fillna(0).values
                 X_scaled = StandardScaler().fit_transform(X)
                 kmeans = KMeans(n_clusters=k, random_state=42)
                 sub_labels = kmeans.fit_predict(X_scaled)
                 
                 if 'Size.Area' in features_df.columns:
-                    centers = [features_df.loc[pos_idx[sub_labels == i], 'Size.Area'].mean() if (sub_labels == i).any() else 0 for i in range(k)]
+                    centers = [features_df.loc[all_idx[sub_labels == i], 'Size.Area'].mean() if (sub_labels == i).any() else 0 for i in range(k)]
                     mapping = {old: new for new, old in enumerate(np.argsort(centers))}
                     sub_labels = np.array([mapping[l] for l in sub_labels])
 
@@ -223,7 +218,7 @@ def process_region(region, **kwargs):
                 filtered_details = []
                 for i in range(k):
                     g_mask = (sub_labels == i)
-                    g_df = features_df.loc[pos_idx[g_mask]]
+                    g_df = features_df.loc[all_idx[g_mask]] # 🚀
                     n = len(g_df)
                     m_area = g_df['Size.Area'].mean() * (mpp**2) if n>0 else 0
                     m_int = g_df['Nucleus.Intensity.Mean'].mean() if n>0 else 0
@@ -240,17 +235,17 @@ def process_region(region, **kwargs):
                 cluster_table_html += "</table></div>"
                 
                 if not keep_grps:
-                    warning_html = "<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>⚠️ <b>Warning:</b> No groups selected. Please select groups to apply refinement.</div>"
+                    warning_html = "<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>⚠️ <b>Warning:</b> No groups selected. Please select subpopulations to analyze.</div>"
                 elif filtered_details:
-                    warning_html = f"<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>* Filtered out: {', '.join(filtered_details)}</div>"
+                    warning_html = f"<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>* Excluded: {', '.join(filtered_details)}</div>"
                 else:
-                    warning_html = f"<div style='color:#2ecc71; font-size:9pt; margin-top:8px;'>* All positive cells retained</div>"
+                    warning_html = f"<div style='color:#2ecc71; font-size:9pt; margin-top:8px;'>* All cells retained for analysis</div>"
 
                 if show_preview:
                     overlay = final_vis_bgr.copy()
                     lut = np.zeros((masks.max()+1, 3), dtype=np.uint8)
                     p_mask = np.zeros(masks.max()+1, dtype=bool)
-                    for lab, cid in zip(features_df.loc[pos_idx, 'Label'].values, sub_labels):
+                    for lab, cid in zip(features_df.loc[all_idx, 'Label'].values, sub_labels):
                         lut[lab] = c_colors_bgr[cid]; p_mask[lab] = True
                     overlay[p_mask[masks]] = lut[masks][p_mask[masks]]
                     final_vis_bgr = cv2.addWeighted(final_vis_bgr, 1-_mask_alpha, overlay, _mask_alpha, 0)
@@ -259,43 +254,44 @@ def process_region(region, **kwargs):
                 
                 if keep_grps:
                     keep_mask = np.isin(sub_labels, keep_indices)
-                    final_pos_mask.loc[pos_idx[~keep_mask]] = False
+                    features_df.loc[all_idx, 'is_kept'] = keep_mask
 
-    elif refine_method == "Threshold" and features_df['base_positive'].sum() > 0:
-        pos_idx = features_df.index[features_df['base_positive']]
+    elif refine_method == "Threshold" and len(features_df) > 0:
+        all_idx = features_df.index
         feat = configs.get("Refine Feature", "Size.Area")
         cutoff = _safe_float(configs.get("Threshold Cutoff", 0.0))
         if feat in features_df.columns:
-            vals = features_df.loc[pos_idx, feat].values.copy()
+            vals = features_df.loc[all_idx, feat].values.copy()
             if 'Area' in feat or 'Size' in feat: vals *= (mpp**2)
             keep = (vals >= cutoff)
-            final_pos_mask.loc[pos_idx[~keep]] = False
+            features_df.loc[all_idx, 'is_kept'] = keep # 🚀
             
             n_filtered = (~keep).sum()
             if n_filtered > 0:
                 short_feat = feat.split('.')[-1]
-                cluster_table_html = f"<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>* Filtered out: {n_filtered} cells ({short_feat} < {cutoff})</div>"
+                cluster_table_html = f"<div style='color:#f39c12; font-size:9pt; margin-top:8px;'>* Excluded: {n_filtered} cells ({short_feat} < {cutoff})</div>"
 
     # ====================================================================
-    # final visualization and metrics calculation
+    # 6. final visualization and Ki-67 index calculation (Only on the refined subset!)
     # ====================================================================
     if not preview_drawn:
         final_vis_bgr = visualize_ki67_refined_overlay(
             final_vis_bgr, masks, valid_labels,
-            features_df['base_positive'].values, final_pos_mask.values, alpha=_mask_alpha
+            features_df['is_kept'].values, features_df['is_positive'].values, alpha=_mask_alpha
         )
 
-    num_pos = int(final_pos_mask.sum())
-    num_total = len(valid_labels)
+    kept_df = features_df[features_df['is_kept']]
+    num_pos = int(kept_df['is_positive'].sum())
+    num_total = len(kept_df)
     pos_percent = (num_pos / num_total * 100) if num_total > 0 else 0
     
     is_actually_refined = (refine_method != "None" and "⚠️" not in warning_html)
-    index_label = "Refined Ki-67 Index" if is_actually_refined else "Ki-67 Index"
+    index_label = "Gated Ki-67 Index" if is_actually_refined else "Ki-67 Index"
 
     text = (
         f"<b style='color:#9b59b6;'>{index_label}:</b> {pos_percent:.2f}%<br>"  
-        f"<span style='color:#e74c3c;'>True Positives: {num_pos}</span><br>"
-        f"<span style='color:#3498db;'>Negatives: {num_total - num_pos}</span>" 
+        f"<span style='color:#e74c3c;'>Target Positives: {num_pos}</span><br>"
+        f"<span style='color:#3498db;'>Target Negatives: {num_total - num_pos}</span>" 
     )
     
     text += warning_html
