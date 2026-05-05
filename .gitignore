@@ -11,7 +11,7 @@ dist/
 output-gpu/
 NuLite/
 app_one_dir.spec
-
+.vscode/
 
 __pycache__/
 data/
