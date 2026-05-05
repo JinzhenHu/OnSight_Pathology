@@ -1,4 +1,4 @@
-#排除环境和日志
+# .gitignore file
 .venv/
 runs/
 logs/
@@ -10,12 +10,14 @@ celltest/
 dist/
 output-gpu/
 NuLite/
+app_one_dir.spec
 
-# 排除数据集
+
+__pycache__/
 data/
 datasets/
 
-# 排除训练好的模型权重
+
 *.pth
 *.exe
 *.mp4
