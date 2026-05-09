@@ -3,8 +3,29 @@
 #
 # Run:
 #   App main.py
-
+import os
+import sys
 import logging
+# ONLY FOR CPU EXE
+if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
+
+# Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
+# Crash logging to file unaffected.
+for h in logging.root.handlers[:]:
+    if isinstance(h, logging.StreamHandler):
+        logging.root.removeHandler(h)
+
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
+
+import crash_logging
 import os
 import sys
 
@@ -97,7 +118,7 @@ def run_llm_worker_if_requested() -> None:
 
 def configure_runtime_environment() -> None:
     """Set runtime environment flags."""
-    os.environ["QT_SCALE_FACTOR"] = "0.9"
+    os.environ["QT_SCALE_FACTOR"] = "1"
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     os.environ["TQDM_DISABLE"] = "1"
 

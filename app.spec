@@ -40,6 +40,7 @@ a = Analysis(
 
     datas=
         [("metadata/*.json", "metadata")]
+        + [("local_models/*", "local_models")]
         + [
             ("retinanet/file/config.yaml", "retinanet/file"),
             ("retinanet/file/statistics_sdata.pickle", "retinanet/file"),

@@ -4,10 +4,10 @@ import numpy as np
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QColor
-
+import os
 from utils import find_clusters
 
-
+from utils import resource_path
 from torchvision import transforms
 import torch
 import timm
@@ -25,9 +25,27 @@ class OverlayWorker(QThread):
         # 1. Initialize Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         #print(f"Initializing OverlayWorker on: {self.device}")
-
-        # 2. Load Model ONCE
-        self.model = timm.create_model('mobilenetv3_small_100.lamb_in1k', pretrained=True, features_only=True, out_indices=(1, 2, 3, 4))
+        #model_path = resource_path(os.path.join("local_models", "model.safetensors"))
+        model_path = r"D:\UofT\2025fall\OnSight\OnSight_Pathology\local_models\model.safetensors"
+        if os.path.exists(model_path):
+            # print(f"Found local model at {model_path}. Loading offline...")
+            self.model = timm.create_model(
+                'mobilenetv3_small_100.lamb_in1k', 
+                pretrained=False, 
+                features_only=True, 
+                out_indices=(1, 2, 3, 4)
+            )
+            from safetensors.torch import load_file
+            state_dict = load_file(model_path)
+            self.model.load_state_dict(state_dict, strict=False)
+        else:
+            #print(f"Local model not found. Downloading from HuggingFace...")
+            self.model = timm.create_model(
+                'mobilenetv3_small_100.lamb_in1k', 
+                pretrained=True, 
+                features_only=True, 
+                out_indices=(1, 2, 3, 4)
+            )
         self.model.eval().to(self.device)
 
         # 3. Create Standard Transform
@@ -50,7 +68,7 @@ class OverlayWorker(QThread):
                     tissue_threshold=getattr(self, 'tissue_thresh', 0.95),
                     batch_size=128
                 )
-                cv2.imwrite("debug_overlay_cluster.png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR)) 
+                #cv2.imwrite("debug_overlay_cluster.png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR)) 
                 self.finished.emit(result)
             except Exception as e:
                 print(f"[Overlay Error]: {e}")

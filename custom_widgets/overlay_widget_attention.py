@@ -106,7 +106,6 @@ class OverlayWidget(QFrame):
         if self.state == "RUNNING" and not self.worker.is_busy:
                 self.worker.frame = frame_rgb.copy()
                 self.worker.percentile = getattr(self, 'percentile', 80)
-                # 🚀 将 Widget 绑定的变量传给后台 worker
                 self.worker.kernel_size = getattr(self, 'kernel_size', 5)
                 self.worker.start()
 
