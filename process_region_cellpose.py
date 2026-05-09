@@ -37,7 +37,10 @@ def visualize_ki67_refined_overlay(img, masks, labels, is_kept_arr, is_pos_arr, 
                 color_lut[lab] = [0, 0, 255]  
             else:
                 color_lut[lab] = [255, 0, 0]  
-            paint_mask[lab] = True
+        else:
+            color_lut[lab] = [255, 255, 0]
+            
+        paint_mask[lab] = True
             
     pixel_colors = color_lut[masks]
     pixel_paint = paint_mask[masks]
@@ -49,7 +52,6 @@ def visualize_ki67_refined_overlay(img, masks, labels, is_kept_arr, is_pos_arr, 
     blended[bg_mask] = img[bg_mask]
     
     return blended
-
 
 def deconvolution_ihc_ki67_dynamic(img_rgb):
     I_0 = 255

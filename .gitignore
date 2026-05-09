@@ -12,6 +12,7 @@ output-gpu/
 NuLite/
 app_one_dir.spec
 .vscode/
+installer-gpu.iss
 
 __pycache__/
 data/
