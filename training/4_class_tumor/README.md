@@ -45,9 +45,3 @@ Navigate to the project directory in your terminal and run the following command
 * Early Stopping: If the patch-level F1 Score does not improve for 3 consecutive epochs, the training will stop early.
 * Model Saving: The model weights with the best validation performance will be automatically saved in the current directory.
 
-## Model Details 
-
-If you need to modify the model, you can adjust the following strategies in train.py:
-* Base Model: Uses the kaiko_ai_towards_large_pathology_fms pre-trained model, which is specifically optimized for pathology.
-* Layer Freezing Strategy: By default, the bottom feature extraction layers are frozen. Only the classification head, the last 8 Transformer Blocks, and the final LayerNorm are unfrozen and fine-tuned.
-* Optimizer: AdamW combined with a CosineAnnealingLR scheduler.
