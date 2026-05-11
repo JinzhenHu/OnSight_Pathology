@@ -14,9 +14,9 @@ This document describes how to run OnSight Pathology locally, how to build the a
 - Python: 3.11.9 (recommended)
 - Optional: NVIDIA GPU with CUDA support (for GPU build)
 
-macOS is supported for both Intel and Apple Silicon, Please see the branch mac.
+macOS is supported for both Intel and Apple Silicon. Please see the branch mac.
 
-Linux(Beta) is supported for the GPU version, please see the branch linux.
+Linux(Beta) is supported for the GPU version. Please see the branch linux.
 
 ---
 
