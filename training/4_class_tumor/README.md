@@ -1,4 +1,4 @@
-# 4-Class Brain Tumor ViT Classification Model Training
+# Four-Class Brain Tumor ViT Classification Model Training
 
 This section contains the training scripts for the four class tumor ViT model used in OnSight Pathology.
 
