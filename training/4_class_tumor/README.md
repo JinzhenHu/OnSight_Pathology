@@ -1,6 +1,6 @@
 # 4-Class Brain Tumor ViT Classification Model Training
 
-This respo uses a pre-trained Vision Transformer (ViT) model to fine-tune a 4-class classification task for brain tumor slides. The codebase includes the complete pipeline from data loading and augmentation to model building and evaluation.
+This section contains the training scripts for the four class tumor ViT model used in OnSight Pathology.
 
 ## File Structure 
 
