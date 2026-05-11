@@ -2,8 +2,16 @@
 
 This section contains the training scripts for the four class tumor ViT model used in OnSight Pathology.
 
-## File Structure 
+## File Structure
 
+Please ensure your project directory looks like this, saving the two pieces of code you provided into their respective Python files:
+
+    project_folder/
+    │
+    ├── train.py                
+    ├── utlis_4_class.py       
+    └── README.md              
+    
 ## Dataset Preparation
 
 The code uses on CSV files to load the data. Please prepare train.csv and val.csv, and ensure they contain the following 3 required columns:
