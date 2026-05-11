@@ -36,3 +36,10 @@ Navigate to the project directory in your terminal and run the following command
 * The code defaults to training for 30 Epochs.
 * After each epoch, the terminal will print both Patch-level and Patient-level Accuracy and F1 Score.
 * Early Stopping: If the patch-level F1 Score does not improve for 3 consecutive epochs, the training will stop early.
+* 
+## Model Details
+
+If you need to modify the model, you can adjust the following strategies in train.py:
+* Base Model: Uses the kaiko_ai_towards_large_pathology_fms pre-trained model.
+* Layer Freezing Strategy: By default, the bottom feature extraction layers are frozen. Only the classification head, the last 8 Transformer Blocks are unfrozen and fine-tuned.
+* Optimizer: AdamW combined with a CosineAnnealingLR scheduler.
