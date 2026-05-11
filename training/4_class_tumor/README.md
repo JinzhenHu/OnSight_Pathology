@@ -4,13 +4,6 @@ This section contains the training scripts for the four class tumor ViT model us
 
 ## File Structure 
 
-## Environment Dependencies
-
-Ensure the following Python libraries are installed before running the code:
-
-    pip install torch torchvision
-    pip install timm pandas numpy Pillow scikit-learn matplotlib seaborn
-
 ## Dataset Preparation
 
 The code uses on CSV files to load the data. Please prepare train.csv and val.csv, and ensure they contain the following 3 required columns:
