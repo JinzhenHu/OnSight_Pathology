@@ -15,6 +15,7 @@ This document describes how to run OnSight Pathology locally, how to build the a
 - Optional: NVIDIA GPU with CUDA support (for GPU build)
 
 macOS is supported for both Intel and Apple Silicon, Please see the branch mac.
+
 Linux(Beta) is supported for the GPI, please see the branch linux.
 
 ---
