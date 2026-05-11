@@ -42,4 +42,3 @@ Navigate to the project directory in your terminal and run the following command
 If you need to modify the model, you can adjust the following strategies in train.py:
 * Base Model: Uses the kaiko_ai_towards_large_pathology_fms pre-trained model.
 * Layer Freezing Strategy: By default, the bottom feature extraction layers are frozen. Only the classification head, the last 8 Transformer Blocks are unfrozen and fine-tuned.
-* Optimizer: AdamW combined with a CosineAnnealingLR scheduler.
