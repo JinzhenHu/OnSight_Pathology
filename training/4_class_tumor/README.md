@@ -32,9 +32,3 @@ Navigate to the project directory in your terminal and run the following command
 
     python train.py
 
-### 3. Training Process and Outputs
-* The code defaults to training for 30 Epochs.
-* After each epoch, the terminal will print both Patch-level and Patient-level Accuracy and F1 Score.
-* Early Stopping: If the patch-level F1 Score does not improve for 3 consecutive epochs, the training will stop early.
-* Model Saving: The model weights with the best validation performance will be automatically saved in the current directory.
-
