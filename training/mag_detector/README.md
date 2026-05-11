@@ -1,6 +1,6 @@
 # Magnification Detection Model Training (ViT)
 
-This repo contains the training scripts for the magnification detector in OnSight Pathology. It is used to classify the magnification level of pathology image patches into four categories: 5x, 10x, 20x, and 40x. The codebase handles dataset loading from a directory structure, performs patient-level train/validation splitting, and fine-tunes a specialized pathology ViT model using a linear probing strategy.
+This repo contains the training scripts for the magnification detector in OnSight Pathology. It is used to classify the magnification level of pathology image patches into four categories: 5x, 10x, 20x, and 40x.
 
 ## File Structure
 
