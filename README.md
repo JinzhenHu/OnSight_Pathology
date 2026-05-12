@@ -24,30 +24,17 @@ This document describes how to run OnSight Pathology locally, how to build the a
 
 OnSight Pathology is designed to be cross-platform. 
 
-- 🪟 **Windows:** Fully tested and validated (Default).
-- 🍎 **macOS:** Supported for both Intel and Apple Silicon (Please see the `mac` branch).
-- 🐧 **Linux:** Beta support available for the GPU version (Please see the `linux` branch).
-- 🐍 **Python:** `3.11.9` (recommended).
-- ⚡ **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
+-  **Windows:** Fully tested and validated (Default).
+-  **macOS:** Supported for both Intel and Apple Silicon (Please see the `mac` branch).
+-  **Linux:** Beta support available for the GPU version (Please see the `linux` branch).
+-  **Python:** `3.11.9` (recommended).
+-  **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
 
 ---
 ---
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
 
----
-
-# System Requirements
-
-- Operating System: Windows (tested and validated only on Windows)
-- Python: 3.11.9 (recommended)
-- Optional: NVIDIA GPU with CUDA support (for GPU build)
-
-macOS is supported for both Intel and Apple Silicon. Please see the branch mac.
-
-Linux(Beta) is supported for the GPU version. Please see the branch linux.
-
----
 
 # Running Locally (Development Mode)
 
