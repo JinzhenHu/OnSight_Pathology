@@ -1,5 +1,7 @@
 # OnSight Pathology – Local Development and Build Guide
-
+<p align="center">
+  <img src="OnSight.png" alt="OnSight Pathology" width="800">
+</p>
 For documentation, publication details, and pre-built Windows executables, please visit:
 
 https://onsightpathology.github.io/
