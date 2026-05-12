@@ -259,6 +259,7 @@ To integrate additional models into OnSight Pathology:
 Existing model implementations may be used as references.
 
 ---
+# Acknowledgements
 
 The project was built on top of amazing repositories such as MIDOGpp and CellViT. We thank the authors and developers for their contribution.
 
