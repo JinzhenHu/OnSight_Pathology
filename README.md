@@ -4,15 +4,33 @@
   <img src="OnSight.png" alt="OnSight Pathology" width="800">
 </p>
 
+<!-- 跨平台与技术栈徽章 -->
 <p align="center">
   <a href="https://onsightpathology.github.io/"><img src="https://img.shields.io/badge/Website-onsightpathology.github.io-blue?style=flat-square" alt="Website"></a>
   <img src="https://img.shields.io/badge/OS-Windows-0078D6?style=flat-square&logo=windows" alt="Windows">
+  <img src="https://img.shields.io/badge/OS-macOS-000000?style=flat-square&logo=apple" alt="macOS">
+  <img src="https://img.shields.io/badge/OS-Linux_(Beta)-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
   <img src="https://img.shields.io/badge/Python-3.11.9-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
 </p>
 
 > 📚 **Documentation & Downloads**  
 > For full documentation, publication details, and pre-built Windows executables, please visit our official website: **[onsightpathology.github.io](https://onsightpathology.github.io/)**
 
+This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
+
+---
+
+## 💻 System Requirements
+
+OnSight Pathology is designed to be cross-platform. 
+
+- 🪟 **Windows:** Fully tested and validated (Default).
+- 🍎 **macOS:** Supported for both Intel and Apple Silicon (Please see the `mac` branch).
+- 🐧 **Linux:** Beta support available for the GPU version (Please see the `linux` branch).
+- 🐍 **Python:** `3.11.9` (recommended).
+- ⚡ **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
+
+---
 ---
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
