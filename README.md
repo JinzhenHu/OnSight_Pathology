@@ -17,7 +17,6 @@
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
 
----
 
 ---
 
@@ -31,7 +30,6 @@ OnSight Pathology is designed to be cross-platform.
 -  **Python:** `3.11.9` (recommended).
 -  **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
 
----
 ---
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
