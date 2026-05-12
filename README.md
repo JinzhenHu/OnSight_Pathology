@@ -1,10 +1,9 @@
 # 🔬 OnSight Pathology – Local Development and Build Guide
 
 <p align="center">
-  <img src="OnSight.png" alt="OnSight Pathology" width="800">
+  <img src="OnSight.png" alt="OnSight Pathology" width="100%">
 </p>
 
-<!-- 跨平台与技术栈徽章 -->
 <p align="center">
   <a href="https://onsightpathology.github.io/"><img src="https://img.shields.io/badge/Website-onsightpathology.github.io-blue?style=flat-square" alt="Website"></a>
   <img src="https://img.shields.io/badge/OS-Windows-0078D6?style=flat-square&logo=windows" alt="Windows">
@@ -17,6 +16,8 @@
 > For full documentation, publication details, and pre-built Windows executables, please visit our official website: **[onsightpathology.github.io](https://onsightpathology.github.io/)**
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
+
+---
 
 ---
 
