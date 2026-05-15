@@ -37,9 +37,9 @@ Recommended: Python 3.10.9
 
 Two dependency files are provided:
 
-| File | Description |
-|------|------------|
-| `requirements_mac.txt` | GPU version (includes CUDA-enabled PyTorch) |
+| File | 
+|------|
+| `requirements_mac.txt` |
 
 Install the appropriate version:
 
