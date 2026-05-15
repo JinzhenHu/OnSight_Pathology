@@ -1,4 +1,4 @@
-# OnSight Pathology – Local Development and Build Guide
+# OnSight Pathology MacOS – Local Development and Build Guide
 
 For documentation, publication details, and pre-built Windows executables, please visit:
 
@@ -10,7 +10,7 @@ This document describes how to run OnSight Pathology locally, how to build the a
 
 # System Requirements
 
-- Operating System: macOS
+- Operating System: macOS supporting both Intel and M-series
 
 ---
 
@@ -29,7 +29,7 @@ Confirm Python version:
 python --version
 ```
 
-Recommended: Python 3.11.9
+Recommended: Python 3.10.9
 
 ---
 
@@ -39,22 +39,16 @@ Two dependency files are provided:
 
 | File | Description |
 |------|------------|
-| `requirements.txt` | GPU version (includes CUDA-enabled PyTorch) |
-| `requirements_cpu.txt` | CPU-only version |
+| `requirements_mac.txt` | GPU version (includes CUDA-enabled PyTorch) |
 
 Install the appropriate version:
 
 GPU:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_mac.txt
 ```
 
-CPU:
-
-```bash
-pip install -r requirements_cpu.txt
-```
 
 ---
 
@@ -88,35 +82,12 @@ Two executables must be built:
 ## GPU Build (Default)
 
 ```bash
-pyinstaller app.spec --noconfirm
+pyinstaller app_mac.spec --noconfirm
 pyinstaller llm_worker_process.spec --noconfirm
 ```
 
 ---
 
-## CPU Build
-
-For CPU-only builds, set the `BUILD_TYPE` environment variable to `CPU` before running PyInstaller.
-
-This prevents PyTorch from initializing or probing CUDA devices, avoiding CUDA DLL discovery behavior that can cause crashes on systems without GPU drivers.
-
-### PowerShell
-
-```powershell
-$env:BUILD_TYPE="CPU"
-pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
-```
-
-### Command Prompt (cmd)
-
-```cmd
-set BUILD_TYPE=CPU
-pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
-```
-
----
 
 ## Post-Build Directory Structure
 
@@ -159,43 +130,6 @@ dist/
 ```
 
 The main application expects the worker executable to reside in the same directory.
-
----
-
-# Creating a Windows Installer (Inno Setup)
-
-OnSight Pathology can be packaged using Inno Setup version 6.5 or newer.
-
-Download:
-
-https://jrsoftware.org/isdl.php
-
-As of Inno Setup 6.5, the maximum installer size is 4GB. Disk spanning is not required.
-
----
-
-## Building the Installer
-
-A single installer script is provided:
-
-```
-installer.iss
-```
-
-The script expects the `dist/` directory to exist.
-
-To generate the installer:
-
-1. Open `installer.iss` in Inno Setup.
-2. Click **Run**.
-
-The compiled installer will be generated in:
-
-```
-Output/
-```
-
-No modification to the `.iss` file is required.
 
 ---
 
