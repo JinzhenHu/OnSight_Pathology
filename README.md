@@ -10,7 +10,7 @@ This document describes how to run OnSight Pathology locally, how to build the a
 
 # System Requirements
 
-- Operating System: macOS supporting both Intel and M-series
+- Operating System: macOS (supports both Intel and Apple Silicon)
 
 ---
 
