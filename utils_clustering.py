@@ -12,7 +12,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from skimage.measure import regionprops
 from PIL import Image
-from lemon.model import prepare_transform, get_vit_feature_extractor
+#from lemon.model import prepare_transform, get_vit_feature_extractor
 import matplotlib.pyplot as plt
 from huggingface_hub import hf_hub_download
 from pathlib import Path
