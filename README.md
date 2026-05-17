@@ -1,30 +1,21 @@
 # OnSight Pathology – Local Development and Build Guide
 
-For documentation, publication details, and pre-built Windows executables, please visit:
+For documentation, publication details, and pre-built executables, please visit:
 
 https://onsightpathology.github.io/
 
-This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
+This document describes how to run OnSight Pathology linux version locally, how to build the application from source, and where to find model training pipelines.
 
----
-
-# System Requirements
-
-- Operating System: Windows (tested and validated only on Windows)
-- Python: 3.11.9 (recommended)
-- Optional: NVIDIA GPU with CUDA support (for GPU build)
-
-Other operating systems (macOS/Linux) are not officially supported. Certain functionality (e.g., screen capture handling) may require modification outside of Windows.
 
 ---
 
 # Running Locally (Development Mode)
 
-## 1. Create a Virtual Environment
+# 1. Create a Conda Environment (Linux, Miniconda3)
 
 ```bash
-python -m venv onsight_env
-onsight_env\Scripts\activate
+conda create -n onsight_env python=3.11
+conda activate onsight_env
 ```
 
 Confirm Python version:
@@ -44,7 +35,6 @@ Two dependency files are provided:
 | File | Description |
 |------|------------|
 | `requirements.txt` | GPU version (includes CUDA-enabled PyTorch) |
-| `requirements_cpu.txt` | CPU-only version |
 
 Install the appropriate version:
 
@@ -54,11 +44,6 @@ GPU:
 pip install -r requirements.txt
 ```
 
-CPU:
-
-```bash
-pip install -r requirements_cpu.txt
-```
 
 ---
 
@@ -92,31 +77,7 @@ Two executables must be built:
 ## GPU Build (Default)
 
 ```bash
-pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
-```
-
----
-
-## CPU Build
-
-For CPU-only builds, set the `BUILD_TYPE` environment variable to `CPU` before running PyInstaller.
-
-This prevents PyTorch from initializing or probing CUDA devices, avoiding CUDA DLL discovery behavior that can cause crashes on systems without GPU drivers.
-
-### PowerShell
-
-```powershell
-$env:BUILD_TYPE="CPU"
-pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
-```
-
-### Command Prompt (cmd)
-
-```cmd
-set BUILD_TYPE=CPU
-pyinstaller app.spec --noconfirm
+pyinstaller app_linux.spec --noconfirm
 pyinstaller llm_worker_process.spec --noconfirm
 ```
 
