@@ -1,4 +1,4 @@
-# OnSight Pathology Linux(Beta) – Local Development and Build Guide
+# OnSight Pathology Linux (Beta) – Local Development and Build Guide
 
 For documentation, publication details, and pre-built executables, please visit:
 
