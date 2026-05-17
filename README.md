@@ -1,4 +1,4 @@
-# OnSight Pathology – Local Development and Build Guide
+# OnSight Pathology Linux(Beta) – Local Development and Build Guide
 
 For documentation, publication details, and pre-built executables, please visit:
 
@@ -11,7 +11,7 @@ This document describes how to run OnSight Pathology linux version locally, how 
 
 # Running Locally (Development Mode)
 
-# 1. Create a Conda Environment (Linux, Miniconda3)
+# 1. Create a Conda Environment (Miniconda3)
 
 ```bash
 conda create -n onsight_env python=3.11
