@@ -1,0 +1,19 @@
+{
+  "repo": "diamandislabii/Magnification_Detector",
+  "repo_src": "HuggingFace",
+  "info": "This H&E brain tumor classifier was developed using transfer learning on a Vision Transformer(Kaiko) petrained on WSIs",
+  "mpp": 0.504,
+  "model": "VITmagnification_kaiko",
+  "tile_size": 256,
+  "aggregate_type": "classification",
+  "additional_configs": {
+      "Show ViT Attention Map": false
+  },
+  "classes": [
+      
+      "5X Magnification",
+       "10X Magnification",
+       "20X Magnification",
+        "40X Magnification"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "repo": "instanseg/embedding",
+  "repo_src": "PythonLib",
+  "info": "This module uses Cellpose-SAM to analyze single cell features. The module supports both H&E and muscle fiber analysis.",
+  "mpp": 0.25,
+  "model": "CPSAM_profiler",
+  "tile_size": 256,
+  "aggregate_type": "cell_profiler",
+  "supported_mags": ["20x", "40x"],
+  "classes": [
+    "Nuclei"
+  ],
+  "additional_configs": {
+    "mask_transparency": 0.1,
+    "mpp": 0.25,
+    "Feature Category": ["Nuclear Size", "Nuclear Shape", "Intensity"],
+    "Clustering Method": ["None", "Customized Features", "Handcrafted Features", "Hierarchical Gating"],
+    "Image Type": ["H&E Cell Analysis", "Muscle Fiber Typing"],
+    "H&E Features (Multi-Select)": [
+        "Size.Area", "Size.Perimeter", "Size.MajorAxisLength", "Size.MinorAxisLength", "Shape.EquivalentDiameter",
+        "Shape.Circularity", "Shape.Eccentricity", "Shape.Solidity", "Shape.Extent",
+        "Nucleus.Intensity.Mean", "Nucleus.Intensity.Std", "Nucleus.Intensity.IQR", "Nucleus.Intensity.HistEntropy", "Nucleus.Intensity.HistEnergy"
+
+    ],
+    "Muscle Features (Multi-Select)": [
+        "intensity_mean", "intensity_median","intensity_max", "intensity_min", "intensity_std",
+         "Area", "Perimeter","equivalent_diameter_area", "axis_major_length", "axis_minor_length",
+         "eccentricity", "solidity"
+
+    ],
+    "Clusters (k)": 3,
+    "Context Scale": 1.5
+  },
+  "notes:": "Calculates Cellularity and Eccentricity"
+}

@@ -1,0 +1,21 @@
+{
+  "repo": "diamandislabii/CellViT-Sam",
+  "repo_src": "HuggingFace",
+  "info": "CellViT-SAM-H realtime nuclei segmentation and classification(Beta)",
+  "mpp": 0.25,
+  "model": "CellViT",
+  "tile_size": 256,
+  "aggregate_type": "cell_profiler",
+  "classes": [
+    "Neoplastic",
+    "Inflammatory",
+    "Connective",
+    "Dead",
+    "Epithelial"
+  ],
+  "additional_configs": {
+    "mpp": 0.25,
+    "dedup_dist": 10,
+    "contour_thickness": 2
+  }
+}
