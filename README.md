@@ -133,42 +133,6 @@ The main application expects the worker executable to reside in the same directo
 
 ---
 
-# Creating a Windows Installer (Inno Setup)
-
-OnSight Pathology can be packaged using Inno Setup version 6.5 or newer.
-
-Download:
-
-https://jrsoftware.org/isdl.php
-
-As of Inno Setup 6.5, the maximum installer size is 4GB. Disk spanning is not required.
-
----
-
-## Building the Installer
-
-A single installer script is provided:
-
-```
-installer.iss
-```
-
-The script expects the `dist/` directory to exist.
-
-To generate the installer:
-
-1. Open `installer.iss` in Inno Setup.
-2. Click **Run**.
-
-The compiled installer will be generated in:
-
-```
-Output/
-```
-
-No modification to the `.iss` file is required.
-
----
 
 # Training Pipelines
 
