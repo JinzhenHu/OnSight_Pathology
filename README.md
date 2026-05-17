@@ -4,7 +4,7 @@ For documentation, publication details, and pre-built executables, please visit:
 
 https://onsightpathology.github.io/
 
-This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
+This document describes how to run OnSight Pathology MacOS version locally, how to build the application from source, and where to find model training pipelines.
 
 ---
 
