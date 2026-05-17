@@ -1,6 +1,6 @@
 # OnSight Pathology MacOS – Local Development and Build Guide
 
-For documentation, publication details, and pre-built Windows executables, please visit:
+For documentation, publication details, and pre-built executables, please visit:
 
 https://onsightpathology.github.io/
 
