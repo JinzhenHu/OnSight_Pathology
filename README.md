@@ -6,6 +6,12 @@ https://onsightpathology.github.io/
 
 This document describes how to run OnSight Pathology linux version locally, how to build the application from source, and where to find model training pipelines.
 
+---
+
+# System Requirements
+
+- Operating System: Linux (tested on Ubuntu 24.04.3 with NVIDIA GPU support)
+
 
 ---
 
