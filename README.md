@@ -16,11 +16,11 @@ This document describes how to run OnSight Pathology locally, how to build the a
 
 # Running Locally (Development Mode)
 
-## 1. Create a Virtual Environment
+## 1. Create a Conda Environment (Miniforge)
 
 ```bash
-python -m venv onsight_env
-onsight_env\Scripts\activate
+conda create -n onsight_env python=3.10
+conda activate onsight_env
 ```
 
 Confirm Python version:
