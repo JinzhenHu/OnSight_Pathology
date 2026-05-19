@@ -1,4 +1,4 @@
-# OnSight Pathology – Local Development and Build Guide
+# OnSight Pathology v1
 
 For documentation, publication details, and pre-built Windows executables, please visit:
 
