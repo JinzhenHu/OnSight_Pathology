@@ -3,7 +3,7 @@
 #
 # Run:
 #   App main.py
-import torch
+
 import os
 import sys
 import logging
@@ -23,6 +23,7 @@ if sys.stderr is None:
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 
+os.environ["QT_SCALE_FACTOR"] = "1"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 os.environ["TQDM_DISABLE"] = "1"
 
@@ -116,43 +117,8 @@ def run_llm_worker_if_requested() -> None:
 
     sys.exit(0)
 
+run_llm_worker_if_requested()
 
-def configure_runtime_environment() -> None:
-    """Set runtime environment flags."""
-    os.environ["QT_SCALE_FACTOR"] = "1"
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-    os.environ["TQDM_DISABLE"] = "1"
-
-    # NOTE: ONLY FOR CPU EXE
-    if 0:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
-
-
-def configure_logging() -> None:
-    """Remove default stream handlers if needed."""
-    for handler in logging.root.handlers[:]:
-        if isinstance(handler, logging.StreamHandler):
-            logging.root.removeHandler(handler)
-
-
-def ensure_stdio() -> None:
-    """Ensure stdout/stderr are available."""
-    if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w")
-    if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w")
-
-
-def bootstrap() -> None:
-    """Application bootstrap before main window/app creation."""
-    run_llm_worker_if_requested()
-    configure_runtime_environment()
-    configure_logging()
-    ensure_stdio()
-
-
-bootstrap()
 
 ###############################################################################################################################################
 # Data Class for aggregator function
