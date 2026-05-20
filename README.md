@@ -27,7 +27,6 @@ OnSight Pathology is designed to be cross-platform.
 -  **Windows:** Fully tested and validated (Default).
 -  **macOS:** Supported for both Intel and Apple Silicon (Please see the `mac` branch).
 -  **Linux:** Beta support available for the GPU version (Please see the `linux` branch).
--  **Python:** `3.11.9` (recommended).
 -  **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
 
 ---
