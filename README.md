@@ -269,8 +269,8 @@ If OnSight fails to download models with errors poping up on first launch, Windo
 
 1. Right-click the OnSightPathology.exe and select "Run as administrator"
 2. When the terminal window appears, press Enter to begin
-
 Models will download automatically. This is only required on the first launch.
+
 ---
 
 # Citation
