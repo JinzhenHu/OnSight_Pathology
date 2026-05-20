@@ -272,9 +272,9 @@ If OnSightPathology launches and runs normally, you can ignore this section.
 
 If OnSight fails to download the required models during the first launch, Windows Defender or Firewall settings may be blocking the download process. Please follow these steps:
 
-Right-click OnSightPathology.exe and select Run as administrator.
-When the terminal window appears, press Enter to continue.
-The required models will begin downloading automatically.
+1. Right-click OnSightPathology.exe and select Run as administrator.
+2. When the terminal window appears, press Enter to continue.
+3. The required models will begin downloading automatically.
 
 Note: This setup is only required the first time you launch OnSight.
 
