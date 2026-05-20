@@ -2,4 +2,4 @@
 
 This folder contains the CellViT PanNuke module integrated into the OnSIght Pathology system.
 
-We appreciate the contribution of the authors of CellViT, which enabled its integration into the OnSight pathology pipeline.
+We appreciate the contribution of the CellViT authors, which enabled its integration into the OnSight pathology pipeline.
