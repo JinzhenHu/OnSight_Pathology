@@ -268,7 +268,7 @@ The project was built on top of amazing repositories such as MIDOGpp and CellViT
 
 # ⚠️ Windows Users — First-Time Setup
 
-If OnSightPathology launches and runs normally, you can ignore this section.
+Please ignore this section if OnSightPathology launches and runs normally.
 
 If OnSight fails to download the required models during the first launch, Windows Defender or Firewall settings may be blocking the download process. Please follow these steps:
 
