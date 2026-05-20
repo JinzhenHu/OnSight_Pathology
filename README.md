@@ -131,30 +131,6 @@ dist/
 
 The main application expects the worker executable to reside in the same directory.
 
----
-
-
-# Training Pipelines
-
-The repository includes a:
-
-```
-training/
-```
-
-directory containing scripts used to train the models bundled with OnSight Pathology.
-
-Each model has its own subdirectory within `training/` that contains:
-
-- Data preparation scripts
-- Dataset conversion utilities
-- Training configuration files
-- Training scripts
-- Model-specific documentation
-
-Detailed instructions for reproducing model training can be found in the respective `README.md` files within each model’s training directory.
-
-These materials are provided for transparency and reproducibility.
 
 ---
 
