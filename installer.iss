@@ -10,17 +10,14 @@ OutputBaseFilename=OnSightPathologyInstaller
 OutputDir=output
 
 
-; Disable disk spanning to package everything into one EXE
 DiskSpanning=no
 
 
 Compression=lzma2/max
 SolidCompression=yes
 
-; Use separate process for faster compression
 LZMAUseSeparateProcess=yes
 
-; Make sure this icon file exists in the script directory
 SetupIconFile="sample_icon.ico"
 
 [Tasks]
