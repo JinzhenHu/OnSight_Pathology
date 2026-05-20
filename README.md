@@ -264,19 +264,6 @@ Existing model implementations may be used as references.
 
 The project was built on top of amazing repositories such as MIDOGpp and CellViT. We thank the authors and developers for their contribution.
 
----
-
-# ⚠️ Windows Users — First-Time Setup
-
-Please ignore this section if OnSightPathology launches and runs normally.
-
-If OnSight fails to download the required models during the first launch, Windows Defender or Firewall settings may be blocking the download process. Please follow these steps:
-
-1. Right-click OnSightPathology.exe and select Run as administrator.
-2. When the terminal window appears, press Enter to continue.
-3. The required models will begin downloading automatically.
-
-Note: This setup is only required the first time you launch OnSight.
 
 ---
 
