@@ -1,6 +1,6 @@
 ## Test Data
 
-This folder contains the two test images used in the paper:
+This folder contains the three test images used in the paper:
 
 - `Type 2 Atrophy.png`  
   A Type 2 atrophy muscle fiber image used for testing.
