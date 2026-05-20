@@ -8,16 +8,10 @@ DefaultGroupName=OnSightPathology
 ; Output installer filename
 OutputBaseFilename=OnSightPathologyInstaller
 OutputDir=output
-
-
 DiskSpanning=no
-
-
 Compression=lzma2/max
 SolidCompression=yes
-
 LZMAUseSeparateProcess=yes
-
 SetupIconFile="sample_icon.ico"
 
 [Tasks]
