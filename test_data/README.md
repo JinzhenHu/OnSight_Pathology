@@ -3,7 +3,7 @@
 This folder contains the two test images used in the paper:
 
 - `Type 2 Atrophy.png`  
-  A Type 2 Atrophy muscle fiber image used for testing.
+  A Type 2 atrophy muscle fiber image used for testing.
 
 - `ki-67.png`  
   A Ki-67 image used for testing.
