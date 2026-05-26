@@ -17,6 +17,15 @@
 
 This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
 
+## 📦 Downloads
+
+Pre-built packages and additional resources are available through the following platforms:
+
+- **Zenodo:**  
+  https://zenodo.org/records/20402050
+
+- **Google Drive:**  
+  https://drive.google.com/drive/folders/1EnW_5nvWHmMgmszurk0LLtyBAKExFh0p
 
 ---
 
