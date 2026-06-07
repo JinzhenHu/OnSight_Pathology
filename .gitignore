@@ -15,6 +15,7 @@ app_one_dir.spec
 installer-gpu.iss
 
 __pycache__/
+.vscode/
 data/
 datasets/
 

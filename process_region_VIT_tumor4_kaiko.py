@@ -42,6 +42,7 @@ def generate_tiles_nopad(img_h: int,
             for x in x_starts]
 
 def process_region(region, **kwargs):
+    #raise RuntimeError("TEST: simulated crash")
     preprocessing = transforms.Compose(
         [
             transforms.Resize(224),

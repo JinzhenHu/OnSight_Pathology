@@ -27,7 +27,31 @@ os.environ["QT_SCALE_FACTOR"] = "1"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 os.environ["TQDM_DISABLE"] = "1"
 
+# ---- Set DPI awareness BEFORE any GUI library imports ----
+if sys.platform == "win32":
+    try:
+        import ctypes
+        # Try Per-Monitor-V2 (Windows 10 1703+), fall back to Per-Monitor, then System DPI
+        try:
+            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
+        except Exception:
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+            except Exception:
+                ctypes.windll.user32.SetProcessDPIAware()
+    except Exception as e:
+        # Will be logged after crash_logging is imported
+        _dpi_init_error = str(e)
+    else:
+        _dpi_init_error = None
+else:
+    _dpi_init_error = None
 import crash_logging
+import logging  
+if _dpi_init_error:
+    logging.warning(f"DPI awareness init failed: {_dpi_init_error}")
+else:
+    logging.info("DPI awareness set successfully")
 import os
 import sys
 
@@ -268,41 +292,69 @@ class ClassificationThread(QThread):
 
     def run(self):
         while self.running:
-            t0 = time.time()
-            extra_cfg = {}
-            for k, w in self.ui.additional_config_inputs.items():
-                if isinstance(w, CheckableComboBox):
-                    extra_cfg[k] = w.get_checked_items()
-                elif isinstance(w, QComboBox):
-                    extra_cfg[k] = w.currentText()
-                elif isinstance(w, QCheckBox):
-                    extra_cfg[k] = w.isChecked()
-                else:
-                    extra_cfg[k] = w.text()
-            extra_cfg['cascade_pipeline'] = getattr(self.ui, 'current_cascade_pipeline', [])
-
-            # check mpp calibration status and update extra_cfg accordingly
-            saved_mpp = self.ui.calibrated_mpp
-            if saved_mpp and "mpp" in extra_cfg:
-                try:
-                    if abs(float(extra_cfg["mpp"]) - saved_mpp) < 1e-5:
-                        extra_cfg["is_calibrated"] = True
+            try:
+                t0 = time.time()
+                extra_cfg = {}
+                for k, w in self.ui.additional_config_inputs.items():
+                    if isinstance(w, CheckableComboBox):
+                        extra_cfg[k] = w.get_checked_items()
+                    elif isinstance(w, QComboBox):
+                        extra_cfg[k] = w.currentText()
+                    elif isinstance(w, QCheckBox):
+                        extra_cfg[k] = w.isChecked()
                     else:
-                        extra_cfg["is_calibrated"] = False
-                except ValueError:
-                    extra_cfg["is_calibrated"] = False
-            else:
-                extra_cfg["is_calibrated"] = False
+                        extra_cfg[k] = w.text()
+                extra_cfg['cascade_pipeline'] = getattr(self.ui, 'current_cascade_pipeline', [])
 
-            frame, res_txt, metrics = self.process_region(
-                self.ui.selected_region,
-                model=self.model,
-                metadata=self.metadata,
-                additional_configs=extra_cfg,
-            )
-            res_txt += f"<br><span style='color:gray; font-size:8pt;'>({time.time() - t0:.4f}s)</span>"
-            self.update_image.emit(frame, res_txt, metrics)
-            #time.sleep(0.1)
+                # check mpp calibration status and update extra_cfg accordingly
+                saved_mpp = self.ui.calibrated_mpp
+                if saved_mpp and "mpp" in extra_cfg:
+                    try:
+                        if abs(float(extra_cfg["mpp"]) - saved_mpp) < 1e-5:
+                            extra_cfg["is_calibrated"] = True
+                        else:
+                            extra_cfg["is_calibrated"] = False
+                    except ValueError:
+                        extra_cfg["is_calibrated"] = False
+                else:
+                    extra_cfg["is_calibrated"] = False
+
+                frame, res_txt, metrics = self.process_region(
+                    self.ui.selected_region,
+                    model=self.model,
+                    metadata=self.metadata,
+                    additional_configs=extra_cfg,
+                )
+                res_txt += f"<br><span style='color:gray; font-size:8pt;'>({time.time() - t0:.4f}s)</span>"
+                self.update_image.emit(frame, res_txt, metrics)
+                #time.sleep(0.1)
+            except torch.cuda.OutOfMemoryError as e:
+                logging.error("CUDA out of memory in inference thread", exc_info=True)
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                err_img = np.zeros((256, 256, 4), dtype=np.uint8)
+                self.update_image.emit(
+                    err_img,
+                    "<b style='color:red'>GPU out of memory.</b><br>"
+                    "Try a smaller capture region, or switch to CPU build.",
+                    {}
+                )
+                time.sleep(2)
+
+            except Exception as e:
+                logging.critical("Inference thread exception", exc_info=True)
+                err_img = np.zeros((256, 256, 4), dtype=np.uint8)
+                err_short = f"{type(e).__name__}: {str(e)[:200]}"
+                self.update_image.emit(
+                    err_img,
+                    f"<b style='color:red'>Error during inference:</b><br>"
+                    f"<code>{err_short}</code><br>"
+                    f"<small>Full details in log file.</small>",
+                    {}
+                )
+                time.sleep(2)
 
     def stop(self):
         self.running = False
