@@ -1,2 +1,0 @@
-class Started:
-    pass
