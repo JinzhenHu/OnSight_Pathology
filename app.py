@@ -615,6 +615,15 @@ class ImageClassificationApp(QMainWindow):
         self.lbl_help.setVisible(False)
 
     def _on_reset(self):
+        if self.agg.n_tiles > 0:
+            reply = QMessageBox.question(
+                self, "Reset Aggregate?",
+                f"This will clear all {self.agg.n_tiles} collected tiles. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No  # ← 默认 No 防误触
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         self.agg.reset()
         self.lbl_agg.setText("Analysis pending...")
         # self.agg_active = False
