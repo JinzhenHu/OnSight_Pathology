@@ -71,7 +71,7 @@ import torch
 
 from pynput import mouse
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer
 from PyQt6.QtGui import (
     QAction,
     QIcon,
@@ -120,6 +120,7 @@ from utils import (
 from utils_clustering import clear_cluster_models_cache
 
 from custom_widgets.AboutDialog import AboutDialog
+from custom_widgets.WelcomeDialog import WelcomeDialog
 from custom_widgets.cascade_widget import CascadeClusteringWidget  
 from custom_widgets.CheckableComboBox import CheckableComboBox
 from custom_widgets.CollapsibleGroupBox import CollapsibleGroupBox
@@ -449,6 +450,14 @@ class ImageClassificationApp(QMainWindow):
         sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
         sc_add.activated.connect(self._on_add)
         self.shortcut_add = sc_add
+        # global space-bar shortcut. must be here since we have 2 layouts
+        sc_add = QShortcut(QKeySequence("Space"), self)
+        sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        sc_add.activated.connect(self._on_add)
+        self.shortcut_add = sc_add
+
+        # First-launch welcome 
+        QTimer.singleShot(300, self._maybe_show_welcome)
 
     def _create_menu_bar(self):
         menu_bar = self.menuBar()  # QMainWindow provides this
@@ -483,6 +492,16 @@ class ImageClassificationApp(QMainWindow):
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return {}  
+        
+    def _maybe_show_welcome(self):
+            """Show welcome dialog on first launch (or until user opts out)."""
+            if self.settings.get("suppress_welcome", False):
+                return
+            dlg = WelcomeDialog(parent=self, icon_path=resource_path("sample_icon.ico"))
+            dlg.exec()
+            if dlg.is_dont_show_checked():
+                self.settings["suppress_welcome"] = True
+                self._save_settings()
 
     def _save_settings(self):
         """Saves current settings to the JSON file."""

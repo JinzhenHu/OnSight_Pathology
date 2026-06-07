@@ -100,6 +100,7 @@ a = Analysis(
             "custom_widgets.CheckableComboBox",
             "custom_widgets.CollapsibleGroupBox",
             "custom_widgets.PulsingDot",
+            "custom_widgets.WelcomeDialog",
             "settings",
             "utils",
             "utils_clustering",
