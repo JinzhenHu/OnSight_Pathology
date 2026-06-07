@@ -14,17 +14,13 @@ torch_datas, torch_binaries, torch_hiddenimports = collect_all("torch")
 tv_datas, tv_binaries, tv_hiddenimports = collect_all("torchvision")
 np_datas, np_binaries, np_hiddenimports = collect_all("numpy")
 cv_datas, cv_binaries, cv_hiddenimports = collect_all("cv2")
-
-
 skimage_datas, skimage_binaries, skimage_hiddenimports = collect_all("skimage")
 lazy_datas, lazy_binaries, lazy_hiddenimports = collect_all("lazy_loader")
-
-
 tf_datas, tv_binaries_tf, tf_hiddenimports = collect_all("transformers")
+hf_datas, hf_binaries, hf_hiddenimports = collect_all("huggingface_hub")
 
 a = Analysis(
     ['app.py'],
-
 
     pathex=['.'],
 
@@ -35,8 +31,8 @@ a = Analysis(
         + cv_binaries
         + skimage_binaries 
         + lazy_binaries   
-        + tv_binaries_tf,
-
+        + tv_binaries_tf
+        + hf_binaries,
 
     datas=
         [("metadata/*.json", "metadata")]
@@ -50,14 +46,15 @@ a = Analysis(
             includes=["**/*.yaml", "**/*.pickle", "**/*.pth", "**/*.pt"]
         )
         + copy_metadata("fastprogress")
+        + copy_metadata("huggingface_hub")
         + torch_datas
         + tv_datas
         + np_datas
         + cv_datas
         + skimage_datas 
         + lazy_datas
-        + tf_datas,   
-
+        + tf_datas
+        + hf_datas,
 
     hiddenimports=
         torch_hiddenimports
@@ -67,6 +64,7 @@ a = Analysis(
         + skimage_hiddenimports 
         + lazy_hiddenimports   
         + tf_hiddenimports
+        + hf_hiddenimports
         + [
             "torch",
             "torchvision",
@@ -83,6 +81,29 @@ a = Analysis(
             "timm",
             "PIL",
             "scipy",
+            "huggingface_hub",
+            "huggingface_hub.file_download",
+            "huggingface_hub.utils",
+            "huggingface_hub.utils.tqdm",
+            "huggingface_hub.utils._http",
+            "model_loader_thread",
+            "custom_widgets",
+            "custom_widgets.LoadingDialog",
+            "custom_widgets.AboutDialog",
+            "custom_widgets.LLMChatDialog",
+            "custom_widgets.DisclaimerDialog",
+            "custom_widgets.ResizeImageDialog",
+            "custom_widgets.mag_detector_widget",
+            "custom_widgets.overlay_widget",
+            "custom_widgets.overlay_widget_attention",
+            "custom_widgets.cascade_widget",
+            "custom_widgets.CheckableComboBox",
+            "custom_widgets.CollapsibleGroupBox",
+            "custom_widgets.PulsingDot",
+            "settings",
+            "utils",
+            "utils_clustering",
+            "crash_logging",
         ],
 
     hookspath=[],
@@ -130,3 +151,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+#python -m py_compile app.spec
