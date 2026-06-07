@@ -66,6 +66,7 @@ import re
 import time
 
 import cv2
+import mss
 import numpy as np
 import torch
 
@@ -143,6 +144,33 @@ def run_llm_worker_if_requested() -> None:
     sys.exit(0)
 
 run_llm_worker_if_requested()
+
+
+def _normalize_capture_region(region, tile_size):
+    return {
+        "left": int(round(float(region["left"]))),
+        "top": int(round(float(region["top"]))),
+        "width": max(int(round(float(region["width"]))), int(tile_size)),
+        "height": max(int(round(float(region["height"]))), int(tile_size)),
+    }
+
+
+def _capture_looks_blank(frame):
+    if frame is None or frame.size == 0:
+        return True
+    if frame.ndim < 3 or frame.shape[0] <= 1 or frame.shape[1] <= 1:
+        return True
+
+    rgb = frame[:, :, :3]
+    if np.ptp(rgb) == 0:
+        return True
+
+    step_y = max(1, rgb.shape[0] // 64)
+    step_x = max(1, rgb.shape[1] // 64)
+    sample = rgb[::step_y, ::step_x]
+    sample_flat = sample.reshape(-1, sample.shape[-1])
+    unique_colors = np.unique(sample_flat, axis=0).shape[0]
+    return float(sample.std()) < 1.0 and unique_colors <= 2
 
 
 ###############################################################################################################################################
@@ -1175,9 +1203,19 @@ class ImageClassificationApp(QMainWindow):
         self.lbl_cap_hint.setStyleSheet("color:red;")
         v_cap.addWidget(self.lbl_cap_hint)
 
+        cap_btn_row = QHBoxLayout()
+
         btn_sel = QPushButton("Select Screen Region")
         btn_sel.clicked.connect(self._select_region)
-        v_cap.addWidget(btn_sel)
+        cap_btn_row.addWidget(btn_sel)
+
+        self.btn_view_region = QPushButton("View Selected Region")
+        self.btn_view_region.clicked.connect(self._view_selected_region)
+        self.btn_view_region.setEnabled(False)
+        self.btn_view_region.setToolTip("Select a screen region first to preview the captured frame.")
+        cap_btn_row.addWidget(self.btn_view_region)
+
+        v_cap.addLayout(cap_btn_row)
 
         self.lbl_region = QLabel("Selected Region: NOT SET")
         self.lbl_region.setStyleSheet("color:grey;")
@@ -1945,6 +1983,67 @@ class ImageClassificationApp(QMainWindow):
             f"Height: {self.selected_region['height']:.0f} px")
         self.lbl_region.setStyleSheet("color:green;")
         self.btn_start.setEnabled(True)
+        self.btn_view_region.setEnabled(True)
+
+    def _view_selected_region(self):
+        if self.selected_region is None:
+            return
+
+        model_name = self.cmb_model.currentText()
+        meta = settings.MODEL_METADATA.get(model_name, {})
+        tile_size = meta.get("tile_size", 1)
+        capture_region = _normalize_capture_region(self.selected_region, tile_size)
+
+        try:
+            with mss.mss() as sct:
+                screenshot = sct.grab(capture_region)
+            frame = np.array(screenshot, dtype=np.uint8)
+            is_blank = _capture_looks_blank(frame)
+        except Exception:
+            logging.exception("Diagnostic screen capture failed")
+            frame = np.zeros((max(1, capture_region["height"]), max(1, capture_region["width"]), 4), dtype=np.uint8)
+            is_blank = True
+
+        status_text = "Capture successful" if not is_blank else "Capture returned blank frame"
+        status_color = "#2ecc71" if not is_blank else "#e74c3c"
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+        h, w = frame_rgb.shape[:2]
+        qimg = QImage(frame_rgb.data, w, h, 3 * w, QImage.Format.Format_RGB888)
+        pixmap = QPixmap.fromImage(qimg).scaled(
+            900,
+            650,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Selected Region Preview")
+        layout = QVBoxLayout(dialog)
+
+        lbl_status = QLabel(f"<b style='color:{status_color};'>{status_text}</b>")
+        lbl_status.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(lbl_status)
+
+        lbl_info = QLabel(
+            f"Selected region: {self.selected_region['width']:.0f} x {self.selected_region['height']:.0f} px"
+            f" at ({self.selected_region['left']:.0f}, {self.selected_region['top']:.0f})<br>"
+            f"Captured frame: {w} x {h} px"
+        )
+        lbl_info.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(lbl_info)
+
+        lbl_image = QLabel()
+        lbl_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_image.setPixmap(pixmap)
+        layout.addWidget(lbl_image)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+
+        dialog.exec()
 
     # -------------------- Overlay Controls ---------------------------------
     def _start_overlay(self):
