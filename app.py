@@ -2195,24 +2195,28 @@ class ImageClassificationApp(QMainWindow):
         def on_fail(short, tb):
             cleanup()
             if self._was_cancelled:
-                return  # don't show error for cancel-induced failures
+                return
 
             hint = ""
             sl = short.lower()
-            if "huggingface" in sl or "getaddrinfo" in sl or "localentrynotfound" in sl or "connectionerror" in sl:
-                hint = ("<br><br><b>Model weights could not be downloaded.</b><br>"
-                        "• Check your internet connection<br>"
-                        "• huggingface.co may be blocked on your network<br>"
-                        "• Some institutional firewalls require a proxy")
-            elif "out of memory" in sl or "cuda" in sl:
-                hint = "<br><br><b>GPU initialization failed.</b><br>Try the CPU build or a smaller model."
+            # if "huggingface" in sl or "getaddrinfo" in sl or "localentrynotfound" in sl or "connectionerror" in sl:
+            #     hint = ("<b>Model weights could not be downloaded.</b><br>"
+            #             "• Check your internet connection<br>"
+            #             "• huggingface.co may be blocked on your network<br>"
+            #             "• Some institutional firewalls require a proxy")
+            # elif "out of memory" in sl or "cuda" in sl:
+            #     hint = "<b>GPU initialization failed.</b><br>Try the CPU build or a smaller model."
+            # elif "modulenotfound" in sl or "no module named" in sl:
+            #     hint = ("<b>A required dependency is missing.</b><br>"
+            #             "This is a packaging bug. Please report it so we can fix it.")
 
-            QMessageBox.critical(
-                self,
-                "Could not load model",
-                f"<b>Failed to load '{model_name}'</b><br><br>"
-                f"<code>{short}</code>{hint}<br><br>"
-                f"<small>Full details saved to log file.</small>"
+            from crash_logging import show_error_dialog
+            show_error_dialog(
+                title=f"Could not load '{model_name}'",
+                short_msg=short,
+                details=tb,
+                hint_html=hint,
+                parent=self
             )
 
         def on_finished():
