@@ -23,9 +23,9 @@ if sys.stderr is None:
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 
-os.environ["QT_SCALE_FACTOR"] = "1"
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-os.environ["TQDM_DISABLE"] = "1"
+#os.environ["QT_SCALE_FACTOR"] = "1"
+#os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+#os.environ["TQDM_DISABLE"] = "1"
 
 # ---- Set DPI awareness BEFORE any GUI library imports ----
 if sys.platform == "win32":
@@ -129,7 +129,7 @@ from custom_widgets.ResizeImageDialog import ResizableImageDialog
 from custom_widgets.mag_detector_widget import MagDetectorWidget
 from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
-
+from model_loader_thread import ModelLoaderThread
 
 def run_llm_worker_if_requested() -> None:
     """If launched with --run-llm-worker, start worker process and exit."""
@@ -279,17 +279,29 @@ QDialog QWidget, QDialog QLabel, QDialog QPushButton, QDialog QCheckBox {
 class ClassificationThread(QThread):
     update_image = pyqtSignal(np.ndarray, str, dict)
 
-    def __init__(self, ui_instance, model_name):
+    def __init__(self, ui_instance, model_name, preloaded=None):
         super().__init__()
         self.ui = ui_instance
         self.running = True
-
-        res = load_model(settings.MODEL_METADATA[model_name])
-        self.model = res["model"]
-        self.process_region = res["process_region_func"]
-        self.using_gpu = res['using_gpu']
         self.metadata = settings.MODEL_METADATA[model_name]
 
+        if preloaded is not None:
+            # Use pre-loaded resources (skip slow HF download)
+            self.model = preloaded["model"]
+            self.process_region = preloaded["process_region_func"]
+            self.using_gpu = preloaded["using_gpu"]
+        else:
+            # Fallback: original behavior (synchronous load)
+            res = load_model(self.metadata)
+            self.model = res["model"]
+            self.process_region = res["process_region_func"]
+            self.using_gpu = res["using_gpu"]
+
+    @classmethod
+    def from_loaded(cls, ui_instance, model_name, preloaded):
+        return cls(ui_instance, model_name, preloaded=preloaded)
+
+    # run() 和 stop() 保持不动
     def run(self):
         while self.running:
             try:
@@ -1946,13 +1958,7 @@ class ImageClassificationApp(QMainWindow):
             self.thread = None
 
         model_name = self.cmb_model.currentText()
-        self.thread = ClassificationThread(self, model_name)
-        self.thread.update_image.connect(self._update_display)
-        self.thread.start()
-        if self.thread.using_gpu:
-            self.using_gpu_icon.set_color("green")
-        else:
-            self.using_gpu_icon.set_color("red")
+        self._start_with_progress(model_name)
 
         if hasattr(self, 'btn_overlay_start'):
             self.btn_overlay_start.setEnabled(True)
@@ -2142,6 +2148,93 @@ class ImageClassificationApp(QMainWindow):
             if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
                 self.enlarged_window.set_overlay(result_rgb)
 
+        # loading model with progress dialog
+    def _start_with_progress(self, model_name: str):
+        from custom_widgets.LoadingDialog import LoadingDialog
+
+        self._progress_dlg = LoadingDialog(
+            title="Loading Model",
+            model_name=model_name,
+            parent=self
+        )
+        self._loader = ModelLoaderThread(model_name, parent=self)
+        self._was_cancelled = False
+
+        def on_progress(text, pct, cur_b, tot_b):
+            if not self._progress_dlg:
+                return
+            self._progress_dlg.set_status(text)
+            self._progress_dlg.set_progress(pct, cur_b, tot_b)
+
+        def cleanup():
+            """Close dialog and reset state regardless of outcome."""
+            if self._progress_dlg:
+                self._progress_dlg.accept()
+                self._progress_dlg = None
+            self._loader = None
+            self.btn_start.setEnabled(True)
+
+        def on_ok(res):
+            if self._was_cancelled:
+                cleanup()
+                return
+            cleanup()
+            self.thread = ClassificationThread.from_loaded(self, model_name, res)
+            self.thread.update_image.connect(self._update_display)
+            self.thread.start()
+            self.using_gpu_icon.set_color("green" if self.thread.using_gpu else "red")
+
+            if hasattr(self, 'btn_overlay_start'):
+                self.btn_overlay_start.setEnabled(True)
+            self.btn_start.setEnabled(False)
+            self.btn_stop.setEnabled(True)
+            self.btn_chat.setEnabled(True)
+            self.btn_agg_start.setEnabled(True)
+            self.btn_calib.setEnabled(True)
+
+        def on_fail(short, tb):
+            cleanup()
+            if self._was_cancelled:
+                return  # don't show error for cancel-induced failures
+
+            hint = ""
+            sl = short.lower()
+            if "huggingface" in sl or "getaddrinfo" in sl or "localentrynotfound" in sl or "connectionerror" in sl:
+                hint = ("<br><br><b>Model weights could not be downloaded.</b><br>"
+                        "• Check your internet connection<br>"
+                        "• huggingface.co may be blocked on your network<br>"
+                        "• Some institutional firewalls require a proxy")
+            elif "out of memory" in sl or "cuda" in sl:
+                hint = "<br><br><b>GPU initialization failed.</b><br>Try the CPU build or a smaller model."
+
+            QMessageBox.critical(
+                self,
+                "Could not load model",
+                f"<b>Failed to load '{model_name}'</b><br><br>"
+                f"<code>{short}</code>{hint}<br><br>"
+                f"<small>Full details saved to log file.</small>"
+            )
+
+        def on_finished():
+            """QThread.finished — emitted when run() returns, even on cancel/abort."""
+            if self._was_cancelled and self._progress_dlg:
+                cleanup()
+
+        def on_cancel():
+            self._was_cancelled = True
+            if self._loader and self._loader.isRunning():
+                self._loader.request_abort()
+            # The dialog stays open showing "Cancelling…" until on_finished fires.
+
+        self._loader.progress.connect(on_progress)
+        self._loader.finished_ok.connect(on_ok)
+        self._loader.failed.connect(on_fail)
+        self._loader.finished.connect(on_finished)   # ← Qt 自带 signal
+        self._progress_dlg.cancelled.connect(on_cancel)
+
+        self.btn_start.setEnabled(False)
+        self._loader.start()
+        self._progress_dlg.show()
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
         info = settings.MODEL_METADATA[self.cmb_model.currentText()].get("info", "No info.")
