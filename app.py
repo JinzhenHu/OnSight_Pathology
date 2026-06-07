@@ -1217,17 +1217,21 @@ class ImageClassificationApp(QMainWindow):
         self.btn_start = QPushButton("Start")
         self.btn_start.clicked.connect(self._start)
         self.btn_start.setEnabled(False)
+        self.btn_start.setToolTip("Select a screen region first to enable analysis.")
         v_ctrl.addWidget(self.btn_start)
 
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.clicked.connect(self._stop)
         self.btn_stop.setEnabled(False)
+        self.btn_stop.setToolTip("Stops the currently running analysis.")
         v_ctrl.addWidget(self.btn_stop)
 
         # --------------------Export button --------------------
         self.btn_export = QPushButton("Export")
         self.btn_export.clicked.connect(self._export)
         self.btn_export.setEnabled(False)
+        self.btn_export.setToolTip("Save the current annotated frame as an image. Available once analysis has produced a result.")
+
         v_ctrl.addWidget(self.btn_export)
 
         # --------------------Chat button --------------------
@@ -1237,6 +1241,7 @@ class ImageClassificationApp(QMainWindow):
             lambda: self._open_chat(self.cmb_llm.currentText(), "4bit") 
         )
         self.btn_chat.setEnabled(False)
+        self.btn_chat.setToolTip("Ask the AI assistant questions about the current frame. Available after analysis starts.")
         v_ctrl.addWidget(self.btn_chat)
 
         grp_ctrl.setLayout(v_ctrl)
@@ -1375,8 +1380,14 @@ class ImageClassificationApp(QMainWindow):
         self.btn_overlay_stop = QPushButton("Stop")
 
         self.btn_overlay_start.setEnabled(False) 
+        self.btn_overlay_start.setToolTip("Highlight regions of interest based on cluster or hotspot analysis. Available after analysis starts.")
+
         self.btn_overlay_pause.setEnabled(False)
+        self.btn_overlay_pause.setToolTip("Pause or resume the ROI overlay updates.")
+
         self.btn_overlay_stop.setEnabled(False)
+        self.btn_overlay_stop.setToolTip("Stop the ROI overlay and clear the highlights.")
+
 
         self.btn_overlay_start.clicked.connect(self._start_overlay)
         self.btn_overlay_pause.clicked.connect(self._pause_overlay)
@@ -1415,25 +1426,33 @@ class ImageClassificationApp(QMainWindow):
         self.btn_agg_start = QPushButton("Start")
         self.btn_agg_start.clicked.connect(self._agg_start)
         self.btn_agg_start.setEnabled(False)
+        self.btn_agg_start.setToolTip("Begin collecting multiple tiles for combined statistics. Start analysis first.")
+
         grid.addWidget(self.btn_agg_start, 0, 0)
 
         self.btn_agg_stop = QPushButton("Stop")
         self.btn_agg_stop.clicked.connect(self._agg_stop)
         self.btn_agg_stop.setEnabled(False)
+        
         grid.addWidget(self.btn_agg_stop, 0, 1)
 
         self.btn_reset = QPushButton("Reset")
         self.btn_reset.clicked.connect(self._on_reset)
         self.btn_reset.setEnabled(False)
+        self.btn_reset.setToolTip("Clear all collected tiles and reset aggregate statistics.")
+
         grid.addWidget(self.btn_reset, 0, 2)
 
         self.btn_calib = QPushButton("Calibrate")
         self.btn_calib.clicked.connect(self._calibrate_area)
         self.btn_calib.setEnabled(False)
+        self.btn_calib.setToolTip("Calibrate microns-per-pixel for the current magnification. Required for accurate physical measurements.")
+
         grid.addWidget(self.btn_calib, 0, 3)
 
         self.btn_agg_export = QPushButton("Export")
         self.btn_agg_export.setEnabled(False)
+        self.btn_agg_export.setToolTip("Export the aggregate analysis results. Available after analysis starts.")
         self.btn_agg_export.clicked.connect(self._agg_export)
         grid.addWidget(self.btn_agg_export, 0, 4)
 
