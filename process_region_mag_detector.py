@@ -12,6 +12,7 @@ from PIL import Image
 from ctypes import wintypes
 import ctypes
 import re
+from device_compat import get_device
 
 def fix_region(region, tile_size):
     reg = region.copy()
@@ -103,7 +104,7 @@ def process_region(region, **kwargs):
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
     #print(frame.shape)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
     if abs(os_scale - 1.0) > 1e-3:
         frame = cv2.resize(

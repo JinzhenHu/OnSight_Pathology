@@ -4,7 +4,8 @@ import time
 import torch
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QMessageBox
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-
+from torch.mps import empty_cache
+from device_compat import empty_cache
 from utils import load_model
 import settings
 
@@ -61,7 +62,7 @@ class MagDetectorThread(QThread):
             if using_gpu:
                 del model
                 gc.collect()
-                torch.cuda.empty_cache()
+                empty_cache()
 
         except Exception as e:
             self.error_occurred.emit(str(e))
