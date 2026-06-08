@@ -480,7 +480,7 @@ class ImageClassificationApp(QMainWindow):
         self.settings_file = get_user_settings_path()
         self.settings = self._load_settings()
         # UI scaleing factor 
-        default_scale = 0.85 if sys.platform == "darwin" else 1.0
+        default_scale = 0.8 if sys.platform == "darwin" else 1.0
         self.ui_scale = self.settings.get("ui_scale", default_scale)
 
 
@@ -643,7 +643,6 @@ class ImageClassificationApp(QMainWindow):
             scale_hints.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addLayout(scale_hints)
         
-        # 按钮
         layout.addSpacing(8)
         btns = QHBoxLayout()
         cancel = QPushButton("Cancel")
@@ -1458,7 +1457,7 @@ class ImageClassificationApp(QMainWindow):
         main_left.addWidget(self.grp_cfg)
 
 
-        grp_roi = QGroupBox("ROI Finder")
+        grp_roi = CollapsibleGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
@@ -1577,7 +1576,7 @@ class ImageClassificationApp(QMainWindow):
         h_overlay_ctrl.addWidget(self.btn_overlay_stop)
         v_roi.addLayout(h_overlay_ctrl)
 
-        grp_roi.setLayout(v_roi)
+        grp_roi.content_layout().addLayout(v_roi)
         main_left.addWidget(grp_roi)
 
         # -------------------- LLM selection -----------------------------
@@ -1984,7 +1983,7 @@ class ImageClassificationApp(QMainWindow):
         v_out.addWidget(self.lbl_img)
         
         # -------------------- ROI Finder ------------------------------
-        grp_roi = QGroupBox("ROI Finder")
+        grp_roi = CollapsibleGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
@@ -2091,7 +2090,7 @@ class ImageClassificationApp(QMainWindow):
         h_overlay_ctrl.addWidget(self.btn_overlay_stop)
         v_roi.addLayout(h_overlay_ctrl)
 
-        grp_roi.setLayout(v_roi)
+        grp_roi.content_layout().addLayout(v_roi)
         v_out.addWidget(grp_roi)
 
         self.lbl_res = QLabel("Result:")
