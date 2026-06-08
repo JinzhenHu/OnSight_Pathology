@@ -1265,7 +1265,7 @@ class ImageClassificationApp(QMainWindow):
         v_ctrl.addWidget(self.btn_stop)
 
         # --------------------Export button --------------------
-        self.btn_export = QPushButton("Export")
+        self.btn_export = QPushButton("Save Frame")
         self.btn_export.clicked.connect(self._export)
         self.btn_export.setEnabled(False)
         self.btn_export.setToolTip("Save the current annotated frame as an image. Available once analysis has produced a result.")
@@ -1517,7 +1517,21 @@ class ImageClassificationApp(QMainWindow):
 
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        self.lbl_img.setMinimumSize(200, 200)
+        self.lbl_img.setStyleSheet(
+            "QLabel { background-color:#f4f6f8; border:1px dashed #c8d0d8; "
+            "border-radius:6px; color:#7d8a99; }"
+        )
+        self.lbl_img.setText(
+            "<div style='text-align:center; line-height:1.6; padding-top:40px;'>"
+            "<div style='font-size:32pt; margin-bottom:2px;'>🔬</div>"
+            "<div style='font-size:11pt; color:#4a5568; margin-top:0px;'><b>No analysis running</b></div>"
+            "<div style='font-size:9pt; color:#7d8a99; margin-top:4px;'>"
+            "1. Select a screen region<br>"
+            "2. Pick a model<br>"
+            "3. Click Start"
+            "</div></div>"
+        )
         lbl_layout = QVBoxLayout(self.lbl_img)
         lbl_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -1606,7 +1620,7 @@ class ImageClassificationApp(QMainWindow):
         grid_ctrl = QGridLayout()
         self.btn_start = QPushButton("Start")
         self.btn_stop = QPushButton("Stop")
-        self.btn_export = QPushButton("Export")
+        self.btn_export = QPushButton("Save Frame")
         self.btn_chat = QPushButton("Chat with LLM")
 
         self.btn_start.clicked.connect(self._start)
@@ -1782,7 +1796,21 @@ class ImageClassificationApp(QMainWindow):
 
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        self.lbl_img.setMinimumSize(200, 200)
+        self.lbl_img.setStyleSheet(
+            "QLabel { background-color:#f4f6f8; border:1px dashed #c8d0d8; "
+            "border-radius:6px; color:#7d8a99; }"
+        )
+        self.lbl_img.setText(
+            "<div style='text-align:center; line-height:1.6; padding-top:40px;'>"
+            "<div style='font-size:32pt; margin-bottom:2px;'>🔬</div>"
+            "<div style='font-size:11pt; color:#4a5568; margin-top:0px;'><b>No analysis running</b></div>"
+            "<div style='font-size:9pt; color:#7d8a99; margin-top:4px;'>"
+            "1. Select a screen region<br>"
+            "2. Pick a model<br>"
+            "3. Click Start"
+            "</div></div>"
+        )
         lbl_layout = QVBoxLayout(self.lbl_img)
         lbl_layout.setContentsMargins(0, 0, 0, 0)
         
