@@ -60,18 +60,11 @@ def get_bundled_model_names():
 
 def _get_weights_path(model_info, hf_repo, hf_filename):
     """
-    Resolves model weights path. Behavior depends on build mode:
-
-      LOCAL+HF build:
-        1. If model_info has 'local_path' and the file exists → return it
-        2. Else → fall back to HuggingFace download
-
-      HF-ONLY build:
-        Always download from HuggingFace.
-
-    The behavior is controlled at build time by whether bundled_models/
-    is included in the PyInstaller bundle (see app.spec).
+    Resolves weights path. Order:
+      1. Bundled local file (if exists)
+      2. Download from HF to an app-owned directory using `local_dir`
     """
+    # ----- 1. Try bundled -----
     if BUNDLE_MODE_ENABLED:
         local_rel = model_info.get("local_path")
         if local_rel:
@@ -79,14 +72,35 @@ def _get_weights_path(model_info, hf_repo, hf_filename):
             if os.path.exists(local_abs):
                 logging.info(f"[weights] Loading bundled: {local_abs}")
                 return local_abs
-            logging.warning(
-                f"[weights] Bundled file missing ({local_abs}), "
-                f"falling back to HuggingFace."
-            )
 
-    logging.info(f"[weights] Downloading from HF: {hf_repo} / {hf_filename}")
+    # ----- 2. Download to local_dir (REAL FILES, no symlinks) -----
     from huggingface_hub import hf_hub_download
-    return hf_hub_download(repo_id=hf_repo, filename=hf_filename)
+
+    # Per-repo subdirectory under our app-owned cache
+    safe_repo = hf_repo.replace("/", "__")
+    download_dir = os.path.join(
+        os.environ.get("HF_HUB_CACHE",
+                       os.path.join(os.environ["LOCALAPPDATA"],
+                                    "OnSightPathology", "hf_cache", "hub")),
+        "_local_dir_downloads",
+        safe_repo,
+    )
+    os.makedirs(download_dir, exist_ok=True)
+
+    target = os.path.join(download_dir, hf_filename)
+
+    # If we already downloaded once and the file is non-empty, reuse it
+    if os.path.exists(target) and os.path.getsize(target) > 0:
+        logging.info(f"[weights] Reusing existing download: {target}")
+        return target
+
+    logging.info(f"[weights] Downloading to local_dir: {download_dir}")
+    path = hf_hub_download(
+        repo_id=hf_repo,
+        filename=hf_filename,
+        local_dir=download_dir,    
+    )
+    return path
 
 def extract_tiles(frame, tile_size):
     slices = []
@@ -159,7 +173,7 @@ def load_model(model_info):
             model = timm.create_model(
                 model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
                 dynamic_img_size=True,
-                pretrained=True, )
+                pretrained=False, )
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             num_features = model.num_features
@@ -195,7 +209,7 @@ def load_model(model_info):
             model = timm.create_model(
             model_name="hf-hub:1aurent/vit_small_patch16_224.kaiko_ai_towards_large_pathology_fms",
                # dynamic_img_size=True,
-                pretrained=True, )
+                pretrained=False, )
 
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

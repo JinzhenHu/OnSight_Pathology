@@ -180,3 +180,34 @@ coll = COLLECT(
 )
 
 #python -m py_compile app.spec
+
+#打 Local + HF 版（默认，带本地权重）
+#:: 清理旧产物
+#rmdir /s /q build
+#rmdir /s /q dist
+
+#:: 设环境变量并打包
+#set ONSIGHT_BUILD=local
+#pyinstaller app.spec
+
+#:: 编 installer
+#"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DBuildMode=local installer.iss
+
+#:: 用完清环境变量
+#set ONSIGHT_BUILD=
+#set "ONSIGHT_BUILD=local"&& pyinstaller app.spec
+#打纯 HF 版（不带本地权重）
+#:: 清理旧产物
+#rmdir /s /q build
+#rmdir /s /q dist
+
+#:: 设环境变量并打包
+#set ONSIGHT_BUILD=hf
+#pyinstaller app.spec
+
+#:: 编 installer
+#"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DBuildMode=hf installer.iss
+
+#:: 清环境变量
+#set ONSIGHT_BUILD=
+#set "ONSIGHT_BUILD=hf"&& pyinstaller app.spec

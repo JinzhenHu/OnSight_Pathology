@@ -1517,7 +1517,7 @@ class ImageClassificationApp(QMainWindow):
 
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_img.setMinimumSize(200, 200)
+        #self.lbl_img.setMinimumSize(200, 200)
         self.lbl_img.setStyleSheet(
             "QLabel { background-color:#f4f6f8; border:1px dashed #c8d0d8; "
             "border-radius:6px; color:#7d8a99; }"
@@ -1796,7 +1796,7 @@ class ImageClassificationApp(QMainWindow):
 
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_img.setMinimumSize(200, 200)
+        #self.lbl_img.setMinimumSize(200, 200)
         self.lbl_img.setStyleSheet(
             "QLabel { background-color:#f4f6f8; border:1px dashed #c8d0d8; "
             "border-radius:6px; color:#7d8a99; }"
@@ -2187,7 +2187,7 @@ class ImageClassificationApp(QMainWindow):
 
         # CENTRAL 1/3 × 1/3  CALIBRATION BOX
         if self.show_calib_box:
-            bx = int(w / 3);4
+            bx = int(w / 3);
             by = int(h / 3)  
             cx = (w - bx) // 2;
             cy = (h - by) // 2 
