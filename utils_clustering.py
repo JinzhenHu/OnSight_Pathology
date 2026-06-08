@@ -16,6 +16,10 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from huggingface_hub import hf_hub_download
 from pathlib import Path
+from device_compat import is_amp_supported, autocast_device_type, empty_cache
+import sys
+_KMEANS_KW = {'algorithm': 'lloyd'} if sys.platform == 'darwin' else {}
+
 _MODEL_CACHE = {}
 def relabel_and_filter_masks(masks, min_area=20, max_area=100000, min_solidity=0.80):
     new_masks = np.zeros_like(masks, dtype=np.int32)
@@ -144,14 +148,15 @@ def get_cached_kaiko(device):
 def extract_embeddings_lemon(crops, model, transform, device, batch_size=64):
 
     all_embs = []
-    use_amp = "cuda" in str(device)
+    use_amp = is_amp_supported() and "cuda" in str(device)
 
     for i in range(0, len(crops), batch_size):
         batch = crops[i : i + batch_size]
         
         batch_tensor = torch.stack([transform(img) for img in batch]).to(device)
         
-        with torch.autocast(device_type=("cuda" if use_amp else "cpu"), enabled=use_amp, dtype=torch.float16):
+        with torch.autocast(device_type=autocast_device_type(), enabled=use_amp, dtype=torch.float16):
+
             embs = model(batch_tensor)
             
         all_embs.append(embs.cpu().float().numpy())
@@ -171,7 +176,8 @@ def extract_embeddings_kaiko(crops, model, transform, device, batch_size=64):
 
         batch_tensor = torch.stack([transform(img) for img in batch]).to(device)
         
-        with torch.autocast(device_type=("cuda" if use_amp else "cpu"), enabled=use_amp):
+        with torch.autocast(device_type=autocast_device_type(), enabled=use_amp):
+
             embs = model(batch_tensor)
 
         all_embs.append(embs.cpu().float().numpy())
@@ -203,7 +209,7 @@ def cluster_embeddings_lemon(embeddings, k, random_state=0):
     else:
         Xp = Xs
 
-    km = KMeans(n_clusters=valid_k, n_init=20, random_state=random_state)
+    km = KMeans(n_clusters=valid_k, n_init=20, random_state=random_state, **_KMEANS_KW)
     labels = km.fit_predict(Xp)
     return labels
 
@@ -244,7 +250,7 @@ def perform_keamns(df_ready_for_cluster, n_clusters):
     if valid_k == 1:
         return np.zeros(n_samples, dtype=np.int32)
     
-    km = KMeans(n_clusters=valid_k, random_state=42, n_init=20)
+    km = KMeans(n_clusters=valid_k, random_state=42, n_init=20, **_KMEANS_KW)
     clusters = km.fit_predict(X)
     return clusters
 
@@ -320,5 +326,4 @@ def clear_cluster_models_cache(keep=None):
         del _MODEL_CACHE['kaiko']
         
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    empty_cache()

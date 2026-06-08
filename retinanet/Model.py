@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw
 import time
 import os
 import sys
+from device_compat import get_device
 
 def resource_path(relative_path):
     """Get absolute path to resource (for dev and for PyInstaller onefile mode)"""
@@ -57,19 +58,13 @@ class MyMitosisDetection:
 		self.batchsize = config["data"]["value"]["batch_size"]
 
 		self.anchors = create_anchors(sizes=sizes, ratios=ratios, scales=scales)
-		self.device = torch.device('cpu' if not torch.cuda.is_available() else 'cuda')
+		self.device = get_device()
 
 	def load_model(self):
-		if torch.cuda.is_available():
-			print("Model loaded on CUDA")
-			self.model.load_state_dict(torch.load(self.path_model, weights_only=False)['model'])
-		else:
-			print("Model loaded on CPU")
-			self.model.load_state_dict(torch.load(self.path_model, map_location='cpu', weights_only=False)['model'])
-
+		state = torch.load(self.path_model, map_location='cpu', weights_only=False)['model']
+		self.model.load_state_dict(state)
 		self.model.to(self.device)
-
-		logging.info("Model loaded. Mean: {} ; Std: {}".format(self.mean, self.std))
+		logging.info(f"Model loaded on {self.device}. Mean: {self.mean} ; Std: {self.std}")
 		return True
 
 	# def process_image(self, input_image):

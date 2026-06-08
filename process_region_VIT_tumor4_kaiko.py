@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from PIL import Image
 from pytorch_grad_cam import GradCAMPlusPlus
 from torchvision.transforms import v2
-
+from device_compat import get_device
 
 def reshape_transform(tensor, height=14, width=14):
     result = tensor[:, 1:, :].reshape(tensor.size(0), height, width, tensor.size(2))
@@ -68,7 +68,7 @@ def process_region(region, **kwargs):
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
     #print(frame.shape)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
     h, w = frame.shape[:2]
 

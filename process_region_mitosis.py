@@ -9,6 +9,9 @@ from retinanet.utlis.nms_WSI import nms, nms_patch
 from ultralytics.utils.plotting import Annotator
 import itertools
 import math
+from device_compat import get_device
+
+
 def _safe_float(value, default=0.2):
     """
     Return float(value) if it is a valid numeric string/number,
@@ -28,7 +31,7 @@ def fix_region(region, tile_size):
 
 def process_region(region, **kwargs):
 
-    device = torch.device("cuda")
+    device = get_device()
 
     thred = 0.1
     
