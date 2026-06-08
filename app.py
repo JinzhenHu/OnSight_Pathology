@@ -6,6 +6,36 @@
 
 import os
 import sys
+
+import os
+import sys
+
+# ============================================================
+# macOS (Apple Silicon + PyInstaller)
+# ============================================================
+if sys.platform == "darwin":
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+    import ssl
+    try:
+        _ctx = ssl._create_unverified_context
+    except AttributeError:
+        pass
+    else:
+        ssl._create_default_https_context = _ctx
+    try:
+        import pkg_resources
+        pkg_resources.require = lambda *a, **kw: []
+    except ImportError:
+        pass
+
+# ============================================================
+# ============================================================
+
 import logging
 # ONLY FOR CPU EXE
 if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
