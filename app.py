@@ -6,10 +6,6 @@
 
 import os
 import sys
-
-import os
-import sys
-
 # ============================================================
 # macOS (Apple Silicon + PyInstaller)
 # ============================================================
@@ -175,6 +171,7 @@ from custom_widgets.ResizeImageDialog import ResizableImageDialog
 from custom_widgets.mag_detector_widget import MagDetectorWidget
 from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
+from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
 from model_loader_thread import ModelLoaderThread
 
 def run_llm_worker_if_requested() -> None:
@@ -533,7 +530,7 @@ class ImageClassificationApp(QMainWindow):
         self.shortcut_add = sc_add
 
         # First-launch welcome 
-        QTimer.singleShot(300, self._maybe_show_welcome)
+        QTimer.singleShot(300, self._show_welcome_then_check_permissions)
 
     def _create_menu_bar(self):
         menu_bar = self.menuBar()  # QMainWindow provides this
@@ -670,6 +667,16 @@ class ImageClassificationApp(QMainWindow):
             if dlg.is_dont_show_checked():
                 self.settings["suppress_welcome"] = True
                 self._save_settings()
+    def _show_welcome_then_check_permissions(self):
+        """Show WelcomeDialog (if applicable), THEN check macOS permissions.
+        
+        Sequencing matters: WelcomeDialog.exec() is blocking, so the permission
+        check runs only after the user closes Welcome. Prevents the two dialogs
+        from stacking on top of each other on startup.
+        """
+        self._maybe_show_welcome()
+
+        QTimer.singleShot(200, lambda: check_and_prompt_permissions(self))
 
     def _save_settings(self):
         """Saves current settings to the JSON file."""
