@@ -41,7 +41,7 @@ class WelcomeDialog(QDialog):
 
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
-        t1 = QLabel("<h2 style='margin:0;'>👋 Welcome to OnSight Pathology</h2>")
+        t1 = QLabel("<h2 style='margin:0; color:#2c3e50;'>👋 Welcome to OnSight Pathology</h2>")
         t2 = QLabel(
             "<span style='color:#5a6772; font-size:10pt;'>"
             "Real-time AI analysis for digital pathology"
