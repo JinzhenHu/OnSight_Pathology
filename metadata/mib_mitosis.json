@@ -2,6 +2,7 @@
   "repo": "diamandislabii/Mitosis-detection",
   "repo_src": "HuggingFace",
   "info": "Mitosis Detection Model trained using Retinanet",
+  "local_path": "bundled_models/retinanet_mitosis.pth",
   "mpp": 0.25,
   "model": "Retinanet",
   "tile_size": 512,

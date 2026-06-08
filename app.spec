@@ -1,4 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os as _os
+import sys as _sys
+
+# ============================================================================
+# BUILD MODE SELECTOR
+# ----------------------------------------------------------------------------
+# Set environment variable ONSIGHT_BUILD before running pyinstaller:
+#   default / "local"   → bundle weights into the installer (LOCAL+HF mode)
+#   "hf"                → no bundled weights, all models download from HF
+#
+# Usage:
+#   PowerShell:
+#     $env:ONSIGHT_BUILD="local"; pyinstaller app.spec   # bundled
+#     $env:ONSIGHT_BUILD="hf";    pyinstaller app.spec   # HF-only
+#
+#   CMD:
+#     set ONSIGHT_BUILD=local && pyinstaller app.spec
+#     set ONSIGHT_BUILD=hf    && pyinstaller app.spec
+# ============================================================================
+_ONSIGHT_BUILD = _os.environ.get("ONSIGHT_BUILD", "local").lower()
+_BUNDLE_MODELS = (_ONSIGHT_BUILD == "local")
+
+_banner = "=" * 60
+print(f"\n{_banner}\nOnSight build mode: "
+      f"{'LOCAL + HF (bundling weights)' if _BUNDLE_MODELS else 'HF-ONLY (no bundled weights)'}"
+      f"\n{_banner}\n", file=_sys.stderr)
 
 from PyInstaller.utils.hooks import (
     collect_data_files,
@@ -37,6 +63,7 @@ a = Analysis(
     datas=
         [("metadata/*.json", "metadata")]
         + [("local_models/*", "local_models")]
+        + ([("bundled_models/*", "bundled_models")] if _BUNDLE_MODELS else [])
         + [
             ("retinanet/file/config.yaml", "retinanet/file"),
             ("retinanet/file/statistics_sdata.pickle", "retinanet/file"),
@@ -149,7 +176,7 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='app',
+    name=('app_local' if _BUNDLE_MODELS else 'app_hf'),   # ← 输出夹名
 )
 
 #python -m py_compile app.spec

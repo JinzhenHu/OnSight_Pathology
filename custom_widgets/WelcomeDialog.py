@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QIcon, QDesktopServices
 from PyQt6.QtCore import QUrl
-
+from utils import BUNDLE_MODE_ENABLED, get_bundled_model_names
 
 class WelcomeDialog(QDialog):
     """
@@ -84,14 +84,41 @@ class WelcomeDialog(QDialog):
             'and click <b>Start</b>. Analysis runs in real time.'
         ))
 
-        # --- Tip ---
-        tip = QLabel(
-            "<div style='background-color:#eef5ff; border-left:3px solid #339af0; "
-            "padding:10px 12px; border-radius:4px; color:#34495e; font-size:10pt;'>"
-            "💡 <b>Tip:</b> The first time you use a model, it will download "
-            "automatically (a few hundred MB)."
-            "</div>"
-        )
+        # --- Tip (adapts to build mode) ---
+        if BUNDLE_MODE_ENABLED:
+            bundled = get_bundled_model_names()
+            if bundled:
+                if len(bundled) > 3:
+                    shown = ", ".join(bundled[:3]) + f", and {len(bundled)-3} more"
+                else:
+                    shown = ", ".join(bundled)
+                tip_html = (
+                    "<div style='background-color:#e6f7f0; border-left:3px solid #1abc9c; "
+                    "padding:10px 12px; border-radius:4px; color:#2c3e50; font-size:10pt;'>"
+                    f"✅ <b>Ready to go:</b> Bundled models ({shown}) load with no internet required."
+                    "<br><span style='color:#5a6772; font-size:9.5pt;'>"
+                    "Other models will download automatically for the first use.</span>"
+                    "</div>"
+                )
+            else:
+                # Bundle mode enabled but no models found 
+                tip_html = (
+                    "<div style='background-color:#eef5ff; border-left:3px solid #339af0; "
+                    "padding:10px 12px; border-radius:4px; color:#34495e; font-size:10pt;'>"
+                    "💡 <b>First-time download:</b> The first time you use a model, "
+                    "it will download automatically (a few hundred MB per model). "
+                    "</div>"
+                )
+        else:
+            tip_html = (
+                "<div style='background-color:#eef5ff; border-left:3px solid #339af0; "
+                "padding:10px 12px; border-radius:4px; color:#34495e; font-size:10pt;'>"
+                "💡 <b>First-time download:</b> The first time you use a model, "
+                "it will download automatically (a few hundred MB per model). "
+                "</div>"
+            )
+
+        tip = QLabel(tip_html)
         tip.setTextFormat(Qt.TextFormat.RichText)
         tip.setWordWrap(True)
         main.addWidget(tip)

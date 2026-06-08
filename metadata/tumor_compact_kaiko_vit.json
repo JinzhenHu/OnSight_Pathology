@@ -2,6 +2,7 @@
   "repo": "diamandislabii/KaikoVIT_Tumor4Class",
   "repo_src": "HuggingFace",
   "info": "This H&E brain tumor classifier was developed using transfer learning on a Vision Transformer(Kaiko) petrained on WSIs",
+  "local_path": "bundled_models/tumor_4class.pth",
   "mpp": 0.504,
   "model": "VITtumor_kaiko",
   "tile_size": 1024,

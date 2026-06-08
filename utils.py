@@ -22,6 +22,71 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+import logging
+
+# ============================================================================
+# Build mode detection (runs once at import)
+# ----------------------------------------------------------------------------
+# LOCAL+HF mode: bundled_models/ directory exists → prefer bundled weights,
+#                fall back to HuggingFace download if a specific file missing.
+# HF-ONLY mode:  no bundled_models/ → always download from HuggingFace.
+#
+# The packaging script (app.spec) decides which mode to build by including
+# or excluding the bundled_models/ folder. Runtime requires no changes.
+# ============================================================================
+_BUNDLED_DIR = resource_path("bundled_models")
+BUNDLE_MODE_ENABLED = os.path.isdir(_BUNDLED_DIR)
+logging.info(
+    f"[build_mode] {'LOCAL+HF' if BUNDLE_MODE_ENABLED else 'HF-ONLY'} "
+    f"(bundled_models dir: {_BUNDLED_DIR})"
+)
+
+def get_bundled_model_names():
+    """Return list of human-friendly names of bundled models (for UI display)."""
+    if not BUNDLE_MODE_ENABLED:
+        return []
+    try:
+        import settings
+        names = []
+        for cat, items in settings.MODEL_CATELOG:
+            for item in items:
+                meta = settings.MODEL_METADATA.get(item['name'], {})
+                local_rel = meta.get("local_path")
+                if local_rel and os.path.exists(resource_path(local_rel)):
+                    names.append(item['name'])
+        return names
+    except Exception:
+        return []
+
+def _get_weights_path(model_info, hf_repo, hf_filename):
+    """
+    Resolves model weights path. Behavior depends on build mode:
+
+      LOCAL+HF build:
+        1. If model_info has 'local_path' and the file exists → return it
+        2. Else → fall back to HuggingFace download
+
+      HF-ONLY build:
+        Always download from HuggingFace.
+
+    The behavior is controlled at build time by whether bundled_models/
+    is included in the PyInstaller bundle (see app.spec).
+    """
+    if BUNDLE_MODE_ENABLED:
+        local_rel = model_info.get("local_path")
+        if local_rel:
+            local_abs = resource_path(local_rel)
+            if os.path.exists(local_abs):
+                logging.info(f"[weights] Loading bundled: {local_abs}")
+                return local_abs
+            logging.warning(
+                f"[weights] Bundled file missing ({local_abs}), "
+                f"falling back to HuggingFace."
+            )
+
+    logging.info(f"[weights] Downloading from HF: {hf_repo} / {hf_filename}")
+    from huggingface_hub import hf_hub_download
+    return hf_hub_download(repo_id=hf_repo, filename=hf_filename)
 
 def extract_tiles(frame, tile_size):
     slices = []
@@ -84,7 +149,7 @@ def load_model(model_info):
         ##############################################################################
         if model_info['model'] == 'VITtumor_kaiko':
             from huggingface_hub import hf_hub_download
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="best_kaikuo_20000image.pth")
+            model_path = _get_weights_path(model_info, model_info['repo'], "best_kaikuo_20000image.pth")
             #model_path = r"D:\UofT\2025fall\OnSight\Revisions\4_Class_Tumor_VIT\best_model_tumor_4class.pth"
             import timm
             import torch
@@ -121,7 +186,7 @@ def load_model(model_info):
         if model_info['model'] == 'VITmagnification_kaiko':
             from huggingface_hub import hf_hub_download
             #model_path = r"D:\UofT\2025fall\OnSight\Revisions\Mag_Detector\best_model.pth"
-            model_path = hf_hub_download("diamandislabii/Magnification_Detection", filename="best_model.pth")
+            model_path = _get_weights_path(model_info, "diamandislabii/Magnification_Detection", "best_model.pth")
             import timm
             import torch
             import torch.nn as nn
@@ -239,7 +304,7 @@ def load_model(model_info):
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="CellViT-SAM-H-x40.pth")
+            model_path = _get_weights_path(model_info, model_info['repo'], "CellViT-SAM-H-x40.pth")
 
             model_file, mean, std, type_id_to_name, tissue_id_to_name, device = load_cellvit_sam_weights(
                 model_path,
@@ -270,7 +335,7 @@ def load_model(model_info):
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            model_path = hf_hub_download(repo_id=model_info['repo'], filename="bestmodel.pth")
+            model_path = _get_weights_path(model_info, model_info['repo'], "bestmodel.pth")
             config_path = resource_path("retinanet/file/config.yaml")
 
             with open(config_path, "r") as f:
@@ -320,7 +385,7 @@ def load_model(model_info):
             from process_region_YOLO import process_region
             from huggingface_hub import hf_hub_download
 
-            weights_path = hf_hub_download(repo_id=model_info['repo'], filename="best.pt")
+            weights_path = _get_weights_path(model_info, model_info['repo'], "best.pt")
 
             res['model'] = YOLO(weights_path)
             res['process_region_func'] = process_region

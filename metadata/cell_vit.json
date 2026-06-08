@@ -2,6 +2,7 @@
   "repo": "diamandislabii/CellViT-Sam",
   "repo_src": "HuggingFace",
   "info": "CellViT-SAM-H realtime nuclei segmentation and classification(Beta)",
+  "local_path": "bundled_models/cellvit_sam.pth",
   "mpp": 0.25,
   "model": "CellViT",
   "tile_size": 256,

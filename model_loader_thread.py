@@ -30,7 +30,22 @@ class ModelLoaderThread(QThread):
 
     def run(self):
         try:
-            self.progress.emit("Preparing…", -1, 0, 0)
+            try:
+                import settings
+                import os
+                from utils import resource_path
+
+                meta = settings.MODEL_METADATA.get(self.model_name, {})
+                local_rel = meta.get("local_path")
+                if local_rel and os.path.exists(resource_path(local_rel)):
+                    self.progress.emit("Loading bundled model…", -1, 0, 0)
+                else:
+                    self.progress.emit("Connecting to HuggingFace…", -1, 0, 0)
+            except Exception:
+                pass
+
+            # self._install_hf_progress_hook()
+            # self.progress.emit("Preparing…", -1, 0, 0)
             self._install_hf_progress_hook()
 
             if self._abort:
