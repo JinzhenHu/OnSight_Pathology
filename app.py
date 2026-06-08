@@ -35,6 +35,20 @@ if sys.platform == "darwin":
 
 # ============================================================
 # ============================================================
+import json, os
+try:
+    _settings_path = os.path.join(
+        os.path.expanduser("~"),
+        "Library/Application Support" if sys.platform == "darwin" else "AppData/Local",
+        "OnSightPathology", "Settings", "settings.json"
+    )
+    with open(_settings_path) as f:
+        _saved_scale = json.load(f).get("ui_scale", 1.0)
+    os.environ["QT_SCALE_FACTOR"] = str(_saved_scale)
+except Exception:
+    pass  
+# ============================================================
+# ============================================================
 
 import logging
 # ONLY FOR CPU EXE
@@ -465,6 +479,9 @@ class ImageClassificationApp(QMainWindow):
 
         self.settings_file = get_user_settings_path()
         self.settings = self._load_settings()
+        # UI scaleing factor 
+        default_scale = 0.85 if sys.platform == "darwin" else 1.0
+        self.ui_scale = self.settings.get("ui_scale", default_scale)
 
 
         # dictionary management for MPP (5x, 10x, 20x, 40x) >>>
@@ -486,6 +503,7 @@ class ImageClassificationApp(QMainWindow):
         self._switch_view(compact=False)
         # Setup the menu bar
         self._create_menu_bar()
+        
 
         ##############################################################################################################################################
         # Aggregate Function new functions
@@ -522,6 +540,10 @@ class ImageClassificationApp(QMainWindow):
 
         # ---------------- View menu ---------------
         view_menu = menu_bar.addMenu("View")
+        settings_menu = menu_bar.addMenu("Edit" if sys.platform == "win32" else "OnSight")
+        pref_action = settings_menu.addAction("Preferences" if sys.platform == "darwin" else "Settings")
+        #pref_action.setShortcut("Ctrl+,")    
+        pref_action.triggered.connect(self._open_preferences)
 
         # Checkable action for compact view
         self.compact_action = QAction("Compact", self)
@@ -550,6 +572,95 @@ class ImageClassificationApp(QMainWindow):
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return {}  
+        
+    def _set_ui_scale(self, scale):
+        reply = QMessageBox.question(
+            self, "Restart Required",
+            f"UI scale will change to {int(scale*100)}%.\n"
+            f"OnSight needs to restart. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Persist the new scale value
+        self.settings["ui_scale"] = scale
+        self._save_settings()
+
+        # Relaunch the app
+        import subprocess
+        if sys.platform == "darwin" and ".app/" in sys.executable:
+            # macOS .app bundle: use `open -n` to spawn a fresh instance
+            # of the bundle (preserves Dock icon, menu bar, permissions).
+            app_path = sys.executable.split(".app/")[0] + ".app"
+            subprocess.Popen(["open", "-n", app_path])
+        else:
+            # Windows .exe or running from source: relaunch the same interpreter
+            subprocess.Popen([sys.executable] + sys.argv)
+
+        QApplication.quit()
+
+    def _open_preferences(self):
+        from PyQt6.QtWidgets import QDialog, QSlider, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
+        from PyQt6.QtCore import Qt
+        
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Preferences")
+        dlg.setFixedWidth(360)
+        
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+        
+        title = QLabel("Interface Size")
+        title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        desc = QLabel("Adjust the overall size of text, buttons, and panels.")
+        desc.setStyleSheet("color: #888; font-size: 11px;")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+        
+        value_label = QLabel(f"{int(self.ui_scale * 100)}%")
+        value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        value_label.setStyleSheet("font-size: 24px; font-weight: 300; color: #2563eb;")
+        layout.addWidget(value_label)
+        
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(70, 130)             
+        slider.setSingleStep(5)
+        slider.setPageStep(5)
+        slider.setTickInterval(10)
+        slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        slider.setValue(int(self.ui_scale * 100))
+        slider.valueChanged.connect(lambda v: value_label.setText(f"{v - v % 5}%"))
+        layout.addWidget(slider)
+        
+        scale_hints = QHBoxLayout()
+        for txt in ["Smaller", "Default", "Larger"]:
+            lbl = QLabel(txt)
+            lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+            scale_hints.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addLayout(scale_hints)
+        
+        # 按钮
+        layout.addSpacing(8)
+        btns = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dlg.reject)
+        apply = QPushButton("Apply & Restart")
+        apply.setDefault(True)
+        apply.setStyleSheet("background:#2563eb; color:white; padding:6px 16px; border-radius:4px;")
+        apply.clicked.connect(dlg.accept)
+        btns.addStretch()
+        btns.addWidget(cancel)
+        btns.addWidget(apply)
+        layout.addLayout(btns)
+        
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_scale = (slider.value() - slider.value() % 5) / 100.0
+            if abs(new_scale - self.ui_scale) > 0.001:
+                self._set_ui_scale(new_scale)
         
     def _maybe_show_welcome(self):
             """Show welcome dialog on first launch (or until user opts out)."""
