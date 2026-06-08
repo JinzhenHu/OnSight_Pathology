@@ -173,6 +173,7 @@ from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
 from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
 from model_loader_thread import ModelLoaderThread
+from device_compat import empty_cache
 
 def run_llm_worker_if_requested() -> None:
     """If launched with --run-llm-worker, start worker process and exit."""
@@ -367,6 +368,8 @@ class ClassificationThread(QThread):
             self.process_region = res["process_region_func"]
             self.using_gpu = res["using_gpu"]
 
+        self.finished.connect(self._on_finished)
+
     @classmethod
     def from_loaded(cls, ui_instance, model_name, preloaded):
         return cls(ui_instance, model_name, preloaded=preloaded)
@@ -407,6 +410,8 @@ class ClassificationThread(QThread):
                     metadata=self.metadata,
                     additional_configs=extra_cfg,
                 )
+                if not self.running:
+                    break
                 res_txt += f"<br><span style='color:gray; font-size:8pt;'>({time.time() - t0:.4f}s)</span>"
                 self.update_image.emit(frame, res_txt, metrics)
                 #time.sleep(0.1)
@@ -439,14 +444,22 @@ class ClassificationThread(QThread):
                 time.sleep(2)
 
     def stop(self):
+        """Non-blocking stop. Signals the worker to exit and returns immediately
+        so the UI thread never freezes.
+        """
         self.running = False
-        self.wait()
+        # DELIBERATELY no self.wait() — that was the cause of reviewer's freeze.
 
-        #free the model from GPU memory
+    def _on_finished(self):
+        """Runs after the worker's run() returns. Cleans up GPU memory.
+        """
         if self.using_gpu:
-            del self.model
-            gc.collect()
-            torch.cuda.empty_cache()
+            try:
+                del self.model
+                gc.collect()
+                empty_cache()  
+            except Exception as e:
+                logging.warning(f"Cleanup after stop failed (non-fatal): {e}")
 
 
 ##############################################################################################################################################
@@ -667,6 +680,7 @@ class ImageClassificationApp(QMainWindow):
             if dlg.is_dont_show_checked():
                 self.settings["suppress_welcome"] = True
                 self._save_settings()
+                
     def _show_welcome_then_check_permissions(self):
         """Show WelcomeDialog (if applicable), THEN check macOS permissions.
         
@@ -2284,26 +2298,50 @@ class ImageClassificationApp(QMainWindow):
         if self.selected_region is None:
             QMessageBox.warning(self, "No region", "Please select a screen region first.")
             return
-        if self.thread and self.thread.isRunning():
-            self.thread.stop()
-            self.thread = None
 
-        model_name = self.cmb_model.currentText()
+        if self.thread and self.thread.isRunning():
+            old_thread = self.thread
+            self.thread = None
+            
+            # Disable Start button while we wait for old thread to wind down,
+            # so the user can't spam-click and queue multiple pending starts.
+            self.btn_start.setEnabled(False)
+            self.btn_start.setText("Stopping previous...")
+            
+            # Capture the model name NOW (UI state may change before old thread exits)
+            pending_model_name = self.cmb_model.currentText()
+            
+            def _launch_new():
+                self.btn_start.setText("Start")
+                self._launch_model(pending_model_name)
+            
+            old_thread.finished.connect(lambda: QTimer.singleShot(0, _launch_new))
+            old_thread.stop()   # async — sets running=False and returns immediately
+            return              # exit _start, the rest will happen via callback
+        
+        # No previous thread — launch directly
+        self._launch_model(self.cmb_model.currentText())
+
+
+    def _launch_model(self, model_name):
+        """kick off the inference thread for the given model.
+        """
         self._start_with_progress(model_name)
 
         if hasattr(self, 'btn_overlay_start'):
             self.btn_overlay_start.setEnabled(True)
-
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.btn_chat.setEnabled(True)
-
         self.btn_agg_start.setEnabled(True)
         self.btn_calib.setEnabled(True)
 
     def _stop(self):
-        if self.thread:
-            self.thread.stop()
+        if self.thread and self.thread.isRunning():
+            old_thread = self.thread
+            old_thread.finished.connect(lambda: self._clear_thread_ref(old_thread))
+            old_thread.stop()
+        elif self.thread:
             self.thread = None
 
         if hasattr(self, 'btn_overlay_start'):
@@ -2316,6 +2354,11 @@ class ImageClassificationApp(QMainWindow):
         self._agg_stop()
         self.btn_agg_start.setEnabled(False)
         self.btn_calib.setEnabled(True)
+
+    def _clear_thread_ref(self, thread):
+        """Clear self.thread only after the worker truly finishes."""
+        if self.thread is thread:
+            self.thread = None
 
     # ---------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
@@ -2770,7 +2813,14 @@ class ImageClassificationApp(QMainWindow):
       
 # -----------------------------Close----------------------------------------
     def closeEvent(self, e):
-        self._stop()
+        if self.thread and self.thread.isRunning():
+            self.thread.stop()
+            if not self.thread.wait(5000):  # 5s timeout
+                logging.warning("Worker did not exit cleanly; forcing terminate")
+                self.thread.terminate()
+                self.thread.wait(1000)
+            self.thread = None
+
         if hasattr(self, 'mag_widget'):
             self.mag_widget.close_threads()
         if hasattr(self, 'mag_widget_compact'):
