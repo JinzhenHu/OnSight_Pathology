@@ -1703,9 +1703,19 @@ class ImageClassificationApp(QMainWindow):
         grp_cap = CollapsibleGroupBox("Screen Capture")
         v_cap = grp_cap.content_layout()
 
+        cap_btn_row = QHBoxLayout()
+
         btn_sel = QPushButton("Select Screen Region")
         btn_sel.clicked.connect(self._select_region)
-        v_cap.addWidget(btn_sel)
+        cap_btn_row.addWidget(btn_sel)
+
+        self.btn_view_region = QPushButton("View Selected Region")
+        self.btn_view_region.clicked.connect(self._view_selected_region)
+        self.btn_view_region.setEnabled(self.selected_region is not None)
+        self.btn_view_region.setToolTip("Select a screen region first to preview the captured frame.")
+        cap_btn_row.addWidget(self.btn_view_region)
+
+        v_cap.addLayout(cap_btn_row)
 
         self.mag_widget = MagDetectorWidget(get_region_callback=lambda: self.selected_region)
         self.mag_widget.mag_detected.connect(self._on_mag_detected)
