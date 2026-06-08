@@ -13,6 +13,8 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import normalize
 from CellViT.models.segmentation.cell_segmentation.cellvit import CellViTSAM
 from CellViT.models.segmentation.cell_segmentation.cellvit_shared import CellViTSAMShared
+from device_compat import get_device, is_gpu_available
+_KMEANS_KW = {'algorithm': 'lloyd'} if sys.platform == 'darwin' else {}
 
 # Always use this for accessing any local path
 def resource_path(relative_path):
@@ -178,7 +180,7 @@ def load_model(model_info):
                 dynamic_img_size=True,
                 pretrained=False, )
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = get_device()
             num_features = model.num_features
             num_classes = 4
             # model.head = nn.Sequential(
@@ -196,7 +198,7 @@ def load_model(model_info):
             model.to(device)
             res['model'] = model
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
         ##############################################################################
         # VIT-Magnification-4-kaiko
         ##############################################################################
@@ -215,7 +217,7 @@ def load_model(model_info):
                 pretrained=False, )
 
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = get_device()
             num_features = model.num_features
             num_classes = 4
             model.head = nn.Sequential(
@@ -229,7 +231,7 @@ def load_model(model_info):
             model.to(device)
             res['model'] = model
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
        
 
         ##############################################################################
@@ -319,7 +321,7 @@ def load_model(model_info):
 
                 return model, mean, std, type_id_to_name, tissue_id_to_name, device
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = get_device()
 
             model_path = _get_weights_path(model_info, model_info['repo'], "CellViT-SAM-H-x40.pth")
 
@@ -339,7 +341,7 @@ def load_model(model_info):
 
             res['model'] = model
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
 
         ##############################################################################
         # Retinanet
@@ -350,7 +352,7 @@ def load_model(model_info):
             from retinanet.Model import MyMitosisDetection
             from huggingface_hub import hf_hub_download
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = get_device()
 
             model_path = _get_weights_path(model_info, model_info['repo'], "bestmodel.pth")
             config_path = resource_path("retinanet/file/config.yaml")
@@ -376,7 +378,7 @@ def load_model(model_info):
             from process_region_mitosis import process_region
             res['model'] = detector
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
 
             return res
 
@@ -388,10 +390,9 @@ def load_model(model_info):
             import torch
             from process_region_cellpose import process_region
 
-            res['model'] = models.CellposeModel(gpu=True) if torch.cuda.is_available() else models.CellposeModel(
-                gpu=False)
+            res['model'] = models.CellposeModel(gpu=is_gpu_available())
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
 
         ##############################################################################
         # YOLO
@@ -406,7 +407,7 @@ def load_model(model_info):
 
             res['model'] = YOLO(weights_path)
             res['process_region_func'] = process_region
-            res['using_gpu'] = torch.cuda.is_available()
+            res['using_gpu'] = is_gpu_available()
 
             return res
         
@@ -419,12 +420,12 @@ def load_model(model_info):
         import torch
         from process_region_cpsam_cellfeatures import process_region
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = models.CellposeModel(gpu=True)
+        device = str(get_device())
+        model = models.CellposeModel(gpu=is_gpu_available())
         
         res['model'] = model
         res['process_region_func'] = process_region
-        res['using_gpu'] = torch.cuda.is_available()
+        res['using_gpu'] = is_gpu_available()
         return res
 
     return res
@@ -705,7 +706,7 @@ def find_clusters(img, model, transform, device,feature_layer = 2, sat_thresh=10
     embeddings_matrix = normalize(embeddings_matrix, norm='l2')
 
     # ---- KMeans ----
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto', **_KMEANS_KW)
     cluster_labels = kmeans.fit_predict(embeddings_matrix) + 1 
 
     # ---- Rebuild full cluster map ----
