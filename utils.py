@@ -78,10 +78,13 @@ def _get_weights_path(model_info, hf_repo, hf_filename):
 
     # Per-repo subdirectory under our app-owned cache
     safe_repo = hf_repo.replace("/", "__")
+    if sys.platform == "darwin":
+        _default_cache = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "OnSightPathology", "hf_cache", "hub")
+    else:
+        _default_cache = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "OnSightPathology", "hf_cache", "hub")
+
     download_dir = os.path.join(
-        os.environ.get("HF_HUB_CACHE",
-                       os.path.join(os.environ["LOCALAPPDATA"],
-                                    "OnSightPathology", "hf_cache", "hub")),
+        os.environ.get("HF_HUB_CACHE", _default_cache),
         "_local_dir_downloads",
         safe_repo,
     )

@@ -28,7 +28,7 @@ class OverlayWorker(QThread):
                 p_val = getattr(self, 'percentile', 80)
                 result = visualize_hotspot_overlay(self.frame, score_map, tissue_mask, percentile=p_val)
 
-                cv2.imwrite("debug_overlay.png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR)) # Debug: Save the overlay result to disk for inspection
+                #cv2.imwrite("debug_overlay.png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR)) # Debug: Save the overlay result to disk for inspection
                 
                 self.finished.emit(result)
             except Exception as e:
