@@ -10,8 +10,29 @@ class AboutDialog(QDialog):
         self.setModal(True)
         self.setFixedSize(400, 300)
 
-        self.setStyleSheet("background-color: #f0f0f0;")
-
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f0f0f0;
+            }
+            QLabel {
+                color: #1a1a1a;
+                background-color: transparent;
+            }
+            QLabel a {
+                color: #2563eb;
+            }
+            QPushButton {
+                color: #1a1a1a;
+                background-color: #ffffff;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 6px 20px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #e8e8e8;
+            }
+        """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)

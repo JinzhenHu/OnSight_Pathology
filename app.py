@@ -1,168 +1,144 @@
-# Main application for OnSight Pathology
-#
-#
-# Run:
-#   App main.py
-
+# ============================================================
+# OnSight Pathology — main application entry point
+# ============================================================
 import os
 import sys
-# ============================================================
-# macOS (Apple Silicon + PyInstaller)
-# ============================================================
+import json
+
+# ------------------------------------------------------------
+# 1. Environment setup. 
+# ------------------------------------------------------------
+
+# macOS (Apple Silicon + PyInstaller): pin BLAS to single thread
+# to avoid OpenMP duplicate-init crashes; bypass SSL verify; stub
+# pkg_resources for frozen .app bundles.
 if sys.platform == "darwin":
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["OPENBLAS_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                 "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+                 "NUMEXPR_NUM_THREADS"):
+        os.environ[_var] = "1"
 
     import ssl
-    try:
-        _ctx = ssl._create_unverified_context
-    except AttributeError:
-        pass
-    else:
-        ssl._create_default_https_context = _ctx
+    if hasattr(ssl, "_create_unverified_context"):
+        ssl._create_default_https_context = ssl._create_unverified_context
+
     try:
         import pkg_resources
         pkg_resources.require = lambda *a, **kw: []
     except ImportError:
         pass
 
-# ============================================================
-# ============================================================
-import json, os
-try:
-    _settings_path = os.path.join(
-        os.path.expanduser("~"),
-        "Library/Application Support" if sys.platform == "darwin" else "AppData/Local",
-        "OnSightPathology", "Settings", "settings.json"
-    )
-    with open(_settings_path) as f:
-        _saved_scale = json.load(f).get("ui_scale", 1.0)
-    os.environ["QT_SCALE_FACTOR"] = str(_saved_scale)
-except Exception:
-    pass  
-# ============================================================
-# ============================================================
-
-import logging
-# ONLY FOR CPU EXE
+# CPU-only build: hide CUDA from torch.
 if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
-# Logging to stdout never happens in exe but ultralytics logging still tries and can crash (if not utf-8).
-# Crash logging to file unaffected.
-for h in logging.root.handlers[:]:
-    if isinstance(h, logging.StreamHandler):
-        logging.root.removeHandler(h)
+# Persistent UI scale — must be set before QApplication is constructed.
+try:
+    _settings_dir = "Library/Application Support" if sys.platform == "darwin" else "AppData/Local"
+    _settings_path = os.path.join(
+        os.path.expanduser("~"), _settings_dir,
+        "OnSightPathology", "Settings", "settings.json",
+    )
+    with open(_settings_path) as _f:
+        os.environ["QT_SCALE_FACTOR"] = str(json.load(_f).get("ui_scale", 1.0))
+except Exception:
+    pass  # First launch or corrupt settings — fall back to Qt default.
 
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w")
-
-#os.environ["QT_SCALE_FACTOR"] = "1"
-#os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-#os.environ["TQDM_DISABLE"] = "1"
-
-# ---- Set DPI awareness BEFORE any GUI library imports ----
+# Windows: enable per-monitor DPI awareness BEFORE any Qt import.
+_dpi_init_error = None
 if sys.platform == "win32":
     try:
         import ctypes
-        # Try Per-Monitor-V2 (Windows 10 1703+), fall back to Per-Monitor, then System DPI
         try:
-            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
+            # Per-Monitor V2 (Win 10 1703+)
+            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
         except Exception:
             try:
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+                # Per-Monitor (Win 8.1+)
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
             except Exception:
+                # System DPI (Win Vista+)
                 ctypes.windll.user32.SetProcessDPIAware()
     except Exception as e:
-        # Will be logged after crash_logging is imported
         _dpi_init_error = str(e)
-    else:
-        _dpi_init_error = None
-else:
-    _dpi_init_error = None
-import crash_logging
-import logging  
+
+# ------------------------------------------------------------
+# 2. Logging setup. Must precede the LLM-worker fast-path below
+#    so the worker inherits a working file logger.
+# ------------------------------------------------------------
+import logging
+
+# In frozen exes, stdout/stderr may be None and ultralytics' chatty
+# StreamHandler would crash trying to write to them.
+for _h in logging.root.handlers[:]:
+    if isinstance(_h, logging.StreamHandler):
+        logging.root.removeHandler(_h)
+
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
+import crash_logging  # noqa: F401 — installs file-based crash logger
+
 if _dpi_init_error:
     logging.warning(f"DPI awareness init failed: {_dpi_init_error}")
-else:
+elif sys.platform == "win32":
     logging.info("DPI awareness set successfully")
-import os
-import sys
 
-from datetime import datetime
-from dataclasses import dataclass
+# ------------------------------------------------------------
+# 3. LLM worker fast-path. 
+# ------------------------------------------------------------
+def run_llm_worker_if_requested() -> None:
+    if "--run-llm-worker" not in sys.argv:
+        return
+    sys.argv.remove("--run-llm-worker")
+    import llm_worker_process  # noqa: F401 — runs to completion on import
+    sys.exit(0)
 
+run_llm_worker_if_requested()
+
+# ------------------------------------------------------------
+# 4. Heavy imports — only reached by the main GUI process.
+# ------------------------------------------------------------
 import csv
 import gc
-import json
 import math
 import re
 import time
+from datetime import datetime
+from dataclasses import dataclass
 
 import cv2
 import mss
 import numpy as np
 import torch
-
 from pynput import mouse
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect, QSize, QTimer
 from PyQt6.QtGui import (
-    QAction,
-    QIcon,
-    QImage,
-    QKeySequence,
-    QPixmap,
-    QShortcut,
-    QStandardItem,
-    QStandardItemModel,
+    QAction, QIcon, QImage, QKeySequence, QPixmap, QShortcut,
+    QStandardItem, QStandardItemModel,
 )
 from PyQt6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDialogButtonBox,
-    QFileDialog,
-    QDoubleSpinBox,
-    QFrame,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QLayout,
-    QLineEdit,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QSizePolicy,
-    QSpinBox,
-    QStackedWidget,
-    QStyledItemDelegate,
-    QVBoxLayout,
-    QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QDoubleSpinBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
+    QHBoxLayout, QInputDialog, QLabel, QLayout, QLineEdit,
+    QMainWindow, QMessageBox, QPushButton, QSizePolicy, QSpinBox,
+    QStackedWidget, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
 import settings
 from utils import (
-    build_precision_labels,
-    get_gpu_memory,
-    get_system_memory,
-    load_model,
-    resource_path,
+    build_precision_labels, get_gpu_memory, get_system_memory,
+    load_model, resource_path,
 )
 from utils_clustering import clear_cluster_models_cache
 
 from custom_widgets.AboutDialog import AboutDialog
 from custom_widgets.WelcomeDialog import WelcomeDialog
-from custom_widgets.cascade_widget import CascadeClusteringWidget  
+from custom_widgets.cascade_widget import CascadeClusteringWidget
 from custom_widgets.CheckableComboBox import CheckableComboBox
 from custom_widgets.CollapsibleGroupBox import CollapsibleGroupBox
 from custom_widgets.DisclaimerDialog import DisclaimerDialog
@@ -174,19 +150,6 @@ from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOv
 from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
 from model_loader_thread import ModelLoaderThread
 from device_compat import empty_cache
-
-def run_llm_worker_if_requested() -> None:
-    """If launched with --run-llm-worker, start worker process and exit."""
-    if "--run-llm-worker" not in sys.argv:
-        return
-
-    sys.argv.remove("--run-llm-worker")
-    import llm_worker_process  
-
-    sys.exit(0)
-
-run_llm_worker_if_requested()
-
 
 def _normalize_capture_region(region, tile_size):
     return {
@@ -239,17 +202,6 @@ class AggregateStats:
         self.cellularity_sum = 0.0
         self.dynamic_sums = {} 
     
-    def __post_init__(self):
-        if self.dynamic_sums is None:
-            self.dynamic_sums = {}
-
-    def reset(self):
-        self.total_area_mm2 = self.conf_sum = self.mitosis = 0
-        self.n_tiles = self.mib_pos = self.mib_total = 0
-        
-        self.cellularity_sum = 0.0
-        self.dynamic_sums = {}
-
 ###############################################################################################################
 # GUI Stylesh
 ###############################################################################################################      
@@ -536,11 +488,6 @@ class ImageClassificationApp(QMainWindow):
         sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
         sc_add.activated.connect(self._on_add)
         self.shortcut_add = sc_add
-        # global space-bar shortcut. must be here since we have 2 layouts
-        sc_add = QShortcut(QKeySequence("Space"), self)
-        sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
-        sc_add.activated.connect(self._on_add)
-        self.shortcut_add = sc_add
 
         # First-launch welcome 
         QTimer.singleShot(300, self._show_welcome_then_check_permissions)
@@ -608,6 +555,7 @@ class ImageClassificationApp(QMainWindow):
             # Windows .exe or running from source: relaunch the same interpreter
             subprocess.Popen([sys.executable] + sys.argv)
 
+        self.close()
         QApplication.quit()
 
     def _open_preferences(self):
@@ -1277,6 +1225,8 @@ class ImageClassificationApp(QMainWindow):
         """
         Toggle between full and compact view.
         """
+        if hasattr(self, '_loading_timer'):
+            self._loading_timer.stop()
         if self.thread and self.thread.isRunning():
             self._stop()  # kill the old worker
 
@@ -1478,7 +1428,7 @@ class ImageClassificationApp(QMainWindow):
         main_left.addWidget(self.grp_cfg)
 
 
-        grp_roi = CollapsibleGroupBox("ROI Finder")
+        grp_roi = QGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
@@ -1597,7 +1547,7 @@ class ImageClassificationApp(QMainWindow):
         h_overlay_ctrl.addWidget(self.btn_overlay_stop)
         v_roi.addLayout(h_overlay_ctrl)
 
-        grp_roi.content_layout().addLayout(v_roi)
+        grp_roi.setLayout(v_roi)
         main_left.addWidget(grp_roi)
 
         # -------------------- LLM selection -----------------------------
@@ -2668,7 +2618,9 @@ class ImageClassificationApp(QMainWindow):
         Stop the current classification thread before switching models.
         """
         if self.thread and self.thread.isRunning():
-            self._stop()  # kill the old worker
+            old_thread = self.thread
+            self._stop()
+            old_thread.wait(3000)
         try:
             clear_cluster_models_cache(keep=None)
         except ImportError:
@@ -2879,8 +2831,6 @@ class ImageClassificationApp(QMainWindow):
             self.thread = None
         if hasattr(self, 'mag_widget'):
             self.mag_widget.close_threads()
-        if hasattr(self, 'mag_widget_compact'):
-            self.mag_widget_compact.close_threads()
         if getattr(self, 'enlarged_window', None):
             self.enlarged_window.close()
         e.accept()

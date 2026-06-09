@@ -1,5 +1,6 @@
 # .gitignore file
 .venv/
+OnSight_Pathology/
 runs/
 logs/
 .ipynb_checkpoints/
