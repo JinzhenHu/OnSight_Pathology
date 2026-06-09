@@ -2373,7 +2373,7 @@ class ImageClassificationApp(QMainWindow):
     def _set_inference_placeholder(self):
         """Show a simple animated 'loading' message while the first inference runs.
         
-        Heavy models (CellViT, Retinanet, kaiko-ViT) take 5-30s for first inference.
+        Heavy models (CellViT, Retinanet, kaiko-ViT) take 1-5s for first inference.
         A simple animated dot ellipsis tells the user the app isn't frozen.
         """
         self.lbl_img.setPixmap(QPixmap())   # clear any stale image
@@ -2388,7 +2388,7 @@ class ImageClassificationApp(QMainWindow):
                 f"<div style='font-size:11pt; color:#2563eb; margin-top:0px;'>"
                 f"<b>Warming up the model{dots}</b></div>"
                 f"<div style='font-size:9pt; color:#7d8a99; margin-top:8px;'>"
-                f"Heavy models take 5–30 seconds on first run.<br>"
+                f"Heavy models take 1–5 seconds on first run.<br>"
                 f"Subsequent frames will be much faster."
                 f"</div></div>"
             )
