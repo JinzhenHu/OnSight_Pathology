@@ -182,6 +182,44 @@ class LLMChatDialog(QDialog):
         loading_v.addWidget(self.progress_bar)
         loading_v.addWidget(self.lbl_loading_status)
         main_vbox.addWidget(self.loading_container)
+        # --- Error details (hidden until a failure occurs) ---
+        self.btn_show_details = QPushButton("View technical details ▾")
+        self.btn_show_details.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_show_details.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #868E96;
+                border: none;
+                font-size: 9pt;
+                text-decoration: underline;
+            }
+            QPushButton:hover { color: #495057; }
+        """)
+        self.btn_show_details.clicked.connect(self._toggle_error_details)
+        self.btn_show_details.setVisible(False)
+
+        self.txt_error_details = QTextEdit()
+        self.txt_error_details.setReadOnly(True)
+        self.txt_error_details.setMaximumHeight(160)
+        self.txt_error_details.setStyleSheet("""
+            QTextEdit {
+                background-color: #F8F9FA;
+                color: #6C757D;
+                border: 1px solid #E9ECEF;
+                border-radius: 6px;
+                font-family: 'Menlo', 'Consolas', monospace;
+                font-size: 8pt;
+                padding: 8px;
+            }
+        """)
+        self.txt_error_details.setVisible(False)
+
+        h_btn = QHBoxLayout()
+        h_btn.addStretch()
+        h_btn.addWidget(self.btn_show_details)
+        h_btn.addStretch()
+        main_vbox.addLayout(h_btn)
+        main_vbox.addWidget(self.txt_error_details)
 
         # --- Middle: Borderless elegant chat flow (hidden until ready) ---
         self.txt_history = QTextEdit()
@@ -318,15 +356,13 @@ class LLMChatDialog(QDialog):
         self.process.start()
 
     def _on_process_finished(self, exitCode, exitStatus):
-        if exitCode != 0 and not self.model_ready:
-            err_msg = f"<br><b style='color:#FA5252;'>[System] Backend process died unexpectedly! (Exit Code: {exitCode})</b><br>"
-            if exitCode == 137 or exitCode == -9:
-                err_msg += "<span style='color:gray;'>Reason: Out of Memory. The OS killed the process because it ran out of RAM.</span>"
-            # Show error in the loading status area if we never got to ready
-            self.lbl_loading_title.setText("⚠️ Failed to start")
-            self.lbl_loading_status.setText(err_msg.replace("<br>", " "))
-            self.txt_history.setVisible(True)
-            self.txt_history.append(err_msg)
+            if exitCode != 0 and not self.model_ready:
+                hint = ""
+                if exitCode in (137, -9):
+                    hint = "The OS killed the process — most likely it ran out of RAM."
+                self._show_friendly_error(
+                    f"Backend process exited with code {exitCode}. {hint}".strip()
+                )
 
     def _on_process_error(self, error):
         self.lbl_loading_status.setText(f"Failed to start process: {error}")
@@ -396,15 +432,14 @@ class LLMChatDialog(QDialog):
 
                 elif msg_type == "error":
                     if not self.model_ready:
-                        # Error during loading — surface it in the loading area.
-                        self.lbl_loading_title.setText("⚠️ Initialization failed")
-                        self.lbl_loading_status.setText(msg.get("text", "Unknown error"))
-                    self.txt_history.setVisible(True)
-                    self.txt_history.append(
-                        f"<b style='color:#FA5252;'>Error:</b> {msg.get('text', '')}<br>"
-                    )
-                    self.inp.setEnabled(True)
-                    self.btn_send.setEnabled(True)
+                        self._show_friendly_error(msg.get("text", ""))
+                    else:
+                        # Runtime error after model loaded — show inline in chat.
+                        self.txt_history.append(
+                            f"<b style='color:#FA5252;'>Error:</b> {msg.get('text', '')}<br>"
+                        )
+                        self.inp.setEnabled(True)
+                        self.btn_send.setEnabled(True)
 
             except json.JSONDecodeError:
                 # Non-JSON line: probably stderr debug output from a library.
@@ -412,7 +447,102 @@ class LLMChatDialog(QDialog):
                 print(f"[LLM Debug]: {line}")
             except Exception as e:
                 print(f"[UI Update Error]: {e}")
+    def _show_friendly_error(self, raw_text):
+        """Replace the loading UI with a clean error card."""
+        title, message, suggestion = self._classify_error(raw_text or "")
 
+        # Hide the progress bar — there's nothing more to load.
+        self.progress_bar.setVisible(False)
+
+        self.lbl_loading_title.setText(title)
+        self.lbl_loading_title.setStyleSheet(
+            "color: #E03131; font-size: 13pt; font-weight: 600;"
+        )
+
+        # Use rich text for a small visual hierarchy: message in dark, suggestion in lighter grey.
+        self.lbl_loading_status.setText(
+            f"<div style='color:#343A40; font-size:10pt;'>{message}</div>"
+            f"<div style='color:#868E96; font-size:9pt; margin-top:8px;'>{suggestion}</div>"
+        )
+        self.lbl_loading_status.setTextFormat(Qt.TextFormat.RichText)
+
+        # Stash the raw traceback in the collapsible details panel.
+        if raw_text:
+            self.txt_error_details.setPlainText(raw_text)
+            self.btn_show_details.setVisible(True)
+
+        # Make sure the chat area stays hidden — we never got to chat.
+        self.txt_history.setVisible(False)
+        self.loading_container.setVisible(True)
+
+    def _toggle_error_details(self):
+        visible = self.txt_error_details.isVisible()
+        self.txt_error_details.setVisible(not visible)
+        self.btn_show_details.setText(
+            "Hide technical details ▴" if not visible else "View technical details ▾"
+        )
+
+    def _classify_error(self, raw_text):
+        """Map a raw traceback to (title, message, suggestion) tuple."""
+        t = raw_text.lower()
+
+        if "mps backend out of memory" in t or "cuda out of memory" in t \
+           or "out of memory" in t or "killed" in t:
+            return (
+                "💾 Not Enough Memory",
+                "This Mac doesn't have enough RAM to load the AI model.",
+                "Qwen2.5-VL needs about 16 GB of unified memory to run. "
+                "Please try OnSight on a machine with more RAM, "
+                "or contact the developer for a lighter model variant."
+            )
+
+        if "no space left" in t or "errno 28" in t or "disk" in t and "full" in t:
+            return (
+                "💿 Disk Full",
+                "There isn't enough free space to download or load the model.",
+                "Free up at least 10 GB on your startup disk, then try again."
+            )
+
+        if any(k in t for k in ("connectionerror", "httperror", "max retries",
+                                 "name resolution", "name or service not known",
+                                 "failed to establish")):
+            return (
+                "🌐 Network Issue",
+                "Could not reach the model server to download weights.",
+                "Check your internet connection and try again. "
+                "If you're behind a corporate proxy or VPN, the Hugging Face servers may be blocked."
+            )
+
+        if "permission denied" in t or "errno 13" in t:
+            return (
+                "🔒 Permission Denied",
+                "OnSight can't read or write the model cache folder.",
+                "Check folder permissions in:\n"
+                "~/Library/Application Support/OnSightPathology/"
+            )
+
+        if "no module named" in t or "modulenotfounderror" in t:
+            return (
+                "📦 Missing Dependency",
+                "A required Python package isn't installed in this environment.",
+                "Try reinstalling OnSight, or check the README for setup instructions."
+            )
+
+        if "huggingfacehub" in t or "repository not found" in t or "401" in t or "403" in t:
+            return (
+                "🤖 Model Access Issue",
+                "The AI model could not be retrieved from Hugging Face.",
+                "The model may be private or require a token. "
+                "Check your Hugging Face login or the model config file."
+            )
+
+        # Generic fallback
+        return (
+            "⚠️ Failed to Start AI Engine",
+            "Something went wrong while initializing the language model.",
+            "Tap 'View technical details' below to see the full error, "
+            "then send it to the developer if the problem persists."
+        )
     def on_send(self):
             text = self.inp.text().strip()
             if not self.model_ready or not text:
