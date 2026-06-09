@@ -172,6 +172,7 @@ from custom_widgets.mag_detector_widget import MagDetectorWidget
 from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
 from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
+from custom_widgets.InferenceLoadingWidget import InferenceLoadingWidget
 from model_loader_thread import ModelLoaderThread
 from device_compat import empty_cache
 
@@ -2337,6 +2338,8 @@ class ImageClassificationApp(QMainWindow):
         self.btn_calib.setEnabled(True)
 
     def _stop(self):
+        if hasattr(self, '_loading_timer'):
+            self._loading_timer.stop()
         if self.thread and self.thread.isRunning():
             old_thread = self.thread
             old_thread.finished.connect(lambda: self._clear_thread_ref(old_thread))
@@ -2362,6 +2365,8 @@ class ImageClassificationApp(QMainWindow):
 
     # ---------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
+        if hasattr(self, '_loading_timer'):
+            self._loading_timer.stop()
         self.latest_metrics = metrics
         self.latest_frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB).copy()  # annotated
         self.latest_original = metrics.get("orig_img", self.latest_frame).copy()
@@ -2416,6 +2421,41 @@ class ImageClassificationApp(QMainWindow):
             if hasattr(self.enlarged_window, 'set_text'):
                 self.enlarged_window.set_text(txt)
 
+    def _set_inference_placeholder(self):
+        """Show a simple animated 'loading' message while the first inference runs.
+        
+        Heavy models (CellViT, Retinanet, kaiko-ViT) take 5-30s for first inference.
+        A simple animated dot ellipsis tells the user the app isn't frozen.
+        """
+        self.lbl_img.setPixmap(QPixmap())   # clear any stale image
+        self._loading_dot_count = 0
+        
+        def _tick():
+            self._loading_dot_count = (self._loading_dot_count + 1) % 4
+            dots = "." * self._loading_dot_count
+            self.lbl_img.setText(
+                f"<div style='text-align:center; line-height:1.6; padding-top:40px;'>"
+                f"<div style='font-size:32pt; margin-bottom:2px;'>⏳</div>"
+                f"<div style='font-size:11pt; color:#2563eb; margin-top:0px;'>"
+                f"<b>Warming up the model{dots}</b></div>"
+                f"<div style='font-size:9pt; color:#7d8a99; margin-top:8px;'>"
+                f"Heavy models take 5–30 seconds on first run.<br>"
+                f"Subsequent frames will be much faster."
+                f"</div></div>"
+            )
+        
+        _tick()   # show immediately
+        
+        if not hasattr(self, '_loading_timer'):
+            self._loading_timer = QTimer(self)
+            self._loading_timer.timeout.connect(_tick)
+        else:
+            try:
+                self._loading_timer.timeout.disconnect()
+            except TypeError:
+                pass
+            self._loading_timer.timeout.connect(_tick)
+        self._loading_timer.start(500)   # update every 500ms
     # ---------------------------- Export------------------------------------------
     def _export(self):
         if self.latest_frame is None:
@@ -2556,6 +2596,7 @@ class ImageClassificationApp(QMainWindow):
             self.thread = ClassificationThread.from_loaded(self, model_name, res)
             self.thread.update_image.connect(self._update_display)
             self.thread.start()
+            self._set_inference_placeholder()
             self.using_gpu_icon.set_color("green" if self.thread.using_gpu else "red")
 
             if hasattr(self, 'btn_overlay_start'):
