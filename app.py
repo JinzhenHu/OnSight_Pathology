@@ -1707,8 +1707,8 @@ class ImageClassificationApp(QMainWindow):
         main_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
         # ----------- Controls (start/stop/export/chat) ----------
-        grp_ctrl = QGroupBox("Inference Controls")
-        v_ctrl = QVBoxLayout(grp_ctrl)
+        grp_ctrl = CollapsibleGroupBox("Inference Controls")
+        v_ctrl = grp_ctrl.content_layout()
 
         # GPU status
         status_widget = QWidget()
@@ -1753,7 +1753,7 @@ class ImageClassificationApp(QMainWindow):
         main_layout.addWidget(grp_ctrl)
 
         # -------------------- Model selection ------------------------------
-        grp_model = QGroupBox("Model Selection")
+        grp_model = CollapsibleGroupBox("Model Selection")
         h_model = QHBoxLayout()
 
         class PaddedItemDelegate(QStyledItemDelegate):
@@ -1794,7 +1794,7 @@ class ImageClassificationApp(QMainWindow):
         btn_info.clicked.connect(self._show_model_info)
         h_model.addWidget(btn_info)
 
-        grp_model.setLayout(h_model)
+        grp_model.content_layout().addLayout(h_model)
         main_layout.addWidget(grp_model)
 
         grp_mag = CollapsibleGroupBox("Active Magnification")
