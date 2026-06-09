@@ -212,3 +212,16 @@ coll = COLLECT(
 #:: 清环境变量
 #set ONSIGHT_BUILD=
 #set "ONSIGHT_BUILD=hf"&& pyinstaller app.spec
+
+
+# Cellpose 模型缓存
+#open ~/.cellpose/models
+
+# HuggingFace 缓存（你的模型大部分在这）
+#open ~/.cache/huggingface
+
+# OnSight 的 HF 缓存（如果你 spec 设了 HF_HOME）
+#open ~/Library/Application\ Support/OnSightPathology
+
+# OnSight 的 settings.json
+#open ~/Library/Application\ Support/OnSightPathology/Settings

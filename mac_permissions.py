@@ -34,8 +34,8 @@ def check_accessibility_permission() -> bool:
         return True
     try:
         from ApplicationServices import AXIsProcessTrusted
-        #return bool(AXIsProcessTrusted())
-        return False
+        return bool(AXIsProcessTrusted())
+        #return False
     except ImportError:
         logging.warning(
             "[mac_permissions] pyobjc not installed; cannot check "
@@ -63,8 +63,8 @@ def check_screen_recording_permission() -> bool:
             shot = sct.grab({"left": 0, "top": 0, "width": 20, "height": 20})
             arr = np.array(shot)
             # All zeros → permission denied. Any non-zero pixel → granted.
-            #return bool(arr.sum() > 0)
-            return False
+            return bool(arr.sum() > 0)
+            #return False
     except Exception as e:
         logging.warning(f"[mac_permissions] Screen recording check failed: {e}")
         return True  # fail-open
