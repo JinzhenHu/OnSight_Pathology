@@ -1224,13 +1224,19 @@ class ImageClassificationApp(QMainWindow):
             cmb_llm_precision.setVisible(False)
 
     def _toggle_view(self, checked):
-        """
-        Toggle between full and compact view.
-        """
         if hasattr(self, '_loading_timer'):
             self._loading_timer.stop()
         if self.thread and self.thread.isRunning():
-            self._stop()  # kill the old worker
+            old_thread = self.thread
+            self._stop()
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                old_thread.wait(5000)
+                if old_thread.isRunning():
+                    old_thread.terminate()
+                    old_thread.wait(1000)
+            finally:
+                QApplication.restoreOverrideCursor()
 
         self.compact_mode = checked
         self._switch_view(compact=checked)
