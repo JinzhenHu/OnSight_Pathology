@@ -2311,7 +2311,36 @@ class ImageClassificationApp(QMainWindow):
         """Clear self.thread only after the worker truly finishes."""
         if self.thread is thread:
             self.thread = None
+    # def _clear_outputs(self):
+    #     """Wipe text outputs from the previous model — but keep the last
+    #     image visible so the user retains visual context while waiting
+    #     for the new model to load."""
+    #     # Reset the result text and metric-related state so a stale
+    #     # confidence or cell count isn't shown for the new model.
+    #     self.latest_metrics = None
+    #     self.last_result = ""
 
+    #     if hasattr(self, 'lbl_res'):
+    #         self.lbl_res.setText("Result:")
+
+    #     # Disable buttons that depended on having a result.
+    #     if hasattr(self, 'btn_export'):
+    #         self.btn_export.setEnabled(False)
+
+    #     # If the enlarged window is open, clear its text too — image stays.
+    #     if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
+    #         try:
+    #             if hasattr(self.enlarged_window, 'set_text'):
+    #                 self.enlarged_window.set_text("")
+    #         except Exception:
+    #             pass
+
+    #     # Stop any running overlay so stale ROI highlights don't carry over.
+    #     if hasattr(self, '_stop_overlay'):
+    #         try:
+    #             self._stop_overlay()
+    #         except Exception:
+    #             pass
     # ---------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
         if hasattr(self, '_loading_timer'):
@@ -2388,7 +2417,7 @@ class ImageClassificationApp(QMainWindow):
                 f"<div style='font-size:11pt; color:#2563eb; margin-top:0px;'>"
                 f"<b>Warming up the model{dots}</b></div>"
                 f"<div style='font-size:9pt; color:#7d8a99; margin-top:8px;'>"
-                f"Heavy models take 1–5 seconds on first run.<br>"
+                f"Heavy models take 1–20 seconds on first run.<br>"
                 f"Subsequent frames will be much faster."
                 f"</div></div>"
             )
@@ -2640,6 +2669,8 @@ class ImageClassificationApp(QMainWindow):
             old_thread = self.thread
             self._stop()
             old_thread.wait(3000)
+
+        #self._clear_outputs()
         try:
             clear_cluster_models_cache(keep=None)
         except ImportError:

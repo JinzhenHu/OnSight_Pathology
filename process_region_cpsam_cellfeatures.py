@@ -1,6 +1,7 @@
 import mss
 import numpy as np
 import cv2
+import sys
 from skimage.color import rgb2hsv
 from histomicstk.features import compute_nuclei_features
 import histomicstk as htk
@@ -255,19 +256,49 @@ def process_region(region, **kwargs):
                                         
                                     #print("Selected features for clustering:", selected_feats)
                                     
+                                    if sys.platform == "darwin":
+                                        full_props = [
+                                            'label', 'area', 'perimeter', 'equivalent_diameter_area',
+                                            'axis_major_length', 'axis_minor_length', 'eccentricity',
+                                            'solidity', 'intensity_mean', 'intensity_max', 'intensity_min',
+                                        ]
+                                        intensity_img = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                                        props_dict = regionprops_table(
+                                            label_image=masks,
+                                            intensity_image=intensity_img,
+                                            properties=full_props,
+                                        )
+                                        features_df = pd.DataFrame(props_dict)
 
-                                    full_props = [
-                                        'label', 'area', 'perimeter', 'equivalent_diameter_area', 
-                                        'axis_major_length', 'axis_minor_length', 'eccentricity', 
-                                        'solidity', 'intensity_mean', 'intensity_max', 'intensity_min',
-                                        "intensity_median", "intensity_std","area"
-                                    ]
-                                    props_dict = regionprops_table(
-                                        label_image=masks, 
-                                        intensity_image=cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), 
-                                        properties=full_props
-                                    )
-                                    features_df = pd.DataFrame(props_dict)
+                                        # Compute median + std per region manually so the code
+                                        # works on any scikit-image version (intensity_median /
+                                        # intensity_std were only added in 0.22). Pure numpy,
+                                        # no platform branch needed.
+                                        _medians, _stds = [], []
+                                        for lbl in features_df['label'].values:
+                                            pixels = intensity_img[masks == lbl]
+                                            if pixels.size == 0:
+                                                _medians.append(0.0)
+                                                _stds.append(0.0)
+                                            else:
+                                                _medians.append(float(np.median(pixels)))
+                                                _stds.append(float(np.std(pixels)))
+                                        features_df['intensity_median'] = _medians
+                                        features_df['intensity_std'] = _stds
+                                    else:
+                                        # Windows: skimage 0.22+ supports these directly.
+                                        full_props = [
+                                            'label', 'area', 'perimeter', 'equivalent_diameter_area', 
+                                            'axis_major_length', 'axis_minor_length', 'eccentricity', 
+                                            'solidity', 'intensity_mean', 'intensity_max', 'intensity_min',
+                                            "intensity_median", "intensity_std"
+                                        ]
+                                        props_dict = regionprops_table(
+                                            label_image=masks, 
+                                            intensity_image=cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), 
+                                            properties=full_props
+                                        )
+                                        features_df = pd.DataFrame(props_dict)
                                     rename_map = {'label': 'Label', 'area': 'Area', 'perimeter': 'Perimeter'}
                                     features_df.rename(columns=rename_map, inplace=True)
                                     #print("Extracted features columns:", features_df.columns.tolist())
