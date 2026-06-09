@@ -1154,9 +1154,11 @@ class ImageClassificationApp(QMainWindow):
                 bx = int(w / 3)
                 by = int(h / 3)
 
-                os_scale = self.devicePixelRatioF()
-                physical_box_w = bx  / os_scale
-                physical_box_h = by  / os_scale
+                #os_scale = self.devicePixelRatioF()
+                # physical_box_w = bx  / os_scale
+                # physical_box_h = by  / os_scale
+                physical_box_w = bx
+                physical_box_h = by
                 
                 # calculate MPP: sqrt( physical area / pixel area )
                 new_mpp = math.sqrt(val_um2 / (physical_box_w * physical_box_h))
