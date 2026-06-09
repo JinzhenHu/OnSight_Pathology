@@ -85,6 +85,7 @@ class LLMChatDialog(QDialog):
         """)
 
         self.model_ready = False
+        self._error_shown = False
         self.frame_rgb = frame_rgb
         self.parent = parent
         self.msgs = []
@@ -449,6 +450,10 @@ class LLMChatDialog(QDialog):
                 print(f"[UI Update Error]: {e}")
     def _show_friendly_error(self, raw_text):
         """Replace the loading UI with a clean error card."""
+        if self._error_shown:
+            return
+        self._error_shown = True
+
         title, message, suggestion = self._classify_error(raw_text or "")
 
         # Hide the progress bar — there's nothing more to load.

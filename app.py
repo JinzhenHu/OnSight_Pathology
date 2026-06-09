@@ -1478,7 +1478,7 @@ class ImageClassificationApp(QMainWindow):
         main_left.addWidget(self.grp_cfg)
 
 
-        grp_roi = QGroupBox("ROI Finder")
+        grp_roi = CollapsibleGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
@@ -1597,7 +1597,7 @@ class ImageClassificationApp(QMainWindow):
         h_overlay_ctrl.addWidget(self.btn_overlay_stop)
         v_roi.addLayout(h_overlay_ctrl)
 
-        grp_roi.setLayout(v_roi)
+        grp_roi.content_layout().addLayout(v_roi)
         main_left.addWidget(grp_roi)
 
         # -------------------- LLM selection -----------------------------
@@ -2422,7 +2422,9 @@ class ImageClassificationApp(QMainWindow):
 
     def _set_inference_placeholder(self):
         """Show a simple animated 'loading' message while the first inference runs.
-    
+        
+        Heavy models (CellViT, Retinanet, kaiko-ViT) take 5-30s for first inference.
+        A simple animated dot ellipsis tells the user the app isn't frozen.
         """
         self.lbl_img.setPixmap(QPixmap())   # clear any stale image
         self._loading_dot_count = 0
@@ -2578,13 +2580,11 @@ class ImageClassificationApp(QMainWindow):
             self._progress_dlg.set_progress(pct, cur_b, tot_b)
 
         def cleanup():
-            """Close dialog and reset state regardless of outcome."""
+            """Close dialog and re-enable UI."""
             if self._progress_dlg:
                 self._progress_dlg.accept()
                 self._progress_dlg = None
-            self._loader = None
             self.btn_start.setEnabled(True)
-
         def on_ok(res):
             if self._was_cancelled:
                 cleanup()
@@ -2632,9 +2632,16 @@ class ImageClassificationApp(QMainWindow):
             )
 
         def on_finished():
-            """QThread.finished — emitted when run() returns, even on cancel/abort."""
             if self._was_cancelled and self._progress_dlg:
                 cleanup()
+            loader = self._loader
+            self._loader = None
+            if loader is not None:
+                # Belt-and-suspenders: wait briefly in case Qt's internal
+                # bookkeeping isn't quite done, then schedule C++ deletion
+                # via the event loop instead of letting Python GC do it.
+                loader.wait(100)
+                loader.deleteLater()
 
         def on_cancel():
             self._was_cancelled = True
@@ -2851,6 +2858,18 @@ class ImageClassificationApp(QMainWindow):
       
 # -----------------------------Close----------------------------------------
     def closeEvent(self, e):
+        loader = getattr(self, '_loader', None)
+        if loader is not None and loader.isRunning():
+            try:
+                loader.request_abort()
+            except Exception:
+                pass
+            if not loader.wait(5000):
+                logging.warning("Model loader did not exit cleanly; forcing terminate")
+                loader.terminate()
+                loader.wait(1000)
+            self._loader = None
+
         if self.thread and self.thread.isRunning():
             self.thread.stop()
             if not self.thread.wait(5000):  # 5s timeout
@@ -2858,7 +2877,6 @@ class ImageClassificationApp(QMainWindow):
                 self.thread.terminate()
                 self.thread.wait(1000)
             self.thread = None
-
         if hasattr(self, 'mag_widget'):
             self.mag_widget.close_threads()
         if hasattr(self, 'mag_widget_compact'):
