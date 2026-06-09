@@ -1,4 +1,5 @@
 # Custom LLM Chat Dialog with sleek white theme for OnSight Pathology
+# Unified for Windows and macOS — platform differences are handled inline.
 import sys
 import time
 import json
@@ -7,7 +8,8 @@ import gc
 import os
 import torch
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QDialog, QTextEdit, QWidget, QFrame, QGraphicsDropShadowEffect
+    QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QDialog,
+    QTextEdit, QWidget, QFrame, QGraphicsDropShadowEffect, QProgressBar
 )
 from PyQt6.QtGui import QPixmap, QImage, QTextCursor, QColor, QFont
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
@@ -15,6 +17,10 @@ from PIL import Image
 import tempfile
 
 from utils import resource_path
+
+
+_IS_MAC = sys.platform == "darwin"
+
 
 class LLMChatDialog(QDialog):
     """Modern, sleek, white-themed chat interface for the LLM."""
@@ -51,27 +57,22 @@ class LLMChatDialog(QDialog):
                 border: 1px solid #339AF0;
                 background-color: #FFFFFF;
             }
-            /* Rounded send button */
             QPushButton#SendBtn {
                 background-color: #339AF0;
                 color: white;
+                border: none;
                 border-radius: 20px;
-                padding: 10px 20px;
+                padding: 10px 24px;
                 font-weight: bold;
                 font-size: 13pt;
             }
-            QPushButton#SendBtn:hover {
-                background-color: #228BE6;
-            }
-            QPushButton#SendBtn:disabled {
-                background-color: #A5D8FF;
-            }
-            /* Cool Update Image Button */
+            QPushButton#SendBtn:hover { background-color: #228BE6; }
+            QPushButton#SendBtn:disabled { background-color: #ADB5BD; }
             QPushButton#UpdateBtn {
-                background-color: rgba(255, 255, 255, 200);
+                background-color: white;
                 color: #495057;
-                border: 1px solid #DEE2E6;
-                border-radius: 15px;
+                border: 1px solid #E9ECEF;
+                border-radius: 16px;
                 padding: 6px 12px;
                 font-weight: bold;
                 font-size: 13pt;
@@ -107,25 +108,25 @@ class LLMChatDialog(QDialog):
         img_container = QWidget()
         img_layout = QVBoxLayout(img_container)
         img_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.lbl_img = QLabel()
         self.lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_img.setStyleSheet("border-radius: 10px; background-color: #F8F9FA;")
         self._set_preview_image(self.frame_rgb)
-        
+
         # Update button floating below the image
         self.btn_update = QPushButton("📸 Refresh Vision")
         self.btn_update.setObjectName("UpdateBtn")
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.setAutoDefault(False)
         self.btn_update.clicked.connect(self.on_update_image)
-        
+
         # Center the image and button
         h_img_center = QHBoxLayout()
         h_img_center.addStretch()
         h_img_center.addWidget(self.lbl_img)
         h_img_center.addStretch()
-        
+
         h_btn_center = QHBoxLayout()
         h_btn_center.addStretch()
         h_btn_center.addWidget(self.btn_update)
@@ -135,26 +136,78 @@ class LLMChatDialog(QDialog):
         img_layout.addLayout(h_btn_center)
         main_vbox.addWidget(img_container)
 
-    # --- Middle: Borderless elegant chat flow ---
+        # --- Loading progress UI (visible until model is ready) ---
+        self.loading_container = QWidget()
+        loading_v = QVBoxLayout(self.loading_container)
+        loading_v.setContentsMargins(40, 20, 40, 10)
+        loading_v.setSpacing(10)
+
+        self.lbl_loading_title = QLabel("🚀 Initializing AI engine...")
+        self.lbl_loading_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_loading_title.setStyleSheet(
+            "color: #2C3E50; font-size: 12pt; font-weight: 600;"
+        )
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 7px;
+                background-color: #E9ECEF;
+                color: #495057;
+                font-size: 8pt;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                border-radius: 7px;
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4DABF7, stop:1 #228BE6
+                );
+            }
+        """)
+
+        self.lbl_loading_status = QLabel("Preparing...")
+        self.lbl_loading_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_loading_status.setWordWrap(True)
+        self.lbl_loading_status.setStyleSheet(
+            "color: #6C757D; font-size: 9pt;"
+        )
+
+        loading_v.addWidget(self.lbl_loading_title)
+        loading_v.addWidget(self.progress_bar)
+        loading_v.addWidget(self.lbl_loading_status)
+        main_vbox.addWidget(self.loading_container)
+
+        # --- Middle: Borderless elegant chat flow (hidden until ready) ---
         self.txt_history = QTextEdit()
         self.txt_history.setReadOnly(True)
         self.txt_history.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
 
-        font = QFont("Segoe UI", self.BASE_FONT_SIZE)
+        # Use system font: SF on macOS, Segoe UI on Windows. Avoids the
+        # "missing font Segoe UI" warning on Mac.
+        font = QFont()
+        font.setFamily(".AppleSystemUIFont" if _IS_MAC else "Segoe UI")
+        font.setPointSize(self.BASE_FONT_SIZE)
         self.txt_history.setFont(font)
-        
+        self.inp_font = font
+
+        self.txt_history.setVisible(False)
         main_vbox.addWidget(self.txt_history)
 
         # --- Bottom: Modern input area ---
         input_layout = QHBoxLayout()
         input_layout.setSpacing(10)
-        
+
         self.inp = QLineEdit()
         self.inp.setPlaceholderText("Message AI Copilot...")
-        self.inp.setFont(font)
+        self.inp.setFont(self.inp_font)
         self.inp.returnPressed.connect(self.on_send)
-        
+
         self.btn_send = QPushButton("Send")
         self.btn_send.setObjectName("SendBtn")
         self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -165,17 +218,11 @@ class LLMChatDialog(QDialog):
         input_layout.addWidget(self.btn_send)
         main_vbox.addLayout(input_layout)
 
-        # welcome message
-        welcome_html = """
-        <div style='text-align: center; margin-top: 20px;'>
-            <span style='color: #ADB5BD; font-size: 10pt;'>
-                🚀 Initializing AI engine... This may take a moment.
-            </span>
-        </div>
-        """
-        self.txt_history.setHtml(welcome_html)
         self.inp.setEnabled(False)
         self.btn_send.setEnabled(False)
+
+        # Incremental stdout buffer (must exist before _start_process emits anything)
+        self._stdout_buffer = ""
 
         # Launch subprocess
         self._start_process()
@@ -184,7 +231,9 @@ class LLMChatDialog(QDialog):
         """Helper function to set and scale the preview image smoothly."""
         h, w, c = frame_rgb.shape
         qimg = QImage(frame_rgb.data, w, h, c * w, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimg).scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        pixmap = QPixmap.fromImage(qimg).scaled(
+            220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        )
         self.lbl_img.setPixmap(pixmap)
 
     def on_update_image(self):
@@ -196,10 +245,10 @@ class LLMChatDialog(QDialog):
             msg.setStyleSheet("background-color: white; color: black;")
             msg.exec()
             return
-            
+
         if getattr(self.parent, 'latest_frame', None) is None:
             return
-            
+
         new_frame = self.parent.latest_frame.copy()
 
         if np.array_equal(self.frame_rgb, new_frame):
@@ -207,13 +256,13 @@ class LLMChatDialog(QDialog):
 
         self.frame_rgb = new_frame
         self._set_preview_image(self.frame_rgb)
-        
+
         Image.fromarray(new_frame).save(self.temp_img_path)
-        
+
         if self.process and self.process.state() == QProcess.ProcessState.Running:
-                msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
-                self.process.write(msg.encode("utf-8"))
-                
+            msg = json.dumps({"type": "update_image", "path": self.temp_img_path}) + "\n"
+            self.process.write(msg.encode("utf-8"))
+
         # cool visual feedback for image update
         sys_html = """
         <table width="100%" cellspacing="0" cellpadding="0">
@@ -228,35 +277,90 @@ class LLMChatDialog(QDialog):
           </tr>
         </table>
         """
-
         self.txt_history.append(sys_html)
 
     def _start_process(self):
         self.process = QProcess(self)
 
+        # Merge stderr into stdout so any stray prints don't get lost — the
+        # JSON parser already tolerates non-JSON lines.
+        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+
+        # Default precision differs by platform: bitsandbytes 8bit needs CUDA,
+        # so on Mac we ship a 16bit model instead.
         if not self.llm_precision:
-            self.llm_precision = "8bit"
+            self.llm_precision = "16bit" if _IS_MAC else "8bit"
 
         if getattr(sys, 'frozen', False):
             self.process.setProgram(sys.executable)
-            self.process.setArguments(["--run-llm-worker", "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
+            self.process.setArguments([
+                "--run-llm-worker",
+                "--cfg", self.llm_metadata_path,
+                "--image", self.temp_img_path,
+                "--precision", self.llm_precision,
+            ])
         else:
             script_path = resource_path("llm_worker_process.py")
             self.process.setProgram(sys.executable)
-            self.process.setArguments([script_path, "--cfg", self.llm_metadata_path, "--image", self.temp_img_path, "--precision", self.llm_precision])
+            # -u keeps the child's stdout/stderr unbuffered so progress JSON
+            # lines reach us in real time (important on Windows in particular).
+            self.process.setArguments([
+                "-u", script_path,
+                "--cfg", self.llm_metadata_path,
+                "--image", self.temp_img_path,
+                "--precision", self.llm_precision,
+            ])
 
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
+        self.process.finished.connect(self._on_process_finished)
+        self.process.errorOccurred.connect(self._on_process_error)
+
         self.process.start()
 
+    def _on_process_finished(self, exitCode, exitStatus):
+        if exitCode != 0 and not self.model_ready:
+            err_msg = f"<br><b style='color:#FA5252;'>[System] Backend process died unexpectedly! (Exit Code: {exitCode})</b><br>"
+            if exitCode == 137 or exitCode == -9:
+                err_msg += "<span style='color:gray;'>Reason: Out of Memory. The OS killed the process because it ran out of RAM.</span>"
+            # Show error in the loading status area if we never got to ready
+            self.lbl_loading_title.setText("⚠️ Failed to start")
+            self.lbl_loading_status.setText(err_msg.replace("<br>", " "))
+            self.txt_history.setVisible(True)
+            self.txt_history.append(err_msg)
+
+    def _on_process_error(self, error):
+        self.lbl_loading_status.setText(f"Failed to start process: {error}")
+
     def _handle_stdout(self):
-        output = bytes(self.process.readAllStandardOutput()).decode("utf-8")
-        for line in output.strip().splitlines():
+        # Read whatever bytes are currently available and append to buffer.
+        raw_bytes = self.process.readAllStandardOutput().data()
+        self._stdout_buffer += raw_bytes.decode("utf-8", errors="replace")
+
+        # Process every complete (newline-terminated) line.
+        while "\n" in self._stdout_buffer:
+            line, self._stdout_buffer = self._stdout_buffer.split("\n", 1)
+            line = line.strip()
+
+            if not line:
+                continue
+
             try:
                 msg = json.loads(line)
                 msg_type = msg.get("type")
 
-                if msg_type == "ready":
+                if msg_type == "progress":
+                    pct = msg.get("percent", -1)
+                    txt = msg.get("text", "")
+                    if isinstance(pct, int) and 0 <= pct <= 100:
+                        self.progress_bar.setValue(pct)
+                    if txt:
+                        self.lbl_loading_status.setText(txt)
+
+                elif msg_type == "ready":
                     self.model_ready = True
+                    self.progress_bar.setValue(100)
+                    self.loading_container.setVisible(False)
+                    self.txt_history.setVisible(True)
                     self.txt_history.clear()
                     self.txt_history.append("""
                     <div style='text-align: center; margin-top: 10px; margin-bottom: 20px;'>
@@ -270,32 +374,44 @@ class LLMChatDialog(QDialog):
                     self.inp.setFocus()
 
                 elif msg_type == "chunk":
-                    # streaming response chunk from the LLM
                     cursor = self.txt_history.textCursor()
                     cursor.movePosition(QTextCursor.MoveOperation.End)
-                    
+
                     fmt = cursor.charFormat()
                     fmt.setFontPointSize(self.BASE_FONT_SIZE)
                     fmt.setForeground(QColor("#2C3E50"))
                     cursor.setCharFormat(fmt)
-                    
+
                     cursor.insertText(msg["text"])
                     self.txt_history.setTextCursor(cursor)
-                    self.txt_history.verticalScrollBar().setValue(self.txt_history.verticalScrollBar().maximum())
-                    
+                    self.txt_history.verticalScrollBar().setValue(
+                        self.txt_history.verticalScrollBar().maximum()
+                    )
+
                 elif msg_type == "stream_end":
                     self.inp.setEnabled(True)
                     self.btn_send.setEnabled(True)
                     self.inp.setFocus()
-                    self.txt_history.append("<br>") # add spacing after each response
+                    self.txt_history.append("<br>")
 
                 elif msg_type == "error":
-                    self.txt_history.append(f"<b style='color:#FA5252;'>Error:</b> {msg['text']}<br>")
+                    if not self.model_ready:
+                        # Error during loading — surface it in the loading area.
+                        self.lbl_loading_title.setText("⚠️ Initialization failed")
+                        self.lbl_loading_status.setText(msg.get("text", "Unknown error"))
+                    self.txt_history.setVisible(True)
+                    self.txt_history.append(
+                        f"<b style='color:#FA5252;'>Error:</b> {msg.get('text', '')}<br>"
+                    )
                     self.inp.setEnabled(True)
                     self.btn_send.setEnabled(True)
 
+            except json.JSONDecodeError:
+                # Non-JSON line: probably stderr debug output from a library.
+                # Don't surface it to the user but keep it for the dev console.
+                print(f"[LLM Debug]: {line}")
             except Exception as e:
-                pass
+                print(f"[UI Update Error]: {e}")
 
     def on_send(self):
             text = self.inp.text().strip()
@@ -304,7 +420,7 @@ class LLMChatDialog(QDialog):
 
             self.inp.clear()
 
-            # 1. User's blue bubble 
+            # 1. User's blue bubble
             user_html = f"""
             <table width="100%" cellspacing="0" cellpadding="0">
             <tr>
@@ -321,7 +437,7 @@ class LLMChatDialog(QDialog):
             """
             self.txt_history.append(user_html)
 
-            # 2. prefix 
+            # 2. prefix
             ai_start_html = """
             <table width="100%" cellspacing="0" cellpadding="0">
             <tr>
@@ -330,19 +446,20 @@ class LLMChatDialog(QDialog):
             </table>
             """
             self.txt_history.append(ai_start_html)
-            
+
             self.inp.setEnabled(False)
             self.btn_send.setEnabled(False)
 
             if self.process:
                 msg = json.dumps({"type": "prompt", "text": text}) + "\n"
                 self.process.write(msg.encode("utf-8"))
+                self.process.waitForBytesWritten()
 
     def closeEvent(self, event):
         if self.process and self.process.state() == QProcess.ProcessState.Running:
             self.process.kill()
             self.process.finished.connect(self._cleanup_temp_file)
-            self.process.waitForFinished()  
+            self.process.waitForFinished()
         else:
             self._cleanup_temp_file()
         super().closeEvent(event)

@@ -50,6 +50,15 @@ def get_tissue_mask_global(img_rgb):
     return tissue_mask
 
 def get_foreground_window_scale():
+    """
+    Returns the per-monitor DPI scale factor for the focused window
+    (e.g. 1.0 = 100%, 1.5 = 150%). On macOS / Linux there is no
+    equivalent of Windows per-monitor DPI awareness
+    """
+    import sys
+    if sys.platform != "win32":
+        return 1.0
+
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     shcore = ctypes.WinDLL("Shcore", use_last_error=True)
 
@@ -86,8 +95,14 @@ def get_foreground_window_scale():
             "dpi": dpiX.value,
             "scale_percent": scale_percent
         }
-    info = get_scale_for_foreground_window()
-    return info['scale_percent']/100
+
+    try:
+        info = get_scale_for_foreground_window()
+        return info['scale_percent'] / 100
+    except Exception:
+        # If anything goes wrong on Windows (no foreground window, etc.),
+        # fall back to 1.0 instead of crashing the whole pipeline.
+        return 1.0
 
 def deconvolution_hema_eso(img_rgb):
     I_0 = 255

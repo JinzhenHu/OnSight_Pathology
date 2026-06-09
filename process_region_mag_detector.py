@@ -21,26 +21,32 @@ def fix_region(region, tile_size):
     return reg
 
 def get_foreground_window_scale():
-    try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        shcore = ctypes.WinDLL("Shcore", use_last_error=True)
+    """
+    Returns the per-monitor DPI scale factor for the focused window
+    (e.g. 1.0 = 100%, 1.5 = 150%). On macOS / Linux there is no
+    equivalent of Windows per-monitor DPI awareness, so this always returns 1.0.
+    """
+    import sys
+    if sys.platform != "win32":
+        return 1.0
 
-        PROCESS_PER_MONITOR_DPI_AWARE = 2
-        try:
-            shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
-        except Exception:
-            pass
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    shcore = ctypes.WinDLL("Shcore", use_last_error=True)
 
-        MDT_EFFECTIVE_DPI = 0
-        MONITOR_DEFAULTTONEAREST = 2
+    PROCESS_PER_MONITOR_DPI_AWARE = 2
+    shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 
+    MDT_EFFECTIVE_DPI = 0
+    MONITOR_DEFAULTTONEAREST = 2
+
+    def get_scale_for_foreground_window():
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
-            return 1.0
+            raise ctypes.WinError(ctypes.get_last_error())
 
         hMonitor = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
         if not hMonitor:
-            return 1.0
+            raise ctypes.WinError(ctypes.get_last_error())
 
         dpiX = wintypes.UINT()
         dpiY = wintypes.UINT()
@@ -51,16 +57,23 @@ def get_foreground_window_scale():
             ctypes.byref(dpiX),
             ctypes.byref(dpiY)
         )
-        
         if result != 0:
-            return 1.0
+            raise OSError(f"GetDpiForMonitor failed, HRESULT={result}")
 
         scale_percent = dpiX.value / 96 * 100
-        return scale_percent / 100.0
+        return {
+            "hwnd": hwnd,
+            "dpi": dpiX.value,
+            "scale_percent": scale_percent
+        }
 
-    except Exception as e:
+    try:
+        info = get_scale_for_foreground_window()
+        return info['scale_percent'] / 100
+    except Exception:
+        # If anything goes wrong on Windows (no foreground window, etc.),
+        # fall back to 1.0 instead of crashing the whole pipeline.
         return 1.0
-    
 
 
 def generate_tiles_nopad(img_h: int,
