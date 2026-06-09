@@ -198,6 +198,7 @@ a = Analysis(
             "custom_widgets.PulsingDot",
             "custom_widgets.ResizeImageDialog",
             "custom_widgets.WelcomeDialog",
+            "custom_widgets.SpinnerDialog",
         ]
     ),
 

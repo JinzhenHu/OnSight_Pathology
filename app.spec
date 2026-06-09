@@ -128,6 +128,7 @@ a = Analysis(
             "custom_widgets.CollapsibleGroupBox",
             "custom_widgets.PulsingDot",
             "custom_widgets.WelcomeDialog",
+            "custom_widgets.SpinnerDialog",
             "settings",
             "utils",
             "utils_clustering",

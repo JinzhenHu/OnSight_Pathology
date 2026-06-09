@@ -19,6 +19,7 @@ class ModelLoaderThread(QThread):
     progress = pyqtSignal(str, int, float, float)        # (status_text, percent 0..100; -1 = indeterminate, current_bytes, total_bytes)
     finished_ok = pyqtSignal(dict)           # the dict returned by load_model()
     failed = pyqtSignal(str, str)            # (short_msg, full_traceback)
+    load_mode_detected = pyqtSignal(str)
 
     def __init__(self, model_name: str, parent=None):
         super().__init__(parent)
@@ -28,21 +29,54 @@ class ModelLoaderThread(QThread):
     def request_abort(self):
         self._abort = True
 
+    def _detect_load_mode(self) -> str:
+        """
+        Decide whether this load will be fast (bundled / cached) or slow
+        (will need to download). UI picks spinner vs progress bar based
+        on this.
+        """
+        try:
+            import os
+            from utils import resource_path
+            meta = settings.MODEL_METADATA.get(self.model_name, {})
+
+            # 1. Bundled-with-installer copy exists → fast.
+            local_rel = meta.get("local_path")
+            if local_rel and os.path.exists(resource_path(local_rel)):
+                return "fast"
+
+            # 2. Cellpose models live in ~/.cellpose/models/ regardless of OS.
+            #    Detect Cellpose-SAM by the 'model' field in metadata.
+            model_kind = (meta.get("model") or "").lower()
+            if "cellpose" in model_kind or "cpsam" in model_kind:
+                cpsam_path = os.path.join(
+                    os.path.expanduser("~"), ".cellpose", "models", "cpsam"
+                )
+                return "fast" if os.path.exists(cpsam_path) else "download"
+
+            # 3. HF model — check the local HF cache.
+            repo = meta.get("repo")
+            files = meta.get("hf_files") or []
+            if repo and files:
+                from huggingface_hub import try_to_load_from_cache
+                for fname in files:
+                    if not try_to_load_from_cache(repo_id=repo, filename=fname):
+                        return "download"
+                return "fast"
+
+            # 4. Can't tell — assume worst case so user sees progress bar.
+            return "download"
+        except Exception:
+            return "download"
     def run(self):
         try:
-            try:
-                import settings
-                import os
-                from utils import resource_path
+            mode = self._detect_load_mode()
+            self.load_mode_detected.emit(mode)
 
-                meta = settings.MODEL_METADATA.get(self.model_name, {})
-                local_rel = meta.get("local_path")
-                if local_rel and os.path.exists(resource_path(local_rel)):
-                    self.progress.emit("Loading bundled model…", -1, 0, 0)
-                else:
-                    self.progress.emit("Connecting to HuggingFace…", -1, 0, 0)
-            except Exception:
-                pass
+            if mode == "fast":
+                self.progress.emit("Loading bundled model…", -1, 0, 0)
+            else:
+                self.progress.emit("Connecting to HuggingFace…", -1, 0, 0)
 
             # self._install_hf_progress_hook()
             # self.progress.emit("Preparing…", -1, 0, 0)

@@ -2514,14 +2514,33 @@ class ImageClassificationApp(QMainWindow):
         # loading model with progress dialog
     def _start_with_progress(self, model_name: str):
         from custom_widgets.LoadingDialog import LoadingDialog
+        from custom_widgets.SpinnerDialog import SpinnerDialog
 
-        self._progress_dlg = LoadingDialog(
+        # Start with the lightweight spinner. If the loader thread tells us
+        # files actually need downloading, we'll swap it for the full
+        # LoadingDialog before the download begins.
+        self._progress_dlg = SpinnerDialog(
             title="Loading Model",
             model_name=model_name,
             parent=self
         )
         self._loader = ModelLoaderThread(model_name, parent=self)
         self._was_cancelled = False
+
+        def on_load_mode(mode: str):
+            """Swap to the full progress dialog if we have to download."""
+            if mode == "download" and isinstance(self._progress_dlg, SpinnerDialog):
+                old = self._progress_dlg
+                self._progress_dlg = LoadingDialog(
+                    title="Loading Model",
+                    model_name=model_name,
+                    parent=self,
+                )
+                self._progress_dlg.cancelled.connect(on_cancel)
+                old.close()
+                self._progress_dlg.show()
+
+        self._loader.load_mode_detected.connect(on_load_mode)
 
         def on_progress(text, pct, cur_b, tot_b):
             if not self._progress_dlg:
