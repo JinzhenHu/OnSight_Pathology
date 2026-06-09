@@ -172,7 +172,6 @@ from custom_widgets.mag_detector_widget import MagDetectorWidget
 from custom_widgets.overlay_widget import OverlayWidget as ClusteringOverlay
 from custom_widgets.overlay_widget_attention import OverlayWidget as HistomicsOverlay
 from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
-from custom_widgets.InferenceLoadingWidget import InferenceLoadingWidget
 from model_loader_thread import ModelLoaderThread
 from device_compat import empty_cache
 
@@ -1479,7 +1478,7 @@ class ImageClassificationApp(QMainWindow):
         main_left.addWidget(self.grp_cfg)
 
 
-        grp_roi = CollapsibleGroupBox("ROI Finder")
+        grp_roi = QGroupBox("ROI Finder")
         v_roi = QVBoxLayout()
 
         h_roi_top = QHBoxLayout()
@@ -1598,7 +1597,7 @@ class ImageClassificationApp(QMainWindow):
         h_overlay_ctrl.addWidget(self.btn_overlay_stop)
         v_roi.addLayout(h_overlay_ctrl)
 
-        grp_roi.content_layout().addLayout(v_roi)
+        grp_roi.setLayout(v_roi)
         main_left.addWidget(grp_roi)
 
         # -------------------- LLM selection -----------------------------
@@ -2423,9 +2422,7 @@ class ImageClassificationApp(QMainWindow):
 
     def _set_inference_placeholder(self):
         """Show a simple animated 'loading' message while the first inference runs.
-        
-        Heavy models (CellViT, Retinanet, kaiko-ViT) take 5-30s for first inference.
-        A simple animated dot ellipsis tells the user the app isn't frozen.
+    
         """
         self.lbl_img.setPixmap(QPixmap())   # clear any stale image
         self._loading_dot_count = 0
