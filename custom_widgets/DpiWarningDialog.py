@@ -434,8 +434,8 @@ class DpiWarningDialog(QDialog):
 
         intro = QLabel(
             f"<p style='line-height:1.5;'>"
-            f"For accurate magnification detection, please set Windows display "
-            f"scaling to <b>100%</b>. Your display is currently at "
+            f"For more accurate magnification detection, we recommend setting "
+            f"Windows display scaling to <b>100%</b>. Your display is currently at "
             f"<b style='color:#e67e22;'>{current_pct}%</b>.<br>"
             f"<span style='color:#7d8a99; font-size:9pt;'>"
             f"Here's how to change it 👇</span></p>"
