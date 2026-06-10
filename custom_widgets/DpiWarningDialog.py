@@ -415,7 +415,7 @@ class DpiWarningDialog(QDialog):
             "setting Windows display scaling to <b>100%</b>."
         ),
         "cellvit": (
-            "For <b>accurate cell area and density measurements</b>, we "
+            "For <b>accurate cell area and density measurements</b>, we highly "
             "recommend setting Windows display scaling to <b>100%</b>."
         ),
         "cellpose": (
