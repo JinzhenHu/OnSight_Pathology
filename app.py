@@ -1157,34 +1157,48 @@ class ImageClassificationApp(QMainWindow):
                 by = int(h / 3)
 
                 #os_scale = self.devicePixelRatioF()
-                # physical_box_w = bx  / os_scale
-                # physical_box_h = by  / os_scale
-                physical_box_w = bx
-                physical_box_h = by
-                
-                # calculate MPP: sqrt( physical area / pixel area )
-                new_mpp = math.sqrt(val_um2 / (physical_box_w * physical_box_h))
-                # === DIAGNOSTIC: remove after debugging ===
-                import logging
-                logging.warning(f"[CALIB DEBUG] latest_frame shape: {self.latest_frame.shape}")
-                logging.warning(f"[CALIB DEBUG] bx={bx}, by={by}, bx*by={bx*by}")
-                logging.warning(f"[CALIB DEBUG] val_um2={val_um2}")
-                logging.warning(f"[CALIB DEBUG] mag_key={mag_key}")
-
-                # Check what the capture region was vs what we ended up with
-                if self.selected_region:
-                    logging.warning(f"[CALIB DEBUG] selected_region: {self.selected_region}")
-
-                # Check DPI
                 try:
                     from process_region_mag_detector import get_foreground_window_scale
                     os_scale = get_foreground_window_scale()
-                    logging.warning(f"[CALIB DEBUG] OS DPI scale: {os_scale}")
-                except Exception as e:
-                    logging.warning(f"[CALIB DEBUG] couldn't get OS scale: {e}")
+                except Exception:
+                    os_scale = 1.0
+                physical_box_w = bx  / os_scale
+                physical_box_h = by  / os_scale
+                # physical_box_w = bx
+                # physical_box_h = by
+                
+                # calculate MPP: sqrt( physical area / pixel area )
+                new_mpp = math.sqrt(val_um2 / (physical_box_w * physical_box_h))
+                # # === DIAGNOSTIC: remove after debugging ===
+                # import logging
+                # logging.warning(f"[CALIB] === START ===")
+                # logging.warning(f"[CALIB] latest_frame shape: {self.latest_frame.shape}")
+                # logging.warning(f"[CALIB] selected_region: {self.selected_region}")
 
-                logging.warning(f"[CALIB DEBUG] computed new_mpp: {math.sqrt(val_um2 / (bx*by))}")
-                # === END DIAGNOSTIC ===
+                # try:
+                #     from process_region_mag_detector import get_foreground_window_scale
+                #     os_scale = get_foreground_window_scale()
+                #     logging.warning(f"[CALIB] OS DPI scale: {os_scale}")
+                # except Exception as e:
+                #     os_scale = 1.0
+                #     logging.warning(f"[CALIB] OS DPI fallback: {e}")
+
+                # logging.warning(f"[CALIB] user input val_um2: {val_um2}")
+                # logging.warning(f"[CALIB] user input unit: {cmb_unit.currentText()}")
+                # logging.warning(f"[CALIB] mag_key selected: {mag_key}")
+
+                # logging.warning(f"[CALIB] bx={bx} by={by}")
+                # logging.warning(f"[CALIB] logical bx={bx/os_scale:.2f} by={by/os_scale:.2f}")
+
+                # mpp_raw = math.sqrt(val_um2 / (bx*by))
+                # mpp_logical = math.sqrt(val_um2 / ((bx/os_scale) * (by/os_scale)))
+                # mpp_physical_inv = math.sqrt(val_um2 / ((bx*os_scale) * (by*os_scale)))
+
+                # logging.warning(f"[CALIB] mpp if no DPI correction: {mpp_raw:.4f}")
+                # logging.warning(f"[CALIB] mpp if div by os_scale: {mpp_logical:.4f}")
+                # logging.warning(f"[CALIB] mpp if mul by os_scale: {mpp_physical_inv:.4f}")
+                # logging.warning(f"[CALIB] === END ===")
+                # # === END DIAGNOSTIC ===
                 
                 # save to the corresponding magnification profile 
                 self.calibrated_mpps[mag_key] = new_mpp
