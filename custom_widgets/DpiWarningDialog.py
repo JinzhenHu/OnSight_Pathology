@@ -67,11 +67,7 @@ def _current_dpi_scale() -> float:
             logging.warning(f"Could not query Windows DPI: {e}")
             return 1.0
     else:
-        try:
-            primary = QGuiApplication.primaryScreen()
-            return float(primary.devicePixelRatio()) if primary else 1.0
-        except Exception:
-            return 1.0
+        return 1.0
 
 
 # ============================================================================
