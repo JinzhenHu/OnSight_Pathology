@@ -348,7 +348,7 @@ class ClassificationThread(QThread):
                 saved_mpp = self.ui.calibrated_mpp
                 if saved_mpp and "mpp" in extra_cfg:
                     try:
-                        if abs(float(extra_cfg["mpp"]) - saved_mpp) < 1e-5:
+                        if abs(float(extra_cfg["mpp"]) - saved_mpp) < 1e-3:
                             extra_cfg["is_calibrated"] = True
                         else:
                             extra_cfg["is_calibrated"] = False
