@@ -129,6 +129,7 @@ a = Analysis(
             "custom_widgets.PulsingDot",
             "custom_widgets.WelcomeDialog",
             "custom_widgets.SpinnerDialog",
+            "custom_widgets.DpiWarningDialog",
             "settings",
             "utils",
             "utils_clustering",

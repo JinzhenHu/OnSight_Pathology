@@ -105,6 +105,9 @@ class MagDetectorWidget(QWidget):
                     self.btn_toggle.setChecked(False)
                     return
 
+                from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
+                maybe_show_dpi_warning(parent=self.window())
+
                 self.is_tracking = True
                 self.tracking_state_changed.emit(True)
 

@@ -199,6 +199,7 @@ a = Analysis(
             "custom_widgets.ResizeImageDialog",
             "custom_widgets.WelcomeDialog",
             "custom_widgets.SpinnerDialog",
+            "custom_widgets.DpiWarningDialog",
         ]
     ),
 

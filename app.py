@@ -1156,10 +1156,12 @@ class ImageClassificationApp(QMainWindow):
                 bx = int(w / 3)
                 by = int(h / 3)
 
-                #os_scale = self.devicePixelRatioF()
-                    #from process_region_mag_detector import get_foreground_window_scale
-                    #os_scale = get_foreground_window_scale()
-                os_scale = self.devicePixelRatioF()
+                try:
+                    from custom_widgets.DpiWarningDialog import _current_dpi_scale
+                    os_scale = _current_dpi_scale()
+                except Exception:
+                    os_scale = 1.0
+                
                 physical_box_w = bx  / os_scale
                 physical_box_h = by  / os_scale
                 # physical_box_w = bx
