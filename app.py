@@ -1157,11 +1157,9 @@ class ImageClassificationApp(QMainWindow):
                 by = int(h / 3)
 
                 #os_scale = self.devicePixelRatioF()
-                try:
-                    from process_region_mag_detector import get_foreground_window_scale
-                    os_scale = get_foreground_window_scale()
-                except Exception:
-                    os_scale = 1.0
+                    #from process_region_mag_detector import get_foreground_window_scale
+                    #os_scale = get_foreground_window_scale()
+                os_scale = self.devicePixelRatioF()
                 physical_box_w = bx  / os_scale
                 physical_box_h = by  / os_scale
                 # physical_box_w = bx
