@@ -411,7 +411,7 @@ class DpiWarningDialog(QDialog):
     # Context-specific intro messages
     CONTEXT_MESSAGES = {
         "mag": (
-            "For <b>more accurate magnification detection</b>, we recommend "
+            "For <b>optimal magnification detector performance</b>, we recommend "
             "setting Windows display scaling to <b>100%</b>."
         ),
         "cellvit": (

@@ -14,6 +14,7 @@ NuLite/
 app_one_dir.spec
 .vscode/
 installer-gpu.iss
+.venv_backup_2026_06_10/
 
 __pycache__/
 .vscode/

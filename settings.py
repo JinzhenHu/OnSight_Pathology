@@ -35,7 +35,7 @@ MODEL_CATELOG = [
         {'name': "MIB (YOLO)", 'info_file': 'metadata/mib_yolo_1024.json'},
         {'name': "MIB (Cellpose-SAM)", 'info_file': 'metadata/mib_cellpose.json'},
         {'name': "Cellular Features (Cellpose-SAM)", 'info_file': 'metadata/CPSAM_profiler.json'},
-        {'name': "PanNuke (CellViT-SAM-H)", 'info_file': 'metadata/cell_vit.json'},
+        {'name': "PanNuke (CellViT-SAM-H) [Beta]", 'info_file': 'metadata/cell_vit.json'},
 
     ]),
     ("▶️ Object Detection Models", [
