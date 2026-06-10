@@ -1164,6 +1164,27 @@ class ImageClassificationApp(QMainWindow):
                 
                 # calculate MPP: sqrt( physical area / pixel area )
                 new_mpp = math.sqrt(val_um2 / (physical_box_w * physical_box_h))
+                # === DIAGNOSTIC: remove after debugging ===
+                import logging
+                logging.warning(f"[CALIB DEBUG] latest_frame shape: {self.latest_frame.shape}")
+                logging.warning(f"[CALIB DEBUG] bx={bx}, by={by}, bx*by={bx*by}")
+                logging.warning(f"[CALIB DEBUG] val_um2={val_um2}")
+                logging.warning(f"[CALIB DEBUG] mag_key={mag_key}")
+
+                # Check what the capture region was vs what we ended up with
+                if self.selected_region:
+                    logging.warning(f"[CALIB DEBUG] selected_region: {self.selected_region}")
+
+                # Check DPI
+                try:
+                    from process_region_mag_detector import get_foreground_window_scale
+                    os_scale = get_foreground_window_scale()
+                    logging.warning(f"[CALIB DEBUG] OS DPI scale: {os_scale}")
+                except Exception as e:
+                    logging.warning(f"[CALIB DEBUG] couldn't get OS scale: {e}")
+
+                logging.warning(f"[CALIB DEBUG] computed new_mpp: {math.sqrt(val_um2 / (bx*by))}")
+                # === END DIAGNOSTIC ===
                 
                 # save to the corresponding magnification profile 
                 self.calibrated_mpps[mag_key] = new_mpp
