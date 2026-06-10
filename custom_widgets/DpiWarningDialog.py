@@ -15,7 +15,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QFrame, QWidget, QSizePolicy,
+    QCheckBox, QFrame, QWidget, QSizePolicy, QMessageBox,
 )
 
 
@@ -406,13 +406,31 @@ class AnimatedDpiDemo(QWidget):
 # Dialog
 # ============================================================================
 class DpiWarningDialog(QDialog):
-    SUPPRESS_KEY = "suppress_dpi_warning_mag"
+    SUPPRESS_KEY = "suppress_dpi_warning_mag"  # legacy, kept for back-compat
 
-    def __init__(self, current_scale: float, parent=None):
+    # Context-specific intro messages
+    CONTEXT_MESSAGES = {
+        "mag": (
+            "For <b>more accurate magnification detection</b>, we recommend "
+            "setting Windows display scaling to <b>100%</b>."
+        ),
+        "cellvit": (
+            "For <b>accurate cell area and density measurements</b>, we "
+            "recommend setting Windows display scaling to <b>100%</b>."
+        ),
+        "cellpose": (
+            "For <b>accurate cell area and density measurements</b>, we "
+            "recommend setting Windows display scaling to <b>100%</b>."
+        ),
+    }
+
+    def __init__(self, current_scale: float, parent=None, context: str = "mag"):
         super().__init__(parent)
         self.setWindowTitle("Display Scaling Recommendation")
         self.setMinimumWidth(480)
         self.setModal(True)
+        
+        self._context = context
 
         current_pct = int(round(current_scale * 100))
         # Pick a familiar starting value for the animation
@@ -432,10 +450,11 @@ class DpiWarningDialog(QDialog):
         header.setStyleSheet("font-size: 15pt; font-weight: 600; color: #2c3e50;")
         layout.addWidget(header)
 
+        # ---------- Intro (context-specific) ----------
+        intro_msg = self.CONTEXT_MESSAGES.get(context, self.CONTEXT_MESSAGES["mag"])
         intro = QLabel(
             f"<p style='line-height:1.5;'>"
-            f"For more accurate magnification detection, we recommend setting "
-            f"Windows display scaling to <b>100%</b>. Your display is currently at "
+            f"{intro_msg} Your display is currently at "
             f"<b style='color:#e67e22;'>{current_pct}%</b>.<br>"
             f"<span style='color:#7d8a99; font-size:9pt;'>"
             f"Here's how to change it 👇</span></p>"
@@ -443,7 +462,6 @@ class DpiWarningDialog(QDialog):
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(intro)
-
         # ---------- Animation ----------
         self.demo = AnimatedDpiDemo(initial_value=initial)
         layout.addWidget(self.demo)
@@ -486,35 +504,102 @@ class DpiWarningDialog(QDialog):
         footer.addWidget(btn_done)
         layout.addLayout(footer)
 
+    def is_suppress_checked(self) -> bool:
+        """Return True if the user ticked the 'Don't show this again' checkbox."""
+        return self.chk_suppress.isChecked()
+    
     def _open_display_settings(self):
+        """Open Windows Display Settings, then prompt about restarting OnSight."""
         try:
             if sys.platform == "win32":
                 os.startfile("ms-settings:display")
+            else:
+                return
         except Exception as e:
             logging.warning(f"Could not open Display Settings: {e}")
+            return
+        
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(800, self._prompt_restart)
 
-    def is_suppress_checked(self) -> bool:
-        return self.chk_suppress.isChecked()
+
+    def _prompt_restart(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("After Changing")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText(
+            "Once you've changed the scaling to <b>100%</b> in Windows Display Settings, "
+            "OnSight needs to <b>restart</b> for the new DPI to take effect."
+            "<br><br>"
+            "Click <b>Restart Now</b> when you've finished changing the setting."
+        )
+        btn_restart = msg.addButton("Restart Now", QMessageBox.ButtonRole.AcceptRole)
+        btn_later = msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_later)
+        msg.exec()
+        if msg.clickedButton() is btn_restart:
+            self._restart_onsight()
+
+
+    def _restart_onsight(self):
+        import subprocess
+        from PyQt6.QtWidgets import QApplication
+        
+        try:
+            if sys.platform == "darwin" and ".app/" in sys.executable:
+                app_path = sys.executable.split(".app/")[0] + ".app"
+                subprocess.Popen(["open", "-n", app_path])
+            else:
+                subprocess.Popen([sys.executable] + sys.argv)
+            
+            self.accept()
+            QApplication.quit()
+        except Exception as e:
+            logging.error(f"Failed to restart OnSight: {e}")
+            QMessageBox.warning(
+                self,
+                "Restart Failed",
+                "Could not restart OnSight automatically. "
+                "Please close and reopen the app manually."
+            )
 
 
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
-def maybe_show_dpi_warning(parent=None) -> None:
+def maybe_show_dpi_warning(parent=None, context: str = "mag") -> None:
+    """
+    Show the DPI warning dialog if:
+      - We are on Windows
+      - The user hasn't ticked "Don't show this again" for this context
+      - The current display scaling is NOT already 100%
+    
+    Args:
+        parent: parent widget for the dialog
+        context: identifier for this warning's suppress state. Different
+                 contexts have independent "don't show again" flags, so a
+                 user who silenced the mag-detector warning will still see
+                 the cellvit warning the first time.
+    """
     if sys.platform != "win32":
         return
 
     settings = _load_settings()
-    if settings.get(DpiWarningDialog.SUPPRESS_KEY, False):
+    
+    # Build a context-specific suppress key
+    suppress_key = f"suppress_dpi_warning_{context}"
+    
+    if settings.get(suppress_key, False):
         return
 
     scale = _current_dpi_scale()
     if abs(scale - 1.0) < 0.05:
         return  # already 100%
 
-    dlg = DpiWarningDialog(current_scale=scale, parent=parent)
+    dlg = DpiWarningDialog(current_scale=scale, parent=parent, context=context)
     dlg.exec()
 
     if dlg.is_suppress_checked():
-        settings[DpiWarningDialog.SUPPRESS_KEY] = True
+        settings[suppress_key] = True
         _save_settings(settings)

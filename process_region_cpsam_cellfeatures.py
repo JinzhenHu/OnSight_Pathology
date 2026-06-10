@@ -157,14 +157,14 @@ def process_region(region, **kwargs):
     from custom_widgets.DpiWarningDialog import _current_dpi_scale
     os_scale = _current_dpi_scale() 
     mpp = _safe_float(configs.get('mpp', metadata.get('mpp', 0.25)))
-        # === DIAG: figure out what mpp is actually being used ===
-    is_calibrated = configs.get('is_calibrated', False)
-    import logging
-    logging.warning(f"[CELLPOSE-DIAG] mpp from configs: {configs.get('mpp')}")
-    logging.warning(f"[CELLPOSE-DIAG] mpp final: {mpp}")
-    logging.warning(f"[CELLPOSE-DIAG] is_calibrated: {is_calibrated}")
-    logging.warning(f"[CELLPOSE-DIAG] os_scale: {os_scale}")
-    # === END DIAG ===
+    # # === DIAG: figure out what mpp is actually being used ===
+    # is_calibrated = configs.get('is_calibrated', False)
+    # import logging
+    # logging.warning(f"[CELLPOSE-DIAG] mpp from configs: {configs.get('mpp')}")
+    # logging.warning(f"[CELLPOSE-DIAG] mpp final: {mpp}")
+    # logging.warning(f"[CELLPOSE-DIAG] is_calibrated: {is_calibrated}")
+    # logging.warning(f"[CELLPOSE-DIAG] os_scale: {os_scale}")
+    # # === END DIAG ===
     #print(f"Using mpp: {mpp}, OS scale: {os_scale}, final mpp used for features: {mpp / os_scale}")
     # is_calibrated = configs.get('is_calibrated', False)
     # if not is_calibrated:

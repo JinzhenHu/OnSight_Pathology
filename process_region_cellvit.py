@@ -564,12 +564,27 @@ def process_region(region, **kwargs):
     dedup_dist = _safe_float(configs.get("dedup_dist", DEDUP_DIST_THRESH), DEDUP_DIST_THRESH)
     draw_text = bool(configs.get("draw_text", False))
 
+    from custom_widgets.DpiWarningDialog import _current_dpi_scale
+    os_scale = _current_dpi_scale()
+    #print(f"Using mpp: {mpp}, OS scale: {os_scale}, final mpp used for features: {mpp / os_scale}")
+
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
     frame_rgb = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
+
+    # DPI normalization: shrink image so it looks like it was captured at 100% DPI.
+    # This keeps CellViT seeing cells at the pixel size it was trained on, and lets
+    # `mpp` directly represent "μm per 100%-DPI pixel" — matching the user's calibration.
+    # if abs(os_scale - 1.0) > 1e-3:
+    #     frame_rgb = cv2.resize(
+    #         frame_rgb,
+    #         (max(1, int(round(frame_rgb.shape[1] / os_scale))),
+    #         max(1, int(round(frame_rgb.shape[0] / os_scale)))),
+    #         interpolation=cv2.INTER_AREA,
+    #     )
 
     h, w = frame_rgb.shape[:2]
 
