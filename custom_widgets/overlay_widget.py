@@ -13,6 +13,7 @@ import torch
 import timm
 from timm.data.transforms_factory import create_transform
 from timm.data import resolve_data_config
+from device_compat import get_device
 class OverlayWorker(QThread):
     """Background thread to process the overlay using clustering."""
     finished = pyqtSignal(np.ndarray)
@@ -23,10 +24,10 @@ class OverlayWorker(QThread):
         self.is_busy = False
 
         # 1. Initialize Device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_device()
         #print(f"Initializing OverlayWorker on: {self.device}")
-        #model_path = resource_path(os.path.join("local_models", "model.safetensors"))
-        model_path = r"D:\UofT\2025fall\OnSight\OnSight_Pathology\local_models\model.safetensors"
+        model_path = resource_path(os.path.join("local_models", "model.safetensors"))
+        #model_path = r"D:\UofT\2025fall\OnSight\OnSight_Pathology\local_models\model.safetensors"
         if os.path.exists(model_path):
             # print(f"Found local model at {model_path}. Loading offline...")
             self.model = timm.create_model(
@@ -143,12 +144,11 @@ class OverlayWidget(QFrame):
     #clustering
     ############################################################################
     def process_frame(self, frame_rgb):
-            if self.state == "RUNNING" and not self.worker.is_busy:
+            if self.state == "RUNNING" and not self.worker.isRunning():
                 self.worker.frame = frame_rgb.copy()
                 # Feed the dynamic parameters to the worker thread
                 self.worker.patch_size = getattr(self, 'patch_size', 48)
                 self.worker.n_clusters = getattr(self, 'n_clusters', 5)
-                # 🚀 [将 UI 数据传递给 Worker]
                 self.worker.sat_thresh = getattr(self, 'sat_thresh', 10)
                 self.worker.val_thresh = getattr(self, 'val_thresh', 250)
                 self.worker.tissue_thresh = getattr(self, 'tissue_thresh', 0.95)

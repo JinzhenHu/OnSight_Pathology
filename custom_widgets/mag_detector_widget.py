@@ -4,7 +4,6 @@ import time
 import torch
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QMessageBox
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from torch.mps import empty_cache
 from device_compat import empty_cache
 from utils import load_model
 import settings

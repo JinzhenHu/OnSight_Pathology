@@ -199,6 +199,7 @@ def load_model(model_info):
             res['model'] = model
             res['process_region_func'] = process_region
             res['using_gpu'] = is_gpu_available()
+            return res
         ##############################################################################
         # VIT-Magnification-4-kaiko
         ##############################################################################
@@ -232,6 +233,7 @@ def load_model(model_info):
             res['model'] = model
             res['process_region_func'] = process_region
             res['using_gpu'] = is_gpu_available()
+            return res
        
 
         ##############################################################################
@@ -342,6 +344,7 @@ def load_model(model_info):
             res['model'] = model
             res['process_region_func'] = process_region
             res['using_gpu'] = is_gpu_available()
+            return res
 
         ##############################################################################
         # Retinanet
@@ -393,6 +396,8 @@ def load_model(model_info):
             res['model'] = models.CellposeModel(gpu=is_gpu_available())
             res['process_region_func'] = process_region
             res['using_gpu'] = is_gpu_available()
+
+            return res
 
         ##############################################################################
         # YOLO

@@ -15,7 +15,7 @@ from PyQt6.QtGui import QPixmap, QImage, QTextCursor, QColor, QFont
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
 from PIL import Image
 import tempfile
-
+import html as html_mod
 from utils import resource_path
 
 
@@ -87,7 +87,7 @@ class LLMChatDialog(QDialog):
         self.model_ready = False
         self._error_shown = False
         self.frame_rgb = frame_rgb
-        self.parent = parent
+        self._parent = parent
         self.msgs = []
 
         self.llm_metadata_path = llm_metadata_path
@@ -276,7 +276,7 @@ class LLMChatDialog(QDialog):
         self.lbl_img.setPixmap(pixmap)
 
     def on_update_image(self):
-        if not self.parent.thread or not self.parent.thread.isRunning():
+        if not self._parent.thread or not self._parent.thread.isRunning():
             from PyQt6.QtWidgets import QMessageBox
             msg = QMessageBox(self)
             msg.setWindowTitle("Tracker Paused")
@@ -285,10 +285,10 @@ class LLMChatDialog(QDialog):
             msg.exec()
             return
 
-        if getattr(self.parent, 'latest_frame', None) is None:
+        if getattr(self._parent, 'latest_frame', None) is None:
             return
 
-        new_frame = self.parent.latest_frame.copy()
+        new_frame = self._parent.latest_frame.copy()
 
         if np.array_equal(self.frame_rgb, new_frame):
             return
@@ -549,54 +549,58 @@ class LLMChatDialog(QDialog):
             "then send it to the developer if the problem persists."
         )
     def on_send(self):
-            text = self.inp.text().strip()
-            if not self.model_ready or not text:
-                return
+        text = self.inp.text().strip()
+        if not self.model_ready or not text:
+            return
 
-            self.inp.clear()
+        self.inp.clear()
 
-            # 1. User's blue bubble
-            user_html = f"""
-            <table width="100%" cellspacing="0" cellpadding="0">
-            <tr>
-                <td width="20%"></td>
-                <td align="right">
-                <table cellspacing="0" cellpadding="10" bgcolor="#339AF0">
-                    <tr>
-                    <td><span style="color: white; font-size: 12pt;">{text}</span></td>
-                    </tr>
-                </table>
-                </td>
-            </tr>
+        # Escape user input before embedding it in HTML to prevent
+        text_safe = html_mod.escape(text)
+
+        # 1. User's blue bubble
+        user_html = f"""
+        <table width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+            <td width="20%"></td>
+            <td align="right">
+            <table cellspacing="0" cellpadding="10" bgcolor="#339AF0">
+                <tr>
+                <td><span style="color: white; font-size: 12pt;">{text_safe}</span></td>
+                </tr>
             </table>
-            """
-            self.txt_history.append(user_html)
+            </td>
+        </tr>
+        </table>
+        """
+        self.txt_history.append(user_html)
 
-            # 2. prefix
-            ai_start_html = """
-            <table width="100%" cellspacing="0" cellpadding="0">
-            <tr>
-                <td><b style="color: #20C997; font-size: 12pt;">✦ Assistant</b></td>
-            </tr>
-            </table>
-            """
-            self.txt_history.append(ai_start_html)
+        # 2. AI prefix label
+        ai_start_html = """
+        <table width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+            <td><b style="color: #20C997; font-size: 12pt;">✦ Assistant</b></td>
+        </tr>
+        </table>
+        """
+        self.txt_history.append(ai_start_html)
 
-            self.inp.setEnabled(False)
-            self.btn_send.setEnabled(False)
+        # 3. Disable input while waiting for the model
+        self.inp.setEnabled(False)
+        self.btn_send.setEnabled(False)
 
-            if self.process:
-                msg = json.dumps({"type": "prompt", "text": text}) + "\n"
-                self.process.write(msg.encode("utf-8"))
-                self.process.waitForBytesWritten()
+        if self.process:
+            msg = json.dumps({"type": "prompt", "text": text}) + "\n"
+            self.process.write(msg.encode("utf-8"))
+            self.process.waitForBytesWritten(500)
 
     def closeEvent(self, event):
         if self.process and self.process.state() == QProcess.ProcessState.Running:
-            self.process.kill()
             self.process.finished.connect(self._cleanup_temp_file)
-            self.process.waitForFinished()
-        else:
-            self._cleanup_temp_file()
+            self.process.kill()
+            self.process.waitForFinished(3000)  # bounded timeout, never block GUI forever
+        # Always run cleanup — _cleanup_temp_file is idempotent (uses os.path.exists).
+        self._cleanup_temp_file()
         super().closeEvent(event)
 
     def _cleanup_temp_file(self):

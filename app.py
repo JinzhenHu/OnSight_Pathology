@@ -321,6 +321,7 @@ class ClassificationThread(QThread):
             self.using_gpu = res["using_gpu"]
 
         self.finished.connect(self._on_finished)
+        self.finished.connect(self.deleteLater)
 
     @classmethod
     def from_loaded(cls, ui_instance, model_name, preloaded):
@@ -428,6 +429,7 @@ class ImageClassificationApp(QMainWindow):
         self.selected_region = None
         self.additional_config_inputs = {}
         self.thread = None
+        self._dying_threads = []  
         self.latest_frame = None  
         self.last_result = ""
         self.enlarged_window = None
@@ -898,7 +900,7 @@ class ImageClassificationApp(QMainWindow):
         # Complete
         QMessageBox.information(
             self, "Export complete",
-            f"Saved {len(rows)-1} images and metrics to:\n{out_dir}")
+            f"Saved {len(self.agg_records)} images and metrics to:\n{out_dir}")
 
     # aggregate function triggered by space-bar shortcut and Add button
     def _on_add(self):
@@ -1242,11 +1244,81 @@ class ImageClassificationApp(QMainWindow):
         self._switch_view(compact=checked)
 
     def _switch_view(self, compact: bool):
-        # Remove old widget if exists
+        # ============================================================
+        # 1. Stop and release everything GPU-touching before tearing down
+        #    the UI. Without this, recreating the overlay worker (which
+        #    spawns a new model on the GPU) can hit "illegal memory access"
+        #    on CUDA or stale MPS handles on Apple Silicon if a previous
+        #    GPU context is still half-alive.
+        # ============================================================
+        
+        # Stop the main inference thread if running
+        if self.thread and self.thread.isRunning():
+            self.thread.stop()
+            self.thread.wait(3000)
+            self.thread = None
+        
+        # Stop magnification detector threads (it holds its own model)
+        if hasattr(self, 'mag_widget') and self.mag_widget is not None:
+            try:
+                self.mag_widget.close_threads()
+            except Exception:
+                pass
+        
+        # Stop any overlay workers (they each hold a model in GPU memory)
+        for overlay_attr in ('overlay_clustering', 'overlay_histomics'):
+            overlay = getattr(self, overlay_attr, None)
+            if overlay is not None:
+                try:
+                    # Stop the worker thread if it's running
+                    if hasattr(overlay, 'worker') and overlay.worker is not None:
+                        if overlay.worker.isRunning():
+                            overlay.worker.requestInterruption()
+                            overlay.worker.wait(2000)
+                    # Stop the overlay itself
+                    if hasattr(overlay, 'stop'):
+                        overlay.stop()
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to stop {overlay_attr}: {e}")
+        
+        # Force GPU cleanup — handles CUDA, MPS, and CPU-only transparently.
+        import gc
+        from device_compat import empty_cache
+        gc.collect()
+        empty_cache()
+        
+        # Synchronize: make sure any pending GPU work has truly finished
+        # before we tear down widgets that hold model references.
+        import torch
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.synchronize()
+            except Exception:
+                pass
+        elif (getattr(torch.backends, "mps", None) is not None
+            and torch.backends.mps.is_available()):
+            try:
+                torch.mps.synchronize()
+            except Exception:
+                pass  # synchronize() exists from PyTorch 2.0+; older versions skip
+        
+        # ============================================================
+        # 2. Tear down the old view widget tree
+        # ============================================================
         if self.current_widget is not None:
-            self.current_widget.setParent(None)  # removes it from layout
-
-        # Create new container for this view
+            self.current_widget.setParent(None)
+            self.current_widget.deleteLater()
+            self.current_widget = None
+        
+        # Clear stale overlay references so _build_ui creates fresh ones
+        self.overlay_clustering = None
+        self.overlay_histomics = None
+        self.current_active_overlay = None
+        
+        # ============================================================
+        # 3. Build the new view
+        # ============================================================
         self.current_widget = QWidget()
         if compact:
             layout = QVBoxLayout(self.current_widget)
@@ -1256,14 +1328,13 @@ class ImageClassificationApp(QMainWindow):
             layout = QHBoxLayout(self.current_widget)
             layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
             self._build_ui(layout)
-
+        
         self.central_layout.addWidget(self.current_widget)
         self.current_widget.show()
-
+        
         # Resize main window to fit new layout
         self.central_widget.adjustSize()
         self.adjustSize()
-
     ################################################################################################################################################
     #Build UI
     ################################################################################################################################################
@@ -2261,21 +2332,42 @@ class ImageClassificationApp(QMainWindow):
             old_thread = self.thread
             self.thread = None
             
-            # Disable Start button while we wait for old thread to wind down,
-            # so the user can't spam-click and queue multiple pending starts.
+            self._dying_threads.append(old_thread)
+            
             self.btn_start.setEnabled(False)
             self.btn_start.setText("Stopping previous...")
             
-            # Capture the model name NOW (UI state may change before old thread exits)
             pending_model_name = self.cmb_model.currentText()
             
             def _launch_new():
                 self.btn_start.setText("Start")
                 self._launch_model(pending_model_name)
+                        
+            def _release_old_thread():
+                try:
+                    if old_thread in self._dying_threads:
+                        self._dying_threads.remove(old_thread)
+                except (RuntimeError, ValueError):
+                    # RuntimeError: wrapper deleted; ValueError: not in list anymore
+                    pass
             
+            # Disconnect any leftover restart callbacks from previous Start→Stop→Start
+            # cycles so we don't queue up stale launches.
+            try:
+                old_thread.finished.disconnect()
+            except TypeError:
+                pass  # nothing was connected
+            
+            # Re-establish the standard finished handlers (we just disconnected them).
+            old_thread.finished.connect(old_thread._on_finished)
+            old_thread.finished.connect(old_thread.deleteLater)
+            
+            # Our new handlers:
+            old_thread.finished.connect(_release_old_thread)
             old_thread.finished.connect(lambda: QTimer.singleShot(0, _launch_new))
-            old_thread.stop()   # async — sets running=False and returns immediately
-            return              # exit _start, the rest will happen via callback
+            
+            old_thread.stop()
+            return
         
         # No previous thread — launch directly
         self._launch_model(self.cmb_model.currentText())
@@ -2299,6 +2391,13 @@ class ImageClassificationApp(QMainWindow):
             self._loading_timer.stop()
         if self.thread and self.thread.isRunning():
             old_thread = self.thread
+            self._dying_threads.append(old_thread)
+            
+            def _release():
+                if old_thread in self._dying_threads:
+                    self._dying_threads.remove(old_thread)
+            
+            old_thread.finished.connect(_release)
             old_thread.finished.connect(lambda: self._clear_thread_ref(old_thread))
             old_thread.stop()
         elif self.thread:
@@ -2319,36 +2418,36 @@ class ImageClassificationApp(QMainWindow):
         """Clear self.thread only after the worker truly finishes."""
         if self.thread is thread:
             self.thread = None
-    # def _clear_outputs(self):
-    #     """Wipe text outputs from the previous model — but keep the last
-    #     image visible so the user retains visual context while waiting
-    #     for the new model to load."""
-    #     # Reset the result text and metric-related state so a stale
-    #     # confidence or cell count isn't shown for the new model.
-    #     self.latest_metrics = None
-    #     self.last_result = ""
+    def _clear_outputs(self):
+        """Wipe text outputs from the previous model — but keep the last
+        image visible so the user retains visual context while waiting
+        for the new model to load."""
+        # Reset the result text and metric-related state so a stale
+        # confidence or cell count isn't shown for the new model.
+        self.latest_metrics = None
+        self.last_result = ""
 
-    #     if hasattr(self, 'lbl_res'):
-    #         self.lbl_res.setText("Result:")
+        if hasattr(self, 'lbl_res'):
+            self.lbl_res.setText("Result:")
 
-    #     # Disable buttons that depended on having a result.
-    #     if hasattr(self, 'btn_export'):
-    #         self.btn_export.setEnabled(False)
+        # Disable buttons that depended on having a result.
+        if hasattr(self, 'btn_export'):
+            self.btn_export.setEnabled(False)
 
-    #     # If the enlarged window is open, clear its text too — image stays.
-    #     if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
-    #         try:
-    #             if hasattr(self.enlarged_window, 'set_text'):
-    #                 self.enlarged_window.set_text("")
-    #         except Exception:
-    #             pass
+        # If the enlarged window is open, clear its text too — image stays.
+        if getattr(self, 'enlarged_window', None) and self.enlarged_window.isVisible():
+            try:
+                if hasattr(self.enlarged_window, 'set_text'):
+                    self.enlarged_window.set_text("")
+            except Exception:
+                pass
 
-    #     # Stop any running overlay so stale ROI highlights don't carry over.
-    #     if hasattr(self, '_stop_overlay'):
-    #         try:
-    #             self._stop_overlay()
-    #         except Exception:
-    #             pass
+        # Stop any running overlay so stale ROI highlights don't carry over.
+        if hasattr(self, '_stop_overlay'):
+            try:
+                self._stop_overlay()
+            except Exception:
+                pass
     # ---------------------------- Display----------------------------------
     def _update_display(self, frame, txt, metrics):
         if hasattr(self, '_loading_timer'):
@@ -2678,7 +2777,7 @@ class ImageClassificationApp(QMainWindow):
             self._stop()
             old_thread.wait(3000)
 
-        #self._clear_outputs()
+        self._clear_outputs()
         try:
             clear_cluster_models_cache(keep=None)
         except ImportError:
@@ -2887,6 +2986,20 @@ class ImageClassificationApp(QMainWindow):
                 self.thread.terminate()
                 self.thread.wait(1000)
             self.thread = None
+        # Also wait for any orphan threads still draining (e.g. user clicked Stop
+        # then closed the window before cellpose's tile finished).
+        for dt in list(self._dying_threads):
+            try:
+                if dt.isRunning():
+                    if not dt.wait(5000):
+                        logging.warning("Dying thread did not exit; forcing terminate")
+                        dt.terminate()
+                        dt.wait(1000)
+            except RuntimeError:
+                # Underlying C++ object already gone — nothing to wait on. Safe to skip.
+                pass
+        self._dying_threads.clear()
+
         if hasattr(self, 'mag_widget'):
             self.mag_widget.close_threads()
         if getattr(self, 'enlarged_window', None):

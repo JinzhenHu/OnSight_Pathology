@@ -8,7 +8,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 import settings
 from utils import load_model
-
+import glob
 
 class ModelLoaderThread(QThread):
     """
@@ -48,10 +48,10 @@ class ModelLoaderThread(QThread):
             # 2. Cellpose models live in ~/.cellpose/models/cpsam regardless of OS.
             model_kind = (meta.get("model") or "").lower()
             if "cellpose" in model_kind or "cpsam" in model_kind:
-                cpsam_path = os.path.join(
-                    os.path.expanduser("~"), ".cellpose", "models", "cpsam"
+                cpsam_glob = os.path.join(
+                    os.path.expanduser("~"), ".cellpose", "models", "cpsam*"
                 )
-                return "fast" if os.path.exists(cpsam_path) else "download"
+                return "fast" if glob.glob(cpsam_glob) else "download"
 
             # 3. HF model — OnSight downloads to a custom cache root,
             #    not the default ~/.cache/huggingface. Layout:
