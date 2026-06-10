@@ -107,7 +107,8 @@ def process_region(region, **kwargs):
     metadata = kwargs['metadata']
     model = kwargs['model']
     tile_size = metadata['tile_size']
-    os_scale = get_foreground_window_scale()
+    from custom_widgets.DpiWarningDialog import _current_dpi_scale
+    os_scale = _current_dpi_scale()
 
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
