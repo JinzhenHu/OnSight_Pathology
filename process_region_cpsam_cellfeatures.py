@@ -157,10 +157,11 @@ def process_region(region, **kwargs):
     from custom_widgets.DpiWarningDialog import _current_dpi_scale
     os_scale = _current_dpi_scale() 
     mpp = _safe_float(configs.get('mpp', metadata.get('mpp', 0.25)))
-    is_calibrated = configs.get('is_calibrated', False)
-    if not is_calibrated:
-        #os_scale = get_foreground_window_scale()
-        mpp = mpp / os_scale
+    #print(f"Using mpp: {mpp}, OS scale: {os_scale}, final mpp used for features: {mpp / os_scale}")
+    # is_calibrated = configs.get('is_calibrated', False)
+    # if not is_calibrated:
+    #     #os_scale = get_foreground_window_scale()
+    #     mpp = mpp / os_scale
         
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
