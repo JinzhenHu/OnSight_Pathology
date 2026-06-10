@@ -14,10 +14,20 @@ import ctypes
 import re
 from device_compat import get_device
 
-def fix_region(region, tile_size):
+# def fix_region(region, tile_size):
+#     reg = region.copy()
+#     reg['width']  = max(reg['width'],  tile_size)
+#     reg['height'] = max(reg['height'], tile_size)
+#     return reg
+
+def fix_region(region, tile_size, os_scale=1.0):
+    """Ensure the captured region, after DPI normalization, is at least tile_size."""
     reg = region.copy()
-    reg['width']  = max(reg['width'],  tile_size)
-    reg['height'] = max(reg['height'], tile_size)
+    # We need: (capture_size / os_scale) >= tile_size
+    # → capture_size >= tile_size * os_scale
+    min_capture = int(round(tile_size * os_scale))
+    reg['width'] = max(reg['width'], min_capture)
+    reg['height'] = max(reg['height'], min_capture)
     return reg
 
 def get_foreground_window_scale():
@@ -111,9 +121,8 @@ def process_region(region, **kwargs):
     os_scale = _current_dpi_scale()
 
     with mss.mss() as sct:
-        region = fix_region(region, tile_size)
+        region = fix_region(region, tile_size, os_scale=os_scale)
         screenshot = sct.grab(region)
-
 
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
