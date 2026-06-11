@@ -227,7 +227,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='OnSight_App',
+    name='OnSightPathology_App',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -251,7 +251,7 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name=('OnSight_App_local' if _BUNDLE_MODELS else 'OnSight_App_hf'),
+    name=('OnSightPathology_App_local' if _BUNDLE_MODELS else 'OnSightPathology_App_hf'),
 )
 
 # ----------------------------------------------------------------------------
@@ -261,7 +261,7 @@ coll = COLLECT(
 # ----------------------------------------------------------------------------
 app = BUNDLE(
     coll,
-    name='OnSight_App.app',
+    name='OnSightPathology_App.app',
     bundle_identifier='com.onsight.pathology',
     info_plist={
         'CFBundleName': 'OnSight',
@@ -298,7 +298,7 @@ app = BUNDLE(
 #   ONSIGHT_BUILD=hf    pyinstaller --noconfirm app_mac.spec
 #
 # Result lives in:
-#   dist/OnSight_App.app
+#   dist/OnSightPathology_App.app
 # Cellpose 模型缓存
 #open ~/.cellpose/models
 
