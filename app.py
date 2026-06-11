@@ -2196,11 +2196,9 @@ class ImageClassificationApp(QMainWindow):
 
     # ------------- UX ---------------
     def _select_region(self):
-
         if self.compact_mode:
             name = self.cmb_model.currentText()
             meta = settings.MODEL_METADATA[name]
-
             tile = meta["tile_size"]
             mpp = meta.get("mpp", 0.25)
             mag = math.ceil(0.25 / mpp * 40)
@@ -2224,30 +2222,34 @@ class ImageClassificationApp(QMainWindow):
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
 
-        def get_mouse_pos():
-            pos = []
+        # ----- Show "click now" hint so user knows we're waiting -----
+        self.lbl_region.setText("👆 Click TOP-LEFT corner...")
+        self.lbl_region.setStyleSheet("color: #f39c12; font-weight: bold;")
 
-            def _click(x, y, button, pressed):
-                if pressed:
-                    pos.append((x, y));
-                    return False
+        # ----- Capture two clicks asynchronously (non-blocking) -----
+        from region_selector import capture_two_clicks
 
-            with mouse.Listener(on_click=_click) as l: l.join()
-            return pos[0] if pos else (0, 0)
+        def _on_first_done():
+            self.lbl_region.setText("👆 Now click BOTTOM-RIGHT corner...")
 
-        x1, y1 = get_mouse_pos();
-        x2, y2 = get_mouse_pos()
-        self.selected_region = {
-            "left": min(x1, x2), "top": min(y1, y2),
-            "width": abs(x1 - x2), "height": abs(y1 - y2),
-        }
-        self.lbl_region.setText(
-            f"Selected Region:\nWidth: {self.selected_region['width']:.0f} px\n"
-            f"Height: {self.selected_region['height']:.0f} px")
-        self.lbl_region.setStyleSheet("color:green;")
-        self.btn_start.setEnabled(True)
-        self.btn_view_region.setEnabled(True)
+        def _on_clicks_done(x1, y1, x2, y2):
+            self.selected_region = {
+                "left": min(x1, x2),
+                "top": min(y1, y2),
+                "width": abs(x1 - x2),
+                "height": abs(y1 - y2),
+            }
+            self.lbl_region.setText(
+                f"Selected Region:\nWidth: {self.selected_region['width']:.0f} px\n"
+                f"Height: {self.selected_region['height']:.0f} px"
+            )
+            self.lbl_region.setStyleSheet("color: green;")
+            self.btn_start.setEnabled(True)
+            self.btn_view_region.setEnabled(True)
 
+        # Keep reference on self so threads aren't GC'd mid-capture
+        self._region_capture_state = capture_two_clicks(_on_clicks_done, _on_first_done)
+        
     def _view_selected_region(self):
         if self.selected_region is None:
             return

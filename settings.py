@@ -51,3 +51,9 @@ for _, _v in MODEL_CATELOG:
 
 with open(resource_path('metadata/mag_detector.json')) as f:
     MODEL_METADATA["Magnification (VIT)"] = json.load(f)
+
+# cd D:\UofT\2025fall\OnSight\OnSight_Pathology
+# Compress-Archive `
+#     -Path output\OnSightPathologyInstaller_Local.exe, output\OnSightPathologyInstaller_Local-*.bin `
+#     -DestinationPath OnSightPathologyInstaller_Local.zip `
+#     -CompressionLevel Fastest

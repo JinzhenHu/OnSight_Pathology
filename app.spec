@@ -134,6 +134,7 @@ a = Analysis(
             "utils",
             "utils_clustering",
             "crash_logging",
+            "region_selector",
         ],
 
     hookspath=[],
@@ -142,13 +143,6 @@ a = Analysis(
 
     excludes=[
         "tensorboard",
-        "dask",
-        "dask_expr",
-        "distributed",
-        "pyarrow",
-        "llvmlite",
-        "torchaudio",
-        "av",
     ],
     noarchive=False,
     optimize=0,

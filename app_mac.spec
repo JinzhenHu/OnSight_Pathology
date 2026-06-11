@@ -201,6 +201,7 @@ a = Analysis(
             "custom_widgets.WelcomeDialog",
             "custom_widgets.SpinnerDialog",
             "custom_widgets.DpiWarningDialog",
+            "region_selector",
         ]
     ),
 
