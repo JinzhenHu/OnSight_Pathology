@@ -142,8 +142,14 @@ a = Analysis(
 
     excludes=[
         "tensorboard",
+        "dask",
+        "dask_expr",
+        "distributed",
+        "pyarrow",
+        "llvmlite",
+        "torchaudio",
+        "av",
     ],
-
     noarchive=False,
     optimize=0,
 )

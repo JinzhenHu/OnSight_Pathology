@@ -1,6 +1,7 @@
 """
-mac_permission_dialog.py — Premium permission dialog with per-row actions
-and an animated toggle demonstration.
+MacPermissionDialog.py — Premium permission dialog with per-row actions,
+an animated toggle demonstration, and a restart button so users can
+relaunch OnSight after granting access without finding the .app manually.
 
 Behavior:
   - One unified dialog lists every missing permission as its own row.
@@ -8,22 +9,27 @@ Behavior:
     System Settings pane and the button transforms into "Opened ✓".
   - A looping toggle animation at the bottom shows users what to do once
     they reach the Settings page.
+  - Two footer buttons:
+      • Restart OnSight  (primary, blue) — relaunches the app cleanly
+      • Later            (secondary)     — closes; user can grant later
   - On Windows/Linux this entire module is a no-op.
 
 Usage in app.py:
-    from mac_permission_dialog import check_and_prompt_permissions
+    from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
     # Call AFTER WelcomeDialog has closed:
     check_and_prompt_permissions(self)
 """
 
+import os
 import sys
+import subprocess
 
 from PyQt6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, QTimer, pyqtProperty,
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QWidget, QGraphicsDropShadowEffect,
 )
 
@@ -47,6 +53,7 @@ COLOR_TOGGLE_OFF     = "#D1D1D6"   # Apple gray — used for the OFF toggle stat
 COLOR_BTN_OPEN_BG    = "#E8F1FF"   # Soft blue for inline "Open" buttons
 COLOR_BTN_OPEN_HOVER = "#D5E5FF"
 COLOR_BTN_DONE_BG    = "#E8E8ED"   # Muted gray for "Opened" state
+COLOR_BTN_LATER_HOVER = "#EFEFF2"  # Subtle gray-hover for the Later button
 
 
 # ============================================================================
@@ -350,36 +357,88 @@ class PermissionDialog(QDialog):
         toggle_row.addWidget(_AnimatedToggleDemo())
         toggle_row.addStretch()
         content.addLayout(toggle_row)
-        content.addSpacing(20)
+        content.addSpacing(22)
 
-        # ---- Done button (closes dialog; doesn't grant anything itself) ----
-        done_btn = QPushButton("Done")
-        done_btn.setFixedHeight(40)
-        done_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        done_btn.setStyleSheet(f"""
+        # ---- Footer buttons: Later (secondary) + Restart (primary) ----
+        button_row = QHBoxLayout()
+        button_row.setSpacing(10)
+
+        later_btn = QPushButton("Later")
+        later_btn.setFixedHeight(40)
+        later_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        later_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {COLOR_PRIMARY};
-                color: white;
+                background-color: transparent;
+                color: {COLOR_TEXT_SECONDARY};
                 border-radius: 8px;
                 font-size: 14px;
                 font-weight: 500;
                 border: none;
                 padding: 0 16px;
             }}
+            QPushButton:hover {{
+                background-color: {COLOR_BTN_LATER_HOVER};
+                color: {COLOR_TEXT};
+            }}
+        """)
+        later_btn.clicked.connect(self.reject)
+        button_row.addWidget(later_btn, 1)
+
+        restart_btn = QPushButton("Restart OnSight")
+        restart_btn.setFixedHeight(40)
+        restart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        restart_btn.setDefault(True)
+        restart_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_PRIMARY};
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                border: none;
+                padding: 0 16px;
+            }}
             QPushButton:hover  {{ background-color: {COLOR_PRIMARY_HOVER}; }}
             QPushButton:pressed {{ background-color: {COLOR_PRIMARY_PRESS}; }}
         """)
-        done_btn.clicked.connect(self.accept)
-        content.addWidget(done_btn)
-        content.addSpacing(6)
+        restart_btn.clicked.connect(self._restart_onsight)
+        button_row.addWidget(restart_btn, 2)
 
-        # ---- Footer hint ----
-        footer = QLabel("Restart OnSight after granting access.")
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet(
-            f"font-size: 11px; color: {COLOR_TEXT_TERTIARY};"
-        )
-        content.addWidget(footer)
+        content.addLayout(button_row)
+
+    # ------------------------------------------------------------------
+    # Restart logic — mirrors app.py::_set_ui_scale relaunch behaviour.
+    # ------------------------------------------------------------------
+    def _restart_onsight(self):
+        """Relaunch OnSight cleanly so newly-granted permissions take effect.
+
+        macOS permission changes are only applied when the process restarts —
+        toggling Screen Recording in Settings while OnSight is running has no
+        effect until relaunch.
+
+        For a frozen .app bundle, we use `open -n <App.app>` so macOS spawns a
+        new instance (preserves Dock icon, menu bar, and permission grants).
+        For dev/source runs, we re-exec the current Python interpreter with
+        the same argv.
+        """
+        try:
+            if sys.platform == "darwin" and ".app/" in sys.executable:
+                # Inside a PyInstaller .app bundle — find the .app path and
+                # ask macOS to launch a fresh instance.
+                app_path = sys.executable.split(".app/")[0] + ".app"
+                subprocess.Popen(["open", "-n", app_path])
+            else:
+                # Source / dev run — re-exec the same interpreter.
+                subprocess.Popen([sys.executable] + sys.argv)
+        except Exception:
+            # If restart fails for any reason, fall through and just quit.
+            # The user can relaunch manually from the Dock.
+            pass
+
+        # Close dialog and exit the current process — the new instance will
+        # already be starting up.
+        self.accept()
+        QApplication.quit()
 
 
 # ============================================================================
@@ -390,6 +449,9 @@ def check_and_prompt_permissions(parent=None):
 
     No-op on Windows/Linux. Designed to be called after WelcomeDialog has
     closed so the two dialogs don't overlap on first launch.
+
+    Returns True if all permissions were already granted (no dialog shown),
+    False if the dialog was displayed.
     """
     if not mac_permissions.is_macos():
         return True

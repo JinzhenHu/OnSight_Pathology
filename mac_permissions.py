@@ -6,12 +6,12 @@ On macOS, unsigned apps need explicit user authorization to:
   2. Capture screen pixels (mss)             — requires "Screen Recording"
 
 Without these, OnSight's region selection hangs and captured frames are black.
-This module provides:
-  - Non-blocking permission checks (no system prompt shown)
-  - One-call functions to open System Settings directly to the right pane
-  - User-facing dialog text
 
-On Windows/Linux all functions are no-ops returning True.
+Key design choices:
+  - All checks are SILENT — they query permission state without triggering
+    the macOS system prompt. We want OUR custom dialog to appear first,
+    not the system's generic one.
+  - On Windows/Linux all functions are no-ops returning True.
 """
 
 import sys
@@ -35,7 +35,6 @@ def check_accessibility_permission() -> bool:
     try:
         from ApplicationServices import AXIsProcessTrusted
         return bool(AXIsProcessTrusted())
-        #return False
     except ImportError:
         logging.warning(
             "[mac_permissions] pyobjc not installed; cannot check "
@@ -48,26 +47,58 @@ def check_accessibility_permission() -> bool:
 
 
 def check_screen_recording_permission() -> bool:
-    """Return True if this process can actually capture screen pixels.
+    """Return True if this process has Screen Recording permission.
 
-    macOS doesn't expose a clean API for this, so we test empirically:
-    grab a tiny 20x20 region with mss and check whether it's all-black.
-    A pure-zero result means the OS denied capture.
+    Uses CGPreflightScreenCaptureAccess (macOS 10.15+ Catalina), which
+    queries permission state WITHOUT triggering the system prompt.
+    This is critical: we want OnSight's own dialog to appear first,
+    not macOS's generic "OnSight wants to record screen" alert.
+
+    On macOS < 10.15, Screen Recording permission didn't exist as a
+    concept — assume granted. (Our app's LSMinimumSystemVersion is 12.0
+    so this branch is mostly defensive.)
     """
     if not is_macos():
         return True
+
     try:
-        import mss
-        import numpy as np
-        with mss.mss() as sct:
-            shot = sct.grab({"left": 0, "top": 0, "width": 20, "height": 20})
-            arr = np.array(shot)
-            # All zeros → permission denied. Any non-zero pixel → granted.
-            return bool(arr.sum() > 0)
-            #return False
+        from Quartz import CGPreflightScreenCaptureAccess
+        return bool(CGPreflightScreenCaptureAccess())
+    except ImportError:
+        # Quartz framework or the function not available.
+        # On macOS < 10.15, the permission concept doesn't exist → granted.
+        logging.warning(
+            "[mac_permissions] CGPreflightScreenCaptureAccess unavailable "
+            "(macOS < 10.15 or Quartz not installed); assuming granted."
+        )
+        return True
     except Exception as e:
-        logging.warning(f"[mac_permissions] Screen recording check failed: {e}")
-        return True  # fail-open
+        logging.warning(
+            f"[mac_permissions] CGPreflightScreenCaptureAccess failed: {e}; "
+            f"assuming granted."
+        )
+        return True  # fail-open, never block user incorrectly
+
+
+def request_screen_recording_permission() -> None:
+    """Explicitly trigger the macOS Screen Recording permission prompt.
+
+    Use this when the user clicks "Open Settings" — it surfaces the
+    system-level alert that adds OnSight to the Screen Recording list
+    (otherwise the user lands on an empty pane and can't find us).
+
+    This is a one-shot: macOS only ever shows the prompt once per app
+    install. Subsequent calls do nothing.
+    """
+    if not is_macos():
+        return
+    try:
+        from Quartz import CGRequestScreenCaptureAccess
+        CGRequestScreenCaptureAccess()
+    except Exception as e:
+        logging.warning(
+            f"[mac_permissions] CGRequestScreenCaptureAccess failed: {e}"
+        )
 
 
 def open_accessibility_settings() -> None:
@@ -79,9 +110,15 @@ def open_accessibility_settings() -> None:
 
 
 def open_screen_recording_settings() -> None:
-    """Open System Settings to the Screen Recording privacy pane."""
+    """Open System Settings to the Screen Recording privacy pane.
+
+    Also triggers CGRequestScreenCaptureAccess first so OnSight actually
+    appears in the list — without that, the Settings page may show an
+    empty list and the user has no toggle to flip.
+    """
     if not is_macos():
         return
+    request_screen_recording_permission()  # ensures OnSight is listed
     url = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
     subprocess.Popen(["open", url])
 

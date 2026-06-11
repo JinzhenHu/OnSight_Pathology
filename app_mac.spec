@@ -171,6 +171,7 @@ a = Analysis(
             # macOS permissions
             "ApplicationServices",
             "objc",
+            "Quartz",
 
             # Project modules — top-level
             "settings",
@@ -239,7 +240,7 @@ exe = EXE(
                                # or 'universal2' for fat binaries
     codesign_identity=None,    # set this once you have a Developer ID
     entitlements_file=None,    # add an entitlements.plist for notarization
-    icon='sample_icon.icns',   # macOS expects .icns, not .ico
+    icon=None,   # macOS expects .icns, not .ico
 )
 
 coll = COLLECT(
@@ -262,7 +263,6 @@ app = BUNDLE(
     coll,
     name='OnSight_App.app',
     bundle_identifier='com.onsight.pathology',
-    icon='sample_icon.icns',
     info_plist={
         'CFBundleName': 'OnSight',
         'CFBundleDisplayName': 'OnSight Pathology',
