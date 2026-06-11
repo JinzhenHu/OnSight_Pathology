@@ -4,8 +4,13 @@ mac_permissions.py — macOS Accessibility & Screen Recording permission helpers
 On macOS, unsigned apps need explicit user authorization to:
   1. Listen to global mouse events (pynput) — requires "Accessibility"
   2. Capture screen pixels (mss)             — requires "Screen Recording"
-"""
 
+"""
+#import os
+
+# Set ONSIGHT_FAKE_NO_PERMS=1 to force-trigger the permission dialog
+# for testing. Remove env var to use real permission state.
+#_FORCE_MISSING = os.environ.get("ONSIGHT_FAKE_NO_PERMS") == "1"
 import sys
 import subprocess
 import logging
@@ -16,7 +21,8 @@ def is_macos() -> bool:
 
 
 def check_accessibility_permission() -> bool:
-    return False
+    #if _FORCE_MISSING:
+        #return False
     """Return True if this process has macOS Accessibility permission.
 
     Uses AXIsProcessTrusted from the ApplicationServices framework. This
@@ -40,13 +46,18 @@ def check_accessibility_permission() -> bool:
 
 
 def check_screen_recording_permission() -> bool:
-    return False
+    #if _FORCE_MISSING:
+       # return False
     """Return True if this process has Screen Recording permission.
 
     Uses CGPreflightScreenCaptureAccess (macOS 10.15+ Catalina), which
-    queries permission state WITHOUT triggering the system prompt. This
-    is critical: we want OnSight's own dialog to appear first, not
-    macOS's generic "OnSight wants to record screen" alert.
+    queries permission state WITHOUT triggering the system prompt.
+    This is critical: we want OnSight's own dialog to appear first,
+    not macOS's generic "OnSight wants to record screen" alert.
+
+    On macOS < 10.15, Screen Recording permission didn't exist as a
+    concept — assume granted. (Our app's LSMinimumSystemVersion is 12.0
+    so this branch is mostly defensive.)
     """
     if not is_macos():
         return True
@@ -55,6 +66,8 @@ def check_screen_recording_permission() -> bool:
         from Quartz import CGPreflightScreenCaptureAccess
         return bool(CGPreflightScreenCaptureAccess())
     except ImportError:
+        # Quartz framework or the function not available.
+        # On macOS < 10.15, the permission concept doesn't exist → granted.
         logging.warning(
             "[mac_permissions] CGPreflightScreenCaptureAccess unavailable "
             "(macOS < 10.15 or Quartz not installed); assuming granted."
@@ -68,6 +81,27 @@ def check_screen_recording_permission() -> bool:
         return True  # fail-open, never block user incorrectly
 
 
+def request_screen_recording_permission() -> None:
+    """Explicitly trigger the macOS Screen Recording permission prompt.
+
+    Use this when the user clicks "Open Settings" — it surfaces the
+    system-level alert that adds OnSight to the Screen Recording list
+    (otherwise the user lands on an empty pane and can't find us).
+
+    This is a one-shot: macOS only ever shows the prompt once per app
+    install. Subsequent calls do nothing.
+    """
+    if not is_macos():
+        return
+    try:
+        from Quartz import CGRequestScreenCaptureAccess
+        CGRequestScreenCaptureAccess()
+    except Exception as e:
+        logging.warning(
+            f"[mac_permissions] CGRequestScreenCaptureAccess failed: {e}"
+        )
+
+
 def open_accessibility_settings() -> None:
     """Open System Settings to the Accessibility privacy pane."""
     if not is_macos():
@@ -79,20 +113,13 @@ def open_accessibility_settings() -> None:
 def open_screen_recording_settings() -> None:
     """Open System Settings to the Screen Recording privacy pane.
 
-    DESIGN NOTE: We deliberately do NOT call CGRequestScreenCaptureAccess
-    here. That API surfaces a macOS system dialog ("OnSight wants to
-    record screen"), which appears on top of our own dialog and confuses
-    users — they see TWO permission prompts at once.
-
-    OnSight should already be present in the Screen Recording list as a
-    side effect of normal app initialization (Qt/mss touch screen-related
-    APIs during startup, which registers the app with TCC even without an
-    explicit prompt). If a user reports being unable to find OnSight in
-    the Settings list, calling CGRequestScreenCaptureAccess once would
-    force it to appear — but the tradeoff isn't worth the double-prompt UX.
+    Also triggers CGRequestScreenCaptureAccess first so OnSight actually
+    appears in the list — without that, the Settings page may show an
+    empty list and the user has no toggle to flip.
     """
     if not is_macos():
         return
+    request_screen_recording_permission()  # ensures OnSight is listed
     url = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
     subprocess.Popen(["open", url])
 
@@ -109,7 +136,7 @@ ACCESSIBILITY_DIALOG_BODY = (
     "  1. Click 'Open Settings' below\n"
     "  2. Find 'OnSight' (or 'Terminal' / 'Python' in dev mode) in the list\n"
     "  3. Toggle it ON\n"
-    "  4. Click 'Restart OnSight' below\n\n"
+    "  4. Restart OnSight\n\n"
     "Without this permission, region selection will hang indefinitely."
 )
 
@@ -121,6 +148,6 @@ SCREEN_RECORDING_DIALOG_BODY = (
     "  1. Click 'Open Settings' below\n"
     "  2. Find 'OnSight' (or 'Terminal' / 'Python' in dev mode) in the list\n"
     "  3. Toggle it ON\n"
-    "  4. Click 'Restart OnSight' below\n\n"
+    "  4. Restart OnSight\n\n"
     "Without this permission, captured regions will appear black."
 )
