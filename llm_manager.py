@@ -1,6 +1,39 @@
 # llm_manager.py — unified for Windows (CUDA) and macOS (MPS/CPU)
 import os
 import sys
+
+# ---------------------------------------------------------------
+# OnSight-owned HF cache path.
+# Must be set BEFORE importing transformers/huggingface_hub so the
+# constants module captures it. Same parent as utils._get_weights_path
+# so all OnSight model files live under one folder, which keeps
+# Windows Defender / corporate AV happy.
+# ---------------------------------------------------------------
+def _onsight_hf_cache_dir() -> str:
+    if sys.platform == "darwin":
+        return os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support",
+            "OnSightPathology", "hf_cache", "hub",
+        )
+    if sys.platform == "win32":
+        return os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "OnSightPathology", "hf_cache", "hub",
+        )
+    return os.path.join(
+        os.path.expanduser("~"), ".cache",
+        "OnSightPathology", "hf_cache", "hub",
+    )
+
+_ONSIGHT_HF_CACHE = _onsight_hf_cache_dir()
+try:
+    os.makedirs(_ONSIGHT_HF_CACHE, exist_ok=True)
+except Exception:
+    pass
+os.environ.setdefault("HF_HUB_CACHE", _ONSIGHT_HF_CACHE)
+os.environ.setdefault("HF_HOME", os.path.dirname(_ONSIGHT_HF_CACHE))
+
+# Heavy imports must come AFTER the env vars above.
 import json
 import torch
 from threading import Thread
@@ -14,6 +47,135 @@ from transformers import (
 )
 from qwen_vl_utils import process_vision_info
 from utils import resource_path
+
+
+# ---------------------------------------------------------------
+# Download-progress hook.
+# Patches every tqdm reference already imported under huggingface_hub
+# and transformers, so both the "Fetching N files" outer bar and the
+# inner byte-level bars route through our progress_cb.
+# Used as a context manager so patches are reverted on exit.
+# ---------------------------------------------------------------
+class _HfProgressHook:
+    def __init__(self, progress_cb, pct_start=10, pct_end=85):
+        self._cb = progress_cb
+        self._lo = pct_start
+        self._hi = pct_end
+        self._total = 0
+        self._done = 0
+        self._last_pct = -1
+        self._last_mb = -1.0
+        self._patches = []
+
+    def __enter__(self):
+        hook = self
+
+        class _HookedTqdm:
+                    def __init__(self, iterable=None, *args, **kwargs):
+                        # tqdm signature is tqdm(iterable=None, ...), so the first
+                        # positional arg may be the wrapped iterable. Capture it so
+                        # `for x in tqdm(items):` still works.
+                        self._iterable = iterable
+                        self.total = kwargs.get("total")
+                        if self.total is None and iterable is not None:
+                            try:
+                                self.total = len(iterable)
+                            except (TypeError, AttributeError):
+                                self.total = 0
+                        self.total = self.total or 0
+                        self.n = 0
+                        unit = kwargs.get("unit", "")
+                        self.is_bytes = (unit in ("B", "iB")
+                                        or bool(kwargs.get("unit_scale")))
+                        if self.total > 0 and self.is_bytes:
+                            hook._total += self.total
+
+                    def __iter__(self):
+                        if self._iterable is None:
+                            return iter(())
+                        for item in self._iterable:
+                            self.n += 1
+                            yield item
+
+                    def update(self, increment=1):
+                        self.n += increment
+                        if self.total > 0 and self.is_bytes:
+                            hook._done += increment
+                            hook._maybe_report()
+
+                    def reset(self, total=None):
+                        if total is not None and total > 0 and self.is_bytes:
+                            delta = total - self.total if self.total > 0 else total
+                            hook._total += delta
+                            self.total = total
+                        self.n = 0
+
+                    def close(self): pass
+                    def __enter__(self): return self
+                    def __exit__(self, *a): pass
+                    def set_description(self, *a, **kw): pass
+                    def set_postfix(self, *a, **kw): pass
+                    def refresh(self): pass
+                    def write(self, *a, **kw): pass
+                    def display(self, *a, **kw): pass
+                    def clear(self, *a, **kw): pass
+                    disable = False
+        # Walk every already-loaded module under HF / transformers / tqdm
+        # and replace its tqdm attribute. This catches local re-imports
+        # like `from .utils import tqdm` that won't follow a parent patch.
+        seen = set()
+        for mod_name, mod in list(sys.modules.items()):
+            if mod is None:
+                continue
+            if not (mod_name.startswith("huggingface_hub")
+                    or mod_name.startswith("transformers")
+                    or mod_name in ("tqdm", "tqdm.auto", "tqdm.std")):
+                continue
+            try:
+                original = getattr(mod, "tqdm", None)
+            except Exception:
+                continue
+            if original is None or id(original) in seen:
+                continue
+            try:
+                setattr(mod, "tqdm", _HookedTqdm)
+                self._patches.append((mod, "tqdm", original))
+                seen.add(id(original))
+            except Exception:
+                pass
+
+        # Announce that we're starting, in case the first download takes
+        # a while before tqdm fires its first update().
+        try:
+            self._cb(self._lo, "Connecting to HuggingFace...")
+        except Exception:
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        for mod, attr, original in self._patches:
+            try:
+                setattr(mod, attr, original)
+            except Exception:
+                pass
+        self._patches.clear()
+        return False
+
+    def _maybe_report(self):
+        if self._total <= 0:
+            return
+        frac = min(1.0, self._done / self._total)
+        pct = int(self._lo + frac * (self._hi - self._lo))
+        mb_done = self._done / (1024 * 1024)
+        if pct == self._last_pct and abs(mb_done - self._last_mb) < 5.0:
+            return
+        self._last_pct = pct
+        self._last_mb = mb_done
+        mb_total = self._total / (1024 * 1024)
+        try:
+            self._cb(pct, f"Downloading model weights — {mb_done:.0f} / {mb_total:.0f} MB")
+        except Exception:
+            pass
 
 
 # ----------------------------------------------------------
@@ -58,39 +220,47 @@ class AgentMemoryBot:
             precision = "16bit"
 
         self._pcb(10, "Loading tokenizer / processor...")
-        self.processor = AutoProcessor.from_pretrained(model_id)
 
-        self._pcb(25, "Preparing model weights (first run may download several GB)...")
-
-        # ------- Build model_kwargs based on platform / precision -------
-        model_kwargs: Dict[str, Any] = {"trust_remote_code": True}
-
-        if _DEVICE == "cuda":
-            # Windows / CUDA path: rely on accelerate to place layers,
-            # use SDPA attention for speed.
-            model_kwargs["device_map"] = "auto"
-            model_kwargs["attn_implementation"] = "sdpa"
-        else:
-            # macOS (MPS / CPU): no device_map; we will .to(device) after load.
-            # MPS lacks some SDPA kernels, so use eager attention there.
-            model_kwargs["attn_implementation"] = "eager" if _DEVICE == "mps" else "sdpa"
-
-        if precision == "4bit":
-            model_kwargs["quantization_config"] = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-                llm_int8_enable_fp32_cpu_offload=True,
+        # Wrap both from_pretrained calls so download progress streams to the UI.
+        # cache_dir is explicit (in addition to HF_HUB_CACHE env var) to make
+        # sure weights always land in OnSight's own folder, not in ~/.cache.
+        with _HfProgressHook(self._pcb, pct_start=10, pct_end=85):
+            self.processor = AutoProcessor.from_pretrained(
+                model_id,
+                cache_dir=_ONSIGHT_HF_CACHE,
             )
-        elif precision == "16bit":
-            model_kwargs["torch_dtype"] = torch.bfloat16
-        else:  # 8bit
-            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
 
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            model_id, **model_kwargs
-        ).eval()
+            # ------- Build model_kwargs based on platform / precision -------
+            model_kwargs: Dict[str, Any] = {"trust_remote_code": True}
+
+            if _DEVICE == "cuda":
+                # Windows / CUDA path: rely on accelerate to place layers,
+                # use SDPA attention for speed.
+                model_kwargs["device_map"] = "auto"
+                model_kwargs["attn_implementation"] = "sdpa"
+            else:
+                # macOS (MPS / CPU): no device_map; we will .to(device) after load.
+                # MPS lacks some SDPA kernels, so use eager attention there.
+                model_kwargs["attn_implementation"] = "eager" if _DEVICE == "mps" else "sdpa"
+
+            if precision == "4bit":
+                model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True,
+                    llm_int8_enable_fp32_cpu_offload=True,
+                )
+            elif precision == "16bit":
+                model_kwargs["torch_dtype"] = torch.bfloat16
+            else:  # 8bit
+                model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+
+            self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                model_id,
+                cache_dir=_ONSIGHT_HF_CACHE,
+                **model_kwargs,
+            ).eval()
 
         # On Mac we need to manually move 16bit weights to MPS/CPU.
         # On CUDA, accelerate has already placed them via device_map.

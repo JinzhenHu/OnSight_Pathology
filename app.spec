@@ -186,6 +186,7 @@ a = Analysis(
             "skimage",
             "lazy_loader",
             "transformers",
+            "transformers.utils.logging",
             "qwen_vl_utils",
             "accelerate",
             "timm",
@@ -196,6 +197,9 @@ a = Analysis(
             "huggingface_hub.utils",
             "huggingface_hub.utils.tqdm",
             "huggingface_hub.utils._http",
+            "tqdm",                              
+            "tqdm.auto",                       
+            "tqdm.std",    
 
             # Project modules — top-level
             "settings",

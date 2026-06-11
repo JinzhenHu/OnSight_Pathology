@@ -92,20 +92,31 @@ class ModelLoaderThread(QThread):
             mode = self._detect_load_mode()
             self.load_mode_detected.emit(mode)
 
+            model_info = settings.MODEL_METADATA[self.model_name]
+
+            SILENT_DOWNLOAD_MODELS = {"VITmagnification_kaiko"}
+            is_silent = model_info.get("model") in SILENT_DOWNLOAD_MODELS
+
             if mode == "fast":
                 self.progress.emit("Loading bundled model…", -1, 0, 0)
+            elif is_silent:
+                self.progress.emit(f"Loading {self.model_name}…", -1, 0, 0)
             else:
                 self.progress.emit("Connecting to HuggingFace…", -1, 0, 0)
 
-            self._install_progress_hooks()
+            if is_silent:
+                import os
+                os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+                os.environ["TQDM_DISABLE"] = "1"
+            else:
+                self._install_progress_hooks()
 
             if self._abort:
                 return
 
-            model_info = settings.MODEL_METADATA[self.model_name]
             self.progress.emit(f"Loading {self.model_name}…", -1, 0, 0)
-
             res = load_model(model_info)
+
 
             if self._abort:
                 # User cancelled but load actually finished — free the resources

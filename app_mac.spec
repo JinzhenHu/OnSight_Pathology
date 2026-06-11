@@ -156,6 +156,7 @@ a = Analysis(
 
             # LLM stack
             "transformers",
+            "transformers.utils.logging", 
             "qwen_vl_utils",
             "accelerate",
             "timm",
@@ -164,6 +165,9 @@ a = Analysis(
             "huggingface_hub.utils",
             "huggingface_hub.utils.tqdm",
             "huggingface_hub.utils._http",
+            "tqdm",                              
+            "tqdm.auto",                         
+            "tqdm.std",
 
             # GUI
             "PyQt6",
