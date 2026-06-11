@@ -401,8 +401,15 @@ class AnimatedDpiDemo(QWidget):
 # ============================================================================
 # Dialog
 # ============================================================================
+# ============================================================================
+# Dialog
+# ============================================================================
 class DpiWarningDialog(QDialog):
     SUPPRESS_KEY = "suppress_dpi_warning_mag"  # legacy, kept for back-compat
+
+    # Contexts that may never be silenced — calibration errors are permanent
+    # and propagate to every downstream measurement.
+    NON_SUPPRESSIBLE_CONTEXTS = {"calibrate"}
 
     # Context-specific intro messages
     CONTEXT_MESSAGES = {
@@ -418,6 +425,11 @@ class DpiWarningDialog(QDialog):
             "For <b>accurate cell area and density measurements</b>, we "
             "recommend setting Windows display scaling to <b>100%</b>."
         ),
+        "calibrate": (
+            "We highly recommend setting Windows display scaling to <b>100%</b> for calibration.</b><br> "
+            "At other levels (125%, 150% …), the calculated μm/pixel might be "
+            "off."
+        ),
     }
 
     def __init__(self, current_scale: float, parent=None, context: str = "mag"):
@@ -425,11 +437,10 @@ class DpiWarningDialog(QDialog):
         self.setWindowTitle("Display Scaling Recommendation")
         self.setMinimumWidth(480)
         self.setModal(True)
-        
+
         self._context = context
 
         current_pct = int(round(current_scale * 100))
-        # Pick a familiar starting value for the animation
         if current_pct >= 175:
             initial = "200%"
         elif current_pct >= 137:
@@ -458,6 +469,7 @@ class DpiWarningDialog(QDialog):
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(intro)
+
         # ---------- Animation ----------
         self.demo = AnimatedDpiDemo(initial_value=initial)
         layout.addWidget(self.demo)
@@ -489,6 +501,10 @@ class DpiWarningDialog(QDialog):
         footer.addWidget(self.chk_suppress)
         footer.addStretch()
 
+        # Calibration errors are permanent — never allow silencing this warning.
+        if context in self.NON_SUPPRESSIBLE_CONTEXTS:
+            self.chk_suppress.setVisible(False)
+
         btn_done = QPushButton("Got it")
         btn_done.setDefault(True)
         btn_done.setStyleSheet(
@@ -499,6 +515,7 @@ class DpiWarningDialog(QDialog):
         btn_done.clicked.connect(self.accept)
         footer.addWidget(btn_done)
         layout.addLayout(footer)
+
 
     def is_suppress_checked(self) -> bool:
         """Return True if the user ticked the 'Don't show this again' checkbox."""
@@ -564,38 +581,36 @@ class DpiWarningDialog(QDialog):
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 def maybe_show_dpi_warning(parent=None, context: str = "mag") -> None:
     """
     Show the DPI warning dialog if:
       - We are on Windows
-      - The user hasn't ticked "Don't show this again" for this context
-      - The current display scaling is NOT already 100%
-    
-    Args:
-        parent: parent widget for the dialog
-        context: identifier for this warning's suppress state. Different
-                 contexts have independent "don't show again" flags, so a
-                 user who silenced the mag-detector warning will still see
-                 the cellvit warning the first time.
+      - Scaling isn't already 100%
+      - Either the context is non-suppressible, or the user hasn't ticked
+        "Don't show again" for this context
     """
     if sys.platform != "win32":
-        return
-
-    settings = _load_settings()
-    
-    # Build a context-specific suppress key
-    suppress_key = f"suppress_dpi_warning_{context}"
-    
-    if settings.get(suppress_key, False):
         return
 
     scale = _current_dpi_scale()
     if abs(scale - 1.0) < 0.05:
         return  # already 100%
 
+    non_suppressible = DpiWarningDialog.NON_SUPPRESSIBLE_CONTEXTS
+    suppress_key = f"suppress_dpi_warning_{context}"
+
+    if context not in non_suppressible:
+        settings = _load_settings()
+        if settings.get(suppress_key, False):
+            return
+
     dlg = DpiWarningDialog(current_scale=scale, parent=parent, context=context)
     dlg.exec()
 
-    if dlg.is_suppress_checked():
+    if context not in non_suppressible and dlg.is_suppress_checked():
+        settings = _load_settings()
         settings[suppress_key] = True
         _save_settings(settings)

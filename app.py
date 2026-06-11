@@ -500,7 +500,9 @@ class ImageClassificationApp(QMainWindow):
         sc_add.setContext(Qt.ShortcutContext.ApplicationShortcut)
         sc_add.activated.connect(self._on_add)
         self.shortcut_add = sc_add
-
+        from custom_widgets.DpiStatusIndicator import install_dpi_indicator
+        install_dpi_indicator(self)
+        #self.statusBar().addPermanentWidget(self.dpi_indicator)
         # First-launch welcome 
         QTimer.singleShot(300, self._show_welcome_then_check_permissions)
 
@@ -1102,6 +1104,8 @@ class ImageClassificationApp(QMainWindow):
     def _calibrate_area(self):
         # ───────── First Click ─────────
         if not self.show_calib_box:
+            from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
+            maybe_show_dpi_warning(self, context="calibrate")
             if not self._calib_help_shown:
                 QMessageBox.information(
                     self, "How to calibrate",

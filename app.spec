@@ -104,6 +104,8 @@ cp_datas,         cp_binaries,         cp_hiddenimports         = collect_all("c
 fr_datas,         fr_binaries,         fr_hiddenimports         = collect_all("fastremap")
 fv_datas,         fv_binaries,         fv_hiddenimports         = collect_all("fill_voids")
 ultra_datas,      ultra_binaries,      ultra_hiddenimports      = collect_all("ultralytics")
+timm_datas,    timm_binaries,    timm_hiddenimports    = collect_all("timm")        # ← 加
+accel_datas,   accel_binaries,   accel_hiddenimports   = collect_all("accelerate")
 
 
 a = Analysis(
@@ -123,6 +125,8 @@ a = Analysis(
         + fr_binaries        
         + fv_binaries        
         + ultra_binaries     
+        + timm_binaries       
+        + accel_binaries 
     ),
 
     datas=(
@@ -153,10 +157,12 @@ a = Analysis(
         + lazy_datas
         + tf_datas
         + hf_datas
-        + cp_datas           # ← 加
-        + fr_datas           # ← 加
-        + fv_datas           # ← 加
-        + ultra_datas        # ← 加
+        + cp_datas           
+        + fr_datas           
+        + fv_datas           
+        + ultra_datas        
+        + timm_datas           
+        + accel_datas  
     ),
 
     hiddenimports=(
@@ -217,11 +223,13 @@ a = Analysis(
             "custom_widgets.SpinnerDialog",
             "custom_widgets.DpiWarningDialog",
 
-            + cp_hiddenimports        # 
-            + fr_hiddenimports        # 
-            + fv_hiddenimports        # 
-            + ultra_hiddenimports     # 
         ]
+        + cp_hiddenimports        # 
+        + fr_hiddenimports        # 
+        + fv_hiddenimports        # 
+        + ultra_hiddenimports     # 
+        + timm_hiddenimports   # 
+        + accel_hiddenimports
     ),
 
     hookspath=[],
