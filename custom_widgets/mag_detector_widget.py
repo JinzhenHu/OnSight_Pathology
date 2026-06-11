@@ -9,7 +9,7 @@ import logging
 
 import torch
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QPushButton, QLabel, QMessageBox,
+    QWidget, QHBoxLayout, QPushButton, QLabel, QMessageBox, QApplication,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 
@@ -20,14 +20,10 @@ import settings
 
 # ============================================================================
 # Phase 1: one-shot model loader.
-# ----------------------------------------------------------------------------
-# Deliberately does NOT touch huggingface_hub's progress callbacks. We rely
-# on an indeterminate spinner in the dialog instead of a percent bar — this
-# keeps us safely out of the monkey-patched code path the main app uses.
 # ============================================================================
 class MagLoaderThread(QThread):
-    finished_ok = pyqtSignal(dict)      # {model, process_region_func, using_gpu}
-    failed      = pyqtSignal(str, str)  # short_msg, traceback
+    finished_ok = pyqtSignal(dict)
+    failed      = pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,13 +45,9 @@ class MagLoaderThread(QThread):
             if self._abort:
                 return
 
-            # Blocks until the model is ready. On a cold cache this hits
-            # huggingface_hub, which may take 5-30s depending on network.
             res = load_model(meta)
 
             if self._abort:
-                # User cancelled mid-download. Drop the model on the floor;
-                # GC + empty_cache will reclaim VRAM.
                 try:
                     del res["model"]
                     gc.collect()
@@ -71,8 +63,6 @@ class MagLoaderThread(QThread):
             tb = traceback.format_exc()
             logging.error("Mag detector model load failed", exc_info=True)
 
-            # Translate the most common network errors into something
-            # actionable. Full traceback is preserved in the log file.
             err_str = str(e).lower()
             if "ssl" in err_str or "handshake" in err_str or "timed out" in err_str:
                 short = ("Network timeout while downloading the magnification "
@@ -90,7 +80,7 @@ class MagLoaderThread(QThread):
 
 
 # ============================================================================
-# Phase 2: continuous inference loop. Model is already in GPU/CPU memory.
+# Phase 2: continuous inference loop.
 # ============================================================================
 class MagInferenceThread(QThread):
     result_ready   = pyqtSignal(float, str)
@@ -120,8 +110,6 @@ class MagInferenceThread(QThread):
                         region, model=model, metadata=meta, additional_configs={}
                     )
                 except Exception as e:
-                    # Per-frame failures shouldn't kill the whole detector;
-                    # log and try again next tick.
                     logging.warning(f"Mag detector frame failed: {e}")
                     time.sleep(0.5)
                     continue
@@ -132,11 +120,8 @@ class MagInferenceThread(QThread):
                 if self.running:
                     self.result_ready.emit(continuous_mag, pred_cls)
 
-                # ~2 FPS — fast enough to feel real-time, light enough
-                # to leave room for the main inference thread.
                 time.sleep(0.2)
 
-            # Loop ended — release GPU memory
             if using_gpu:
                 try:
                     del model
@@ -163,9 +148,9 @@ class MagDetectorWidget(QWidget):
     def __init__(self, get_region_callback, parent=None):
         super().__init__(parent)
         self.get_region_callback = get_region_callback
-        self.thread          = None   # MagInferenceThread (after load)
-        self._loader         = None   # MagLoaderThread (during load)
-        self._progress_dlg   = None   # SpinnerDialog
+        self.thread          = None
+        self._loader         = None
+        self._progress_dlg   = None
         self.is_tracking     = False
         self._was_cancelled  = False
 
@@ -183,9 +168,6 @@ class MagDetectorWidget(QWidget):
         self.layout.addWidget(self.btn_toggle)
         self.layout.addWidget(self.lbl_result)
 
-    # ----------------------------------------------------------------------
-    # Toggle: handles BOTH the initial click (start load) and the stop click.
-    # ----------------------------------------------------------------------
     def _on_toggle(self, checked):
         if checked:
             self._start_loading()
@@ -199,8 +181,29 @@ class MagDetectorWidget(QWidget):
             self.btn_toggle.setChecked(False)
             return
 
+        # ------------------------------------------------------------------
+        # Show DPI warning FIRST and check for restart-in-progress before
+        # touching the spinner or loader. The DPI dialog's "Restart" button
+        # calls subprocess.Popen() to spawn a new OnSight instance, then
+        # QApplication.quit() — but quit() is ASYNC, so without this guard
+        # the function continues executing, creating a SpinnerDialog and
+        # starting a download. The new process then ALSO creates its own
+        # SpinnerDialog, leaving two spinners on screen during the restart.
+        #
+        # The fix: detect the restart-in-progress case via closingDown()
+        # and bail out before any further UI setup.
+        # ------------------------------------------------------------------
         from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
         maybe_show_dpi_warning(parent=self.window(), context="mag")
+
+        if self._is_app_quitting():
+            # Old process is about to exit — fresh process will start clean.
+            self.btn_toggle.setChecked(False)
+            self.btn_toggle.setText("Start Real-time Mag")
+            self.btn_toggle.setStyleSheet("")
+            self.lbl_result.setText("Restarting…")
+            self.lbl_result.setStyleSheet("color: grey;")
+            return
 
         # --- Visual feedback ---
         self.btn_toggle.setText("Loading…")
@@ -208,9 +211,7 @@ class MagDetectorWidget(QWidget):
         self.lbl_result.setText("Loading model…")
         self.lbl_result.setStyleSheet("color: orange;")
 
-        # --- Spinner dialog (indeterminate — no percent / bytes / ETA) ---
-        # SpinnerDialog is the lightweight cousin of LoadingDialog used
-        # throughout OnSight for "we don't know how long this will take".
+        # --- Spinner dialog (indeterminate) ---
         from custom_widgets.SpinnerDialog import SpinnerDialog
         self._was_cancelled = False
         self._progress_dlg = SpinnerDialog(
@@ -233,10 +234,27 @@ class MagDetectorWidget(QWidget):
         self._loader.start()
         self._progress_dlg.show()
 
+    @staticmethod
+    def _is_app_quitting() -> bool:
+        """Return True if QApplication.quit() has been called.
+
+        Used to short-circuit further UI setup when the DPI warning has
+        triggered a restart. QApplication.closingDown() flips to True once
+        quit() initiates the shutdown sequence — even though quit() returns
+        immediately, the flag is set synchronously.
+        """
+        app = QApplication.instance()
+        if app is None:
+            return True
+        try:
+            if app.closingDown():
+                return True
+        except Exception:
+            pass
+        return False
+
     def _stop_tracking(self):
-        """Stop both the loader (if running) and the inference loop."""
         if self._loader is not None and self._loader.isRunning():
-            # User toggled off while still loading — cancel the download
             self._on_cancel_load()
             return
 
@@ -254,15 +272,11 @@ class MagDetectorWidget(QWidget):
             self.thread.wait(2000)
             self.thread = None
 
-    # ----------------------------------------------------------------------
-    # Loader event handlers
-    # ----------------------------------------------------------------------
     def _on_load_ok(self, model_resources):
         if self._was_cancelled:
             return
         self._close_progress_dialog()
 
-        # --- Start inference now that the model is loaded ---
         self.is_tracking = True
         self.tracking_state_changed.emit(True)
 
@@ -282,7 +296,6 @@ class MagDetectorWidget(QWidget):
         if self._was_cancelled:
             return
 
-        # Reset UI
         self.btn_toggle.setChecked(False)
         self.btn_toggle.setText("Start Real-time Mag 🔍")
         self.btn_toggle.setStyleSheet("")
@@ -290,7 +303,6 @@ class MagDetectorWidget(QWidget):
         self.lbl_result.setText("Load failed")
         self.lbl_result.setStyleSheet("color: red;")
 
-        # Re-use the project's standard error dialog where available
         try:
             from crash_logging import show_error_dialog
             show_error_dialog(
@@ -311,10 +323,8 @@ class MagDetectorWidget(QWidget):
         self._was_cancelled = True
         if self._loader and self._loader.isRunning():
             self._loader.request_abort()
-        # Dialog stays open showing "Cancelling…" until _on_loader_finished.
 
     def _on_loader_finished(self):
-        """Runs after MagLoaderThread.run() returns, regardless of outcome."""
         if self._was_cancelled:
             self._close_progress_dialog()
             self.btn_toggle.setChecked(False)
@@ -327,9 +337,6 @@ class MagDetectorWidget(QWidget):
         loader = self._loader
         self._loader = None
         if loader is not None:
-            # Belt-and-suspenders: wait briefly so Qt's internal bookkeeping
-            # is done, then schedule C++ deletion via the event loop rather
-            # than letting Python GC race with it.
             loader.wait(100)
             loader.deleteLater()
 
@@ -341,9 +348,6 @@ class MagDetectorWidget(QWidget):
                 pass
             self._progress_dlg = None
 
-    # ----------------------------------------------------------------------
-    # Inference event handlers
-    # ----------------------------------------------------------------------
     def _on_result(self, continuous_mag, pred_cls):
         if not self.is_tracking:
             return
@@ -360,11 +364,7 @@ class MagDetectorWidget(QWidget):
         self.btn_toggle.setChecked(False)
         self._stop_tracking()
 
-    # ----------------------------------------------------------------------
-    # Cleanup
-    # ----------------------------------------------------------------------
     def close_threads(self):
-        """Safely stop threads when the main window is closing."""
         if self._loader is not None and self._loader.isRunning():
             try:
                 self._loader.request_abort()

@@ -100,6 +100,10 @@ skimage_datas, skimage_binaries, skimage_hiddenimports = collect_all("skimage")
 lazy_datas,    lazy_binaries,    lazy_hiddenimports    = collect_all("lazy_loader")
 tf_datas,      tf_binaries,      tf_hiddenimports      = collect_all("transformers")
 hf_datas,      hf_binaries,      hf_hiddenimports      = collect_all("huggingface_hub")
+cp_datas,         cp_binaries,         cp_hiddenimports         = collect_all("cellpose")
+fr_datas,         fr_binaries,         fr_hiddenimports         = collect_all("fastremap")
+fv_datas,         fv_binaries,         fv_hiddenimports         = collect_all("fill_voids")
+ultra_datas,      ultra_binaries,      ultra_hiddenimports      = collect_all("ultralytics")
 
 
 a = Analysis(
@@ -115,6 +119,10 @@ a = Analysis(
         + lazy_binaries
         + tf_binaries
         + hf_binaries
+        + cp_binaries        
+        + fr_binaries        
+        + fv_binaries        
+        + ultra_binaries     
     ),
 
     datas=(
@@ -145,6 +153,10 @@ a = Analysis(
         + lazy_datas
         + tf_datas
         + hf_datas
+        + cp_datas           # ← 加
+        + fr_datas           # ← 加
+        + fv_datas           # ← 加
+        + ultra_datas        # ← 加
     ),
 
     hiddenimports=(
@@ -204,6 +216,11 @@ a = Analysis(
             "custom_widgets.WelcomeDialog",
             "custom_widgets.SpinnerDialog",
             "custom_widgets.DpiWarningDialog",
+
+            + cp_hiddenimports        # 
+            + fr_hiddenimports        # 
+            + fv_hiddenimports        # 
+            + ultra_hiddenimports     # 
         ]
     ),
 

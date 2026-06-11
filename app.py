@@ -6,6 +6,16 @@ import sys
 import json
 
 # ------------------------------------------------------------
+# CRITICAL: Stub pkg_resources.require() for ALL frozen bundles.
+# ------------------------------------------------------------
+if getattr(sys, "frozen", False):
+    try:
+        import pkg_resources
+        pkg_resources.require = lambda *a, **kw: []
+    except ImportError:
+        pass
+    
+# ------------------------------------------------------------
 # 1. Environment setup. 
 # ------------------------------------------------------------
 
