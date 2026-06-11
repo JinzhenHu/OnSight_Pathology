@@ -1,6 +1,6 @@
 """
-mag_detector_widget.py — Real-time magnification detector with proper
-model-loading UX.
+mag_detector_widget.py — Real-time magnification detector with simple
+indeterminate-spinner loading UX.
 """
 
 import gc
@@ -19,20 +19,15 @@ import settings
 
 
 # ============================================================================
-# Phase 1: one-shot model loader (mirrors ModelLoaderThread's contract
-# so we can reuse the existing LoadingDialog UI).
+# Phase 1: one-shot model loader.
+# ----------------------------------------------------------------------------
+# Deliberately does NOT touch huggingface_hub's progress callbacks. We rely
+# on an indeterminate spinner in the dialog instead of a percent bar — this
+# keeps us safely out of the monkey-patched code path the main app uses.
 # ============================================================================
 class MagLoaderThread(QThread):
-    """Loads the magnification model once. Emits HF-style progress events.
-
-    The model_loader_thread.ModelLoaderThread used by the main app is
-    tightly coupled to the cmb_model dropdown; rather than refactor that,
-    we provide a smaller compatible thread purpose-built for the mag model.
-    """
-    progress       = pyqtSignal(str, int, float, float)   # text, pct, cur_b, tot_b
-    finished_ok    = pyqtSignal(dict)                     # {model, process_region_func, using_gpu}
-    failed         = pyqtSignal(str, str)                 # short_msg, traceback
-    load_mode_detected = pyqtSignal(str)                  # "download" | "cache"
+    finished_ok = pyqtSignal(dict)      # {model, process_region_func, using_gpu}
+    failed      = pyqtSignal(str, str)  # short_msg, traceback
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,24 +46,16 @@ class MagLoaderThread(QThread):
                 )
                 return
 
-            # We can't perfectly tell upfront whether the weights are
-            # cached or need downloading, but load_model() is the slow
-            # step regardless, so just announce "download" so the dialog
-            # shows the full progress UI rather than a spinner.
-            self.load_mode_detected.emit("download")
-            self.progress.emit("Initializing magnification model…", -1, 0, 0)
-
             if self._abort:
                 return
 
-            # Actual load. This blocks; on a slow connection (or SSL
-            # handshake retry) it can take 30-60s for the first download.
+            # Blocks until the model is ready. On a cold cache this hits
+            # huggingface_hub, which may take 5-30s depending on network.
             res = load_model(meta)
 
             if self._abort:
-                # User cancelled — drop the loaded model on the floor and
-                # let GC reclaim it. Better than emitting finished_ok and
-                # spinning up an inference loop the user no longer wants.
+                # User cancelled mid-download. Drop the model on the floor;
+                # GC + empty_cache will reclaim VRAM.
                 try:
                     del res["model"]
                     gc.collect()
@@ -77,7 +64,6 @@ class MagLoaderThread(QThread):
                     pass
                 return
 
-            self.progress.emit("Ready", 100, 0, 0)
             self.finished_ok.emit(res)
 
         except Exception as e:
@@ -86,16 +72,15 @@ class MagLoaderThread(QThread):
             logging.error("Mag detector model load failed", exc_info=True)
 
             # Translate the most common network errors into something
-            # actionable for the end user. The full traceback is preserved
-            # for the log file.
+            # actionable. Full traceback is preserved in the log file.
             err_str = str(e).lower()
             if "ssl" in err_str or "handshake" in err_str or "timed out" in err_str:
                 short = ("Network timeout while downloading the magnification "
-                         "model.\nCheck your internet connection and try again.")
+                         "model.\n\nCheck your internet connection and try again.")
             elif "connectionerror" in err_str or "getaddrinfo" in err_str:
-                short = ("Could not reach huggingface.co.\n"
+                short = ("Could not reach huggingface.co.\n\n"
                          "If you're behind a firewall or in a region where HF "
-                         "is throttled, try setting HF_ENDPOINT to a mirror.")
+                         "is throttled, try connecting to a different network.")
             elif "no space" in err_str or "disk" in err_str:
                 short = "Not enough disk space to download the model."
             else:
@@ -119,10 +104,10 @@ class MagInferenceThread(QThread):
 
     def run(self):
         try:
-            model = self._res["model"]
+            model        = self._res["model"]
             process_func = self._res["process_region_func"]
-            using_gpu = self._res["using_gpu"]
-            meta = settings.MODEL_METADATA["Magnification (VIT)"]
+            using_gpu    = self._res["using_gpu"]
+            meta         = settings.MODEL_METADATA["Magnification (VIT)"]
 
             while self.running:
                 region = self.get_region_callback()
@@ -135,21 +120,21 @@ class MagInferenceThread(QThread):
                         region, model=model, metadata=meta, additional_configs={}
                     )
                 except Exception as e:
-                    # Per-frame errors shouldn't kill the whole detector;
+                    # Per-frame failures shouldn't kill the whole detector;
                     # log and try again next tick.
                     logging.warning(f"Mag detector frame failed: {e}")
                     time.sleep(0.5)
                     continue
 
                 continuous_mag = metrics.get("continuous_mag", 0.0)
-                pred_cls = metrics.get("pred_cls", "Unknown")
+                pred_cls       = metrics.get("pred_cls", "Unknown")
 
                 if self.running:
                     self.result_ready.emit(continuous_mag, pred_cls)
 
-                # ~2 FPS — fast enough to feel real-time, light enough to
-                # leave room for the main inference thread.
-                time.sleep(0.1)
+                # ~2 FPS — fast enough to feel real-time, light enough
+                # to leave room for the main inference thread.
+                time.sleep(0.2)
 
             # Loop ended — release GPU memory
             if using_gpu:
@@ -172,17 +157,17 @@ class MagInferenceThread(QThread):
 # Widget
 # ============================================================================
 class MagDetectorWidget(QWidget):
-    mag_detected = pyqtSignal(float, str)
+    mag_detected           = pyqtSignal(float, str)
     tracking_state_changed = pyqtSignal(bool)
 
     def __init__(self, get_region_callback, parent=None):
         super().__init__(parent)
         self.get_region_callback = get_region_callback
-        self.thread = None              # MagInferenceThread (after load)
-        self._loader = None             # MagLoaderThread (during load)
-        self._progress_dlg = None       # LoadingDialog
-        self.is_tracking = False
-        self._was_cancelled = False
+        self.thread          = None   # MagInferenceThread (after load)
+        self._loader         = None   # MagLoaderThread (during load)
+        self._progress_dlg   = None   # SpinnerDialog
+        self.is_tracking     = False
+        self._was_cancelled  = False
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -223,22 +208,27 @@ class MagDetectorWidget(QWidget):
         self.lbl_result.setText("Loading model…")
         self.lbl_result.setStyleSheet("color: orange;")
 
-        # --- Spawn the loading dialog (same widget as the main app uses) ---
-        from custom_widgets.LoadingDialog import LoadingDialog
-
+        # --- Spinner dialog (indeterminate — no percent / bytes / ETA) ---
+        # SpinnerDialog is the lightweight cousin of LoadingDialog used
+        # throughout OnSight for "we don't know how long this will take".
+        from custom_widgets.SpinnerDialog import SpinnerDialog
         self._was_cancelled = False
-        self._progress_dlg = LoadingDialog(
+        self._progress_dlg = SpinnerDialog(
             title="Loading Magnification Model",
             model_name="Magnification (VIT)",
             parent=self.window(),
         )
+        self._progress_dlg.set_status(
+            "Downloading from HuggingFace if not cached…\n"
+            "This typically takes 5–30 seconds on first run."
+        )
+        self._progress_dlg.cancelled.connect(self._on_cancel_load)
 
+        # --- Start the loader thread ---
         self._loader = MagLoaderThread(parent=self)
-        self._loader.progress.connect(self._on_load_progress)
         self._loader.finished_ok.connect(self._on_load_ok)
         self._loader.failed.connect(self._on_load_failed)
         self._loader.finished.connect(self._on_loader_finished)
-        self._progress_dlg.cancelled.connect(self._on_cancel_load)
 
         self._loader.start()
         self._progress_dlg.show()
@@ -246,7 +236,7 @@ class MagDetectorWidget(QWidget):
     def _stop_tracking(self):
         """Stop both the loader (if running) and the inference loop."""
         if self._loader is not None and self._loader.isRunning():
-            # User clicked toggle off while loading — cancel the download
+            # User toggled off while still loading — cancel the download
             self._on_cancel_load()
             return
 
@@ -267,12 +257,6 @@ class MagDetectorWidget(QWidget):
     # ----------------------------------------------------------------------
     # Loader event handlers
     # ----------------------------------------------------------------------
-    def _on_load_progress(self, text, pct, cur_b, tot_b):
-        if self._progress_dlg is None:
-            return
-        self._progress_dlg.set_status(text)
-        self._progress_dlg.set_progress(pct, cur_b, tot_b)
-
     def _on_load_ok(self, model_resources):
         if self._was_cancelled:
             return
@@ -306,7 +290,7 @@ class MagDetectorWidget(QWidget):
         self.lbl_result.setText("Load failed")
         self.lbl_result.setStyleSheet("color: red;")
 
-        # Use the same error dialog as the main app where available
+        # Re-use the project's standard error dialog where available
         try:
             from crash_logging import show_error_dialog
             show_error_dialog(
@@ -330,10 +314,9 @@ class MagDetectorWidget(QWidget):
         # Dialog stays open showing "Cancelling…" until _on_loader_finished.
 
     def _on_loader_finished(self):
-        """Called after MagLoaderThread.run() returns, regardless of outcome."""
+        """Runs after MagLoaderThread.run() returns, regardless of outcome."""
         if self._was_cancelled:
             self._close_progress_dialog()
-            # Reset UI
             self.btn_toggle.setChecked(False)
             self.btn_toggle.setText("Start Real-time Mag 🔍")
             self.btn_toggle.setStyleSheet("")
@@ -344,8 +327,9 @@ class MagDetectorWidget(QWidget):
         loader = self._loader
         self._loader = None
         if loader is not None:
-            # Give Qt a tick to settle, then schedule C++ deletion via the
-            # event loop instead of letting Python GC race with it.
+            # Belt-and-suspenders: wait briefly so Qt's internal bookkeeping
+            # is done, then schedule C++ deletion via the event loop rather
+            # than letting Python GC race with it.
             loader.wait(100)
             loader.deleteLater()
 
@@ -368,7 +352,6 @@ class MagDetectorWidget(QWidget):
         self.mag_detected.emit(continuous_mag, pred_cls)
 
     def _on_inference_error(self, err_msg):
-        # Inference loop crashed mid-run — show error and reset
         QMessageBox.critical(
             self.window(),
             "Mag Detection error",
