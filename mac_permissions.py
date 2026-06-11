@@ -13,7 +13,11 @@ Key design choices:
     not the system's generic one.
   - On Windows/Linux all functions are no-ops returning True.
 """
+#import os
 
+# Set ONSIGHT_FAKE_NO_PERMS=1 to force-trigger the permission dialog
+# for testing. Remove env var to use real permission state.
+#_FORCE_MISSING = os.environ.get("ONSIGHT_FAKE_NO_PERMS") == "1"
 import sys
 import subprocess
 import logging
@@ -24,6 +28,8 @@ def is_macos() -> bool:
 
 
 def check_accessibility_permission() -> bool:
+    #if _FORCE_MISSING:
+        #return False
     """Return True if this process has macOS Accessibility permission.
 
     Uses AXIsProcessTrusted from the ApplicationServices framework. This
@@ -47,6 +53,8 @@ def check_accessibility_permission() -> bool:
 
 
 def check_screen_recording_permission() -> bool:
+    #if _FORCE_MISSING:
+       # return False
     """Return True if this process has Screen Recording permission.
 
     Uses CGPreflightScreenCaptureAccess (macOS 10.15+ Catalina), which

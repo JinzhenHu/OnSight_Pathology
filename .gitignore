@@ -29,8 +29,10 @@ bundled_models/
 *.zip
 *.pkl
 *.h5
+*.dmg
 *.png
 *.pt
+*.DS_Store 
 *.h5ad
 *.csv
 checkpoint/
