@@ -63,9 +63,9 @@ def main():
         print("\nℹ️  Nothing to commit — pushing existing commits if any.")
 
     # ----- 3. git push -----
-    run(["git", "push", "origin", "main"])
+    run(["git", "push", "upstream", "main"])
 
-    print("\n✅ Pushed to origin/main successfully.")
+    print("\n✅ Pushed to upstream/main successfully.")
 
 
 if __name__ == "__main__":
