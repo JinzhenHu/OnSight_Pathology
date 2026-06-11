@@ -1,71 +1,62 @@
 """
 region_selector.py — Non-blocking mouse capture for region selection.
-
 """
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 
-class _MouseClickWorker(QObject):
-    """Listens for ONE mouse click, emits its (x, y), then exits."""
-    clicked = pyqtSignal(int, int)
+class _TwoClickWorker(QObject):
+    """Listens for TWO mouse clicks, emits after each, then exits.
+    
+    Single Listener / single CGEventTap — required for macOS reliability.
+    """
+    first_clicked = pyqtSignal(int, int)
+    both_clicked = pyqtSignal(int, int, int, int)
 
     def run(self):
         from pynput import mouse
-        result = []
+        clicks = []
 
         def _on_click(x, y, button, pressed):
-            if pressed:
-                result.append((int(x), int(y)))
-                return False  # stops the Listener
+            if not pressed:
+                return
+            clicks.append((int(x), int(y)))
+            if len(clicks) == 1:
+                self.first_clicked.emit(clicks[0][0], clicks[0][1])
+            elif len(clicks) >= 2:
+                return False  
 
         with mouse.Listener(on_click=_on_click) as listener:
             listener.join()
 
-        if result:
-            self.clicked.emit(result[0][0], result[0][1])
-        else:
-            self.clicked.emit(0, 0)
+        if len(clicks) >= 2:
+            x1, y1 = clicks[0]
+            x2, y2 = clicks[1]
+            self.both_clicked.emit(x1, y1, x2, y2)
 
 
 def capture_two_clicks(on_complete, on_first_done=None):
-    """Capture two mouse clicks without blocking the main UI thread.
-    Returns the QThread holding worker so caller can keep a reference.
-    """
-    state = {"x1": None, "y1": None, "threads": []}
+    """Capture two mouse clicks without blocking the main UI thread."""
+    state = {"thread": None, "worker": None}
 
-    def _start_second():
-        thread2 = QThread()
-        worker2 = _MouseClickWorker()
-        worker2.moveToThread(thread2)
-        thread2.started.connect(worker2.run)
+    thread = QThread()
+    worker = _TwoClickWorker()
+    worker.moveToThread(thread)
+    thread.started.connect(worker.run)
 
-        def _second_click(x2, y2):
-            thread2.quit()
-            thread2.wait(500)
-            on_complete(state["x1"], state["y1"], x2, y2)
+    if on_first_done:
+        worker.first_clicked.connect(lambda x, y: on_first_done())
 
-        worker2.clicked.connect(_second_click)
-        thread2.finished.connect(worker2.deleteLater)
-        thread2.finished.connect(thread2.deleteLater)
-        thread2.start()
-        state["threads"].append((thread2, worker2))
+    def _done(x1, y1, x2, y2):
+        thread.quit()
+        thread.wait(500)
+        on_complete(x1, y1, x2, y2)
 
-    def _first_click(x, y):
-        state["x1"] = x
-        state["y1"] = y
-        thread1.quit()
-        if on_first_done:
-            on_first_done()
-        _start_second()
+    worker.both_clicked.connect(_done)
+    thread.finished.connect(worker.deleteLater)
+    thread.finished.connect(thread.deleteLater)
+    thread.start()
 
-    thread1 = QThread()
-    worker1 = _MouseClickWorker()
-    worker1.moveToThread(thread1)
-    thread1.started.connect(worker1.run)
-    worker1.clicked.connect(_first_click)
-    thread1.finished.connect(worker1.deleteLater)
-    thread1.finished.connect(thread1.deleteLater)
-    thread1.start()
-    state["threads"].append((thread1, worker1))
+    state["thread"] = thread
+    state["worker"] = worker
     return state

@@ -104,9 +104,9 @@ cp_datas,         cp_binaries,         cp_hiddenimports         = collect_all("c
 fr_datas,         fr_binaries,         fr_hiddenimports         = collect_all("fastremap")
 fv_datas,         fv_binaries,         fv_hiddenimports         = collect_all("fill_voids")
 ultra_datas,      ultra_binaries,      ultra_hiddenimports      = collect_all("ultralytics")
-timm_datas,    timm_binaries,    timm_hiddenimports    = collect_all("timm")        # ← 加
+timm_datas,    timm_binaries,    timm_hiddenimports    = collect_all("timm")   
 accel_datas,   accel_binaries,   accel_hiddenimports   = collect_all("accelerate")
-
+bnb_datas,     bnb_binaries,     bnb_hiddenimports     = collect_all("bitsandbytes")
 
 a = Analysis(
     ['app.py'],
@@ -127,6 +127,7 @@ a = Analysis(
         + ultra_binaries     
         + timm_binaries       
         + accel_binaries 
+        + bnb_binaries
     ),
 
     datas=(
@@ -163,6 +164,7 @@ a = Analysis(
         + ultra_datas        
         + timm_datas           
         + accel_datas  
+        + bnb_datas            
     ),
 
     hiddenimports=(
@@ -189,6 +191,7 @@ a = Analysis(
             "transformers.utils.logging",
             "qwen_vl_utils",
             "accelerate",
+            "bitsandbytes",
             "timm",
             "PIL",
             "scipy",
@@ -236,6 +239,7 @@ a = Analysis(
         + ultra_hiddenimports     # 
         + timm_hiddenimports   # 
         + accel_hiddenimports
+        + bnb_hiddenimports
     ),
 
     hookspath=[],
