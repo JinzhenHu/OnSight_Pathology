@@ -163,7 +163,7 @@ def process_region(region, **kwargs):
     # logging.warning(f"[CELLPOSE-DIAG] mpp from configs: {configs.get('mpp')}")
     # logging.warning(f"[CELLPOSE-DIAG] mpp final: {mpp}")
     # logging.warning(f"[CELLPOSE-DIAG] is_calibrated: {is_calibrated}")
-    # logging.warning(f"[CELLPOSE-DIAG] os_scale: {os_scale}")
+    # logging.warning(1f"[CELLPOSE-DIAG] os_scale: {os_scale}")
     # # === END DIAG ===
     #print(f"Using mpp: {mpp}, OS scale: {os_scale}, final mpp used for features: {mpp / os_scale}")
     # is_calibrated = configs.get('is_calibrated', False)

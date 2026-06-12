@@ -1182,11 +1182,20 @@ class ImageClassificationApp(QMainWindow):
             else:
                 val_um2 = val
 
-            if self.latest_frame is not None:
-                h, w, c = self.latest_frame.shape
+            # if self.latest_frame is not None:
+            #     h, w, c = self.latest_frame.shape
+            #     bx = int(w / 3)
+            #     by = int(h / 3)
+            calib_frame = None
+            if self.latest_metrics is not None and "orig_img" in self.latest_metrics:
+                calib_frame = self.latest_metrics["orig_img"]
+            elif self.latest_frame is not None:
+                calib_frame = self.latest_frame
+
+            if calib_frame is not None:
+                h, w = calib_frame.shape[:2]
                 bx = int(w / 3)
                 by = int(h / 3)
-
                 try:
                     from custom_widgets.DpiWarningDialog import _current_dpi_scale
                     os_scale = _current_dpi_scale()
