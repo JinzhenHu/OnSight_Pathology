@@ -89,7 +89,7 @@ class DpiStatusIndicator(QFrame):
 # ---------------------------------------------------------------------------
 class DpiDetailDialog(QDialog):
     AFFECTED = [
-        ("Magnification detector", "may occasionally misread magnification."),
+        ("Magnification detector", "may provide unreliable magnification."),
         ("Calibration",            "the μm-per-pixel value may need adjusting."),
         ("PanNuke (CellViT)",      "cell sizes may need adjusting."),
     ]
@@ -102,7 +102,6 @@ class DpiDetailDialog(QDialog):
         self._is_ok = is_ok
         self._pct = pct
 
-        # Force plain light look so the app's dark stylesheet doesn't leak in
         self.setStyleSheet(
             "QDialog { background: #ffffff; }"
             "QLabel { color: #1f2937; background: transparent; }"
@@ -158,7 +157,7 @@ class DpiDetailDialog(QDialog):
                 "<p style='margin:0; line-height:1.45;'>"
                 "<b>If you'd like to try 100%:</b><br>"
                 "Open Windows Settings → System → Display → Scale, "
-                "choose <b>100%</b>, then restart OnSight."
+                "choose <b>100%</b>, then <b>restart OnSight</b>."
                 "</p>"
             )
             steps.setTextFormat(Qt.TextFormat.RichText)

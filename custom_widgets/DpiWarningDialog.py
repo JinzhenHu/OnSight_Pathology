@@ -490,7 +490,7 @@ class DpiWarningDialog(QDialog):
 
         hint = QLabel(
             "<span style='color:#7d8a99; font-size:9pt;'>"
-            "After changing it, restart OnSight for the change to take effect."
+            "After changing it, <b>restart OnSight</b> for the change to take effect."
             "</span>"
         )
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -540,15 +540,18 @@ class DpiWarningDialog(QDialog):
 
     def _prompt_restart(self):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Restart Required")
+        msg.setWindowTitle("Restart required")
         msg.setIcon(QMessageBox.Icon.Information)
-        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setTextFormat(Qt.TextFormat.RichText)        # ← 必须加，不然 <b> 不生效
         msg.setText(
-            "Once you've changed the scaling to <b>100%</b> in Windows Display Settings, "
-            "please <b>close and reopen OnSight</b> for the change to take effect."
+            "After you change the scaling to <b>100%</b> in Windows Settings, "
+            "OnSight needs to <b>restart</b> for the change to take effect."
         )
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        btn_restart = msg.addButton("Restart now", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
         msg.exec()
+        if msg.clickedButton() is btn_restart:
+            self._restart_app()
     # def _prompt_restart(self):
     #     msg = QMessageBox(self)
     #     msg.setWindowTitle("After Changing")
