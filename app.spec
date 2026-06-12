@@ -243,17 +243,7 @@ a = Analysis(
     ),
 
     hookspath=[],
-    hooksconfig={
-            "pyi-module-collection-mode": {
-                # Force PyInstaller to include both .py source and .pyc for these
-                # packages, so torch's runtime inspect.getsource() calls work.
-                "torch": "pyz+py",
-                "torch.utils": "pyz+py",
-                "torch.utils.serialization": "pyz+py",
-                "torch._dynamo": "pyz+py",
-                "torch._inductor": "pyz+py",
-            },
-        },
+    hooksconfig={},
     runtime_hooks=[],
 
     # ------------------------------------------------------------------

@@ -70,14 +70,14 @@ class DpiStatusIndicator(QFrame):
             )
             self.setToolTip("Display scaling is 100%. Click for details.")
         else:
-            self._dot.setStyleSheet("color: #c97a2b; background: transparent;")
+            self._dot.setStyleSheet("color: #8a8a8a; background: transparent;")  # ← 灰色，不是橙
             self._lbl.setText(f"Display scaling: {pct}%")
-            self._lbl.setStyleSheet("color: #c97a2b; background: transparent;")
+            self._lbl.setStyleSheet("color: #6a6a6a; background: transparent;")
             self.setStyleSheet(
                 "#dpiPill { background: transparent; border: none; }"
-                "#dpiPill:hover { background: rgba(201,122,43,0.12); border-radius: 3px; }"
+                "#dpiPill:hover { background: rgba(0,0,0,0.06); border-radius: 3px; }"
             )
-            self.setToolTip("Display scaling is not 100%. Click for details.")
+            self.setToolTip("Click for details about display scaling.")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -89,10 +89,9 @@ class DpiStatusIndicator(QFrame):
 # ---------------------------------------------------------------------------
 class DpiDetailDialog(QDialog):
     AFFECTED = [
-        ("Magnification detector", "may report unreliable magnification."),
-        ("Calibration",            "the μm-per-pixel value might be off."),
-        ("PanNuke (CellViT)",      "cell area might be off."),
-        #("Cell features (Cellpose)", "size related metrics might be off."),
+        ("Magnification detector", "may occasionally misread magnification."),
+        ("Calibration",            "the μm-per-pixel value may need adjusting."),
+        ("PanNuke (CellViT)",      "cell sizes may need adjusting."),
     ]
 
     def __init__(self, is_ok: bool, pct: int, parent=None):
@@ -123,15 +122,17 @@ class DpiDetailDialog(QDialog):
 
         if is_ok:
             body = QLabel(
-                "This is the recommended setting. "
-                "Measurements in OnSight will be accurate."
+                "Your display scaling is at 100%. "
+                "All OnSight tools should behave consistently."
             )
             body.setWordWrap(True)
             layout.addWidget(body)
         else:
             intro = QLabel(
-                "OnSight recommends 100%. At other levels, the following "
-                "tools may give wrong numbers:"
+                "OnSight works at any display scaling in most cases. "
+                "If you notice that one of the tools below gives numbers "
+                "that don't match your slide viewer, switching to 100% "
+                "may help:"
             )
             intro.setWordWrap(True)
             layout.addWidget(intro)
@@ -155,7 +156,7 @@ class DpiDetailDialog(QDialog):
 
             steps = QLabel(
                 "<p style='margin:0; line-height:1.45;'>"
-                "<b>To change it:</b><br>"
+                "<b>If you'd like to try 100%:</b><br>"
                 "Open Windows Settings → System → Display → Scale, "
                 "choose <b>100%</b>, then restart OnSight."
                 "</p>"
@@ -200,35 +201,46 @@ class DpiDetailDialog(QDialog):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(900, self._prompt_restart)
 
+
     def _prompt_restart(self):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Restart required")
+        msg.setWindowTitle("Restart Required")
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setText(
             "After you change the scaling to 100% in Windows Settings, "
-            "OnSight needs to restart for the change to take effect."
+            "please close and reopen OnSight for the change to take effect."
         )
-        btn_restart = msg.addButton("Restart now", QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
-        if msg.clickedButton() is btn_restart:
-            self._restart_app()
+    # def _prompt_restart(self):
+    #     msg = QMessageBox(self)
+    #     msg.setWindowTitle("Restart required")
+    #     msg.setIcon(QMessageBox.Icon.Information)
+    #     msg.setText(
+    #         "After you change the scaling to 100% in Windows Settings, "
+    #         "OnSight needs to restart for the change to take effect."
+    #     )
+    #     btn_restart = msg.addButton("Restart now", QMessageBox.ButtonRole.AcceptRole)
+    #     msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+    #     msg.exec()
+    #     if msg.clickedButton() is btn_restart:
+    #         self._restart_app()
 
-    def _restart_app(self):
-            import subprocess
-            try:
-                env = os.environ.copy()
-                if sys.platform == "darwin" and ".app/" in sys.executable:
-                    app_path = sys.executable.split(".app/")[0] + ".app"
-                    subprocess.Popen(["open", "-n", app_path], env=env)
-                else:
-                    cwd = os.path.dirname(os.path.abspath(sys.executable))
-                    subprocess.Popen([sys.executable] + sys.argv, cwd=cwd, env=env)
-                self.accept()
-                QApplication.quit()
-            except Exception:
-                QMessageBox.warning(
-                    self, "Restart failed",
-                    "Could not restart OnSight automatically. "
-                    "Please close and reopen the app manually."
-                )
+    # def _restart_app(self):
+    #         import subprocess
+    #         try:
+    #             env = os.environ.copy()
+    #             if sys.platform == "darwin" and ".app/" in sys.executable:
+    #                 app_path = sys.executable.split(".app/")[0] + ".app"
+    #                 subprocess.Popen(["open", "-n", app_path], env=env)
+    #             else:
+    #                 cwd = os.path.dirname(os.path.abspath(sys.executable))
+    #                 subprocess.Popen([sys.executable] + sys.argv, cwd=cwd, env=env)
+    #             self.accept()
+    #             QApplication.quit()
+    #         except Exception:
+    #             QMessageBox.warning(
+    #                 self, "Restart failed",
+    #                 "Could not restart OnSight automatically. "
+    #                 "Please close and reopen the app manually."
+    #             )

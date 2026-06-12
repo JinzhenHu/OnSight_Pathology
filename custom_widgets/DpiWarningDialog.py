@@ -409,32 +409,35 @@ class DpiWarningDialog(QDialog):
 
     # Contexts that may never be silenced — calibration errors are permanent
     # and propagate to every downstream measurement.
-    NON_SUPPRESSIBLE_CONTEXTS = {"calibrate"}
+    NON_SUPPRESSIBLE_CONTEXTS = set()
 
     # Context-specific intro messages
     CONTEXT_MESSAGES = {
         "mag": (
-            "For <b>optimal magnification detector performance</b>, we recommend "
-            "setting Windows display scaling to <b>100%</b>."
+            "Most users see no issues at any scaling. "
+            "If the magnification detector seems unreliable, switching "
+            "Windows display scaling to <b>100%</b> often helps."
         ),
         "cellvit": (
-            "For <b>accurate cell area and density measurements</b>, we highly "
-            "recommend setting Windows display scaling to <b>100%</b>."
+            "Most users see no issues at any scaling. "
+            "If cell sizes look off, try switching "
+            "Windows display scaling to <b>100%</b>."
         ),
         "cellpose": (
-            "For <b>accurate cell area and density measurements</b>, we "
-            "recommend setting Windows display scaling to <b>100%</b>."
+            "Most users see no issues at any scaling. "
+            "If cell metrics look off, try switching Windows display "
+            "scaling to <b>100%</b>."
         ),
         "calibrate": (
-            "We highly recommend setting Windows display scaling to <b>100%</b> for calibration.</b><br> "
-            "At other levels (125%, 150% …), the calculated μm/pixel might be "
-            "off."
+            "Most users see no issues at any scaling. "
+            "If your calibrated measurements don't match the slide viewer, try "
+            "setting Windows display scaling to <b>100%</b> and recalibrate."
         ),
     }
 
     def __init__(self, current_scale: float, parent=None, context: str = "mag"):
         super().__init__(parent)
-        self.setWindowTitle("Display Scaling Recommendation")
+        self.setWindowTitle("Display Scaling Notice")
         self.setMinimumWidth(480)
         self.setModal(True)
 
@@ -453,18 +456,18 @@ class DpiWarningDialog(QDialog):
         layout.setSpacing(14)
 
         # ---------- Header ----------
-        header = QLabel("🖥️  Display Scaling Recommendation")
-        header.setStyleSheet("font-size: 15pt; font-weight: 600; color: #2c3e50;")
+        header = QLabel("Display Scaling Notice")
+        header.setStyleSheet("font-size: 14pt; font-weight: 600; color: #2c3e50;")
         layout.addWidget(header)
 
         # ---------- Intro (context-specific) ----------
         intro_msg = self.CONTEXT_MESSAGES.get(context, self.CONTEXT_MESSAGES["mag"])
         intro = QLabel(
             f"<p style='line-height:1.5;'>"
-            f"{intro_msg} Your display is currently at "
-            f"<b style='color:#e67e22;'>{current_pct}%</b>.<br>"
+            f"{intro_msg}<br><br>"
             f"<span style='color:#7d8a99; font-size:9pt;'>"
-            f"Here's how to change it 👇</span></p>"
+            f"Your display is currently at {current_pct}%. "
+            f"Here's how to change it if you'd like to try 100% 👇</span></p>"
         )
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
@@ -535,52 +538,62 @@ class DpiWarningDialog(QDialog):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(800, self._prompt_restart)
 
-
     def _prompt_restart(self):
         msg = QMessageBox(self)
-        msg.setWindowTitle("After Changing")
+        msg.setWindowTitle("Restart Required")
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setText(
             "Once you've changed the scaling to <b>100%</b> in Windows Display Settings, "
-            "OnSight needs to <b>restart</b> for the new DPI to take effect."
-            "<br><br>"
-            "Click <b>Restart Now</b> when you've finished changing the setting."
+            "please <b>close and reopen OnSight</b> for the change to take effect."
         )
-        btn_restart = msg.addButton("Restart Now", QMessageBox.ButtonRole.AcceptRole)
-        btn_later = msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_later)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
-        if msg.clickedButton() is btn_restart:
-            self._restart_onsight()
+    # def _prompt_restart(self):
+    #     msg = QMessageBox(self)
+    #     msg.setWindowTitle("After Changing")
+    #     msg.setIcon(QMessageBox.Icon.Information)
+    #     msg.setTextFormat(Qt.TextFormat.RichText)
+    #     msg.setText(
+    #         "Once you've changed the scaling to <b>100%</b> in Windows Display Settings, "
+    #         "OnSight needs to <b>restart</b> for the new DPI to take effect."
+    #         "<br><br>"
+    #         "Click <b>Restart Now</b> when you've finished changing the setting."
+    #     )
+    #     btn_restart = msg.addButton("Restart Now", QMessageBox.ButtonRole.AcceptRole)
+    #     btn_later = msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+    #     msg.setDefaultButton(btn_later)
+    #     msg.exec()
+    #     if msg.clickedButton() is btn_restart:
+    #         self._restart_onsight()
 
 
-    def _restart_onsight(self):
-            import subprocess
-            from PyQt6.QtWidgets import QApplication
+    # def _restart_onsight(self):
+    #         import subprocess
+    #         from PyQt6.QtWidgets import QApplication
 
-            try:
-                env = os.environ.copy()
+    #         try:
+    #             env = os.environ.copy()
 
-                if sys.platform == "darwin" and ".app/" in sys.executable:
-                    # macOS .app: `open -n` spawns a fresh instance with the right
-                    # Launch Services context (Dock icon, menu bar, permissions).
-                    app_path = sys.executable.split(".app/")[0] + ".app"
-                    subprocess.Popen(["open", "-n", app_path], env=env)
-                else:
-                    cwd = os.path.dirname(os.path.abspath(sys.executable))
-                    subprocess.Popen([sys.executable] + sys.argv, cwd=cwd, env=env)
+    #             if sys.platform == "darwin" and ".app/" in sys.executable:
+    #                 # macOS .app: `open -n` spawns a fresh instance with the right
+    #                 # Launch Services context (Dock icon, menu bar, permissions).
+    #                 app_path = sys.executable.split(".app/")[0] + ".app"
+    #                 subprocess.Popen(["open", "-n", app_path], env=env)
+    #             else:
+    #                 cwd = os.path.dirname(os.path.abspath(sys.executable))
+    #                 subprocess.Popen([sys.executable] + sys.argv, cwd=cwd, env=env)
 
-                self.accept()
-                QApplication.quit()
-            except Exception as e:
-                logging.error(f"Failed to restart OnSight: {e}")
-                QMessageBox.warning(
-                    self,
-                    "Restart Failed",
-                    "Could not restart OnSight automatically. "
-                    "Please close and reopen the app manually."
-                )
+    #             self.accept()
+    #             QApplication.quit()
+    #         except Exception as e:
+    #             logging.error(f"Failed to restart OnSight: {e}")
+    #             QMessageBox.warning(
+    #                 self,
+    #                 "Restart Failed",
+    #                 "Could not restart OnSight automatically. "
+    #                 "Please close and reopen the app manually."
+    #             )
 
 # ---------------------------------------------------------------------------
 # Public entry point

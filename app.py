@@ -545,32 +545,49 @@ class ImageClassificationApp(QMainWindow):
             return {}  
         
     def _set_ui_scale(self, scale):
-        reply = QMessageBox.question(
-            self, "Restart Required",
-            f"UI scale will change to {int(scale*100)}%.\n"
-            f"OnSight needs to restart. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
+        if sys.platform == "darwin":
+            # macOS: auto-restart works reliably via `open -n`
+            reply = QMessageBox.question(
+                self, "Restart Required",
+                f"UI scale will change to {int(scale*100)}%.\n"
+                f"OnSight needs to restart. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
-        # Persist the new scale value
-        self.settings["ui_scale"] = scale
-        self._save_settings()
+            self.settings["ui_scale"] = scale
+            self._save_settings()
 
-        # Relaunch the app
-        import subprocess
-        if sys.platform == "darwin" and ".app/" in sys.executable:
-            # macOS .app bundle: use `open -n` to spawn a fresh instance
-            # of the bundle (preserves Dock icon, menu bar, permissions).
-            app_path = sys.executable.split(".app/")[0] + ".app"
-            subprocess.Popen(["open", "-n", app_path])
+            import subprocess
+            if ".app/" in sys.executable:
+                app_path = sys.executable.split(".app/")[0] + ".app"
+                subprocess.Popen(["open", "-n", app_path])
+            else:
+                subprocess.Popen([sys.executable] + sys.argv)
+
+            self.close()
+            QApplication.quit()
         else:
-            # Windows .exe or running from source: relaunch the same interpreter
-            subprocess.Popen([sys.executable] + sys.argv)
+            # Windows / Linux: save the setting and let the user restart manually.
+            reply = QMessageBox.question(
+                self, "Save UI Scale?",
+                f"UI scale will be set to {int(scale*100)}%.\n\n"
+                f"You'll need to close and reopen OnSight for the change to take effect.\n\n"
+                f"Save the setting?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
-        self.close()
-        QApplication.quit()
+            self.settings["ui_scale"] = scale
+            self._save_settings()
+
+            QMessageBox.information(
+                self, "Saved",
+                f"UI scale saved as {int(scale*100)}%.\n"
+                f"Please close and reopen OnSight when you're ready to apply the change."
+            )
 
     def _open_preferences(self):
         from PyQt6.QtWidgets import QDialog, QSlider, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
@@ -619,7 +636,7 @@ class ImageClassificationApp(QMainWindow):
         btns = QHBoxLayout()
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(dlg.reject)
-        apply = QPushButton("Apply & Restart")
+        apply = QPushButton("Apply & Restart" if sys.platform == "darwin" else "Save")
         apply.setDefault(True)
         apply.setStyleSheet("background:#2563eb; color:white; padding:6px 16px; border-radius:4px;")
         apply.clicked.connect(dlg.accept)
