@@ -171,6 +171,7 @@ a = Analysis(
             "torch",
             "torchvision",
             "torchvision.ops",
+            "psutil",
             "torchvision.transforms",
             "numpy",
             "cv2",

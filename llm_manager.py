@@ -180,11 +180,6 @@ class _HfProgressHook:
 
 # ----------------------------------------------------------
 # Platform / device detection (done once at import time).
-# Windows builds are expected to ship with CUDA; macOS builds
-# use MPS (Apple Silicon) or CPU fallback.
-# ----------------------------------------------------------
-# ----------------------------------------------------------
-# Platform / device detection (done once at import time).
 # ----------------------------------------------------------
 _IS_MAC = sys.platform == "darwin"
 
@@ -228,15 +223,29 @@ class AgentMemoryBot:
         model_id = self.cfg["repo"]
         print(f"[System] Loading model: {model_id} on {_DEVICE}", file=sys.stderr)
 
-        # bitsandbytes (4/8-bit) needs CUDA + compute capability >= 7.5.
-        # On Mac, on CPU, or on old NVIDIA cards (Pascal/Volta), gracefully
-        # downgrade so we don't crash with "named symbol not found".
+
         if precision in ("4bit", "8bit") and not _BNB_SUPPORTED:
             if _DEVICE == "cuda":
                 # Old CUDA card (e.g. GTX 1080 Ti, CC 6.1).
                 # 16-bit Lingshu-7B needs ~14 GB; if VRAM is below that
                 # threshold, fall back to CPU instead of OOM-crashing.
                 if _GPU_VRAM_GB < 14.0:
+                    # Also check system RAM — Lingshu-7B 16bit needs ~14 GB.
+                    try:
+                        import psutil
+                        sys_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+                    except Exception:
+                        sys_ram_gb = 999  # unknown, assume enough
+
+                    if sys_ram_gb < 16.0:
+                        raise RuntimeError(
+                            f"This machine cannot run the VLM: GPU is too old "
+                            f"for quantization, GPU VRAM is {_GPU_VRAM_GB:.1f} GB "
+                            f"(need 14+), and system RAM is {sys_ram_gb:.1f} GB "
+                            f"(need 16+ for CPU fallback). Please use a newer "
+                            f"machine with an RTX 20-series+ GPU."
+                        )
+
                     print(
                         f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}, "
                         f"{_GPU_VRAM_GB:.1f} GB VRAM) is too old for 4/8-bit "
@@ -244,8 +253,6 @@ class AgentMemoryBot:
                         f"Falling back to CPU — responses will be slow.",
                         file=sys.stderr,
                     )
-                    # Re-route to CPU. Mutate the module-level constant only
-                    # for this load by switching the local one we pass to .to().
                     self._effective_device = "cpu"
                     precision = "16bit"
                 else:
