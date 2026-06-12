@@ -247,11 +247,11 @@ exe = EXE(
     console=False,             # macOS .app — no terminal window
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,          # follows the Python you build with;
+    target_arch='arm64',          # follows the Python you build with;
                                # set 'arm64' for Apple Silicon only,
                                # or 'universal2' for fat binaries
-    codesign_identity=None,    # set this once you have a Developer ID
-    entitlements_file=None,    # add an entitlements.plist for notarization
+    codesign_identity='-',    # set this once you have a Developer ID
+    entitlements_file='onsight.entitlements',    # add an entitlements.plist for notarization
     icon=None,   # macOS expects .icns, not .ico
 )
 
@@ -294,6 +294,12 @@ app = BUNDLE(
         'NSAccessibilityUsageDescription':
             "OnSight needs Accessibility access to detect mouse clicks when "
             "you select a screen region for analysis.",
+
+        'NSInputMonitoringUsageDescription':
+        "OnSight monitors mouse clicks system-wide so you can select a screen "
+        "region by clicking outside the OnSight window (e.g. on your microscope viewer).",
+        'LSApplicationCategoryType': 'public.app-category.medical',
+        'NSRequiresAquaSystemAppearance': False,  
     },
 )
 
@@ -322,3 +328,7 @@ app = BUNDLE(
 
 # OnSight 的 settings.json
 #open ~/Library/Application\ Support/OnSightPathology/Settings
+
+#chmod +x build_mac.sh
+#./build_mac.sh
+#codesign --display --verbose=4 dist/OnSightPathology_App.app 2>&1 | head -20
