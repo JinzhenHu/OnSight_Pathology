@@ -439,14 +439,17 @@ def build_stats_html_and_metrics(
     total_cells = len(cells)
 
     if total_cells == 0 or instance_map.max() == 0:
-        empty_html = """
-        <div style='background-color:#ffffff; padding:20px; text-align:center; font-family:Arial, sans-serif; color:#666;'>
-            <span style='font-size:12pt;'>No cells detected in this region.</span>
-        </div>
-        """
-        metrics["cell_count"] = 0
-        metrics["cellularity_percent"] = 0.0
-        return empty_html, metrics
+            empty_html = (
+                "<div style='background-color:#ffffff; color:#666666;"
+                "padding:20px; text-align:center;"
+                "font-family:Arial, sans-serif;'>"
+                "<span style='color:#666666; font-size:12pt;'>"
+                "No cells detected in this region.</span>"
+                "</div>"
+            )
+            metrics["cell_count"] = 0
+            metrics["cellularity_percent"] = 0.0
+            return empty_html, metrics
 
     gray_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
 
@@ -484,21 +487,28 @@ def build_stats_html_and_metrics(
     metrics["cellularity_percent"] = total_cells / tissue_area_mm2 if tissue_area_mm2 > 0 else 0
 
     html = f"""
-    <div style='background-color:#ffffff; padding:10px; font-family: "Segoe UI", Arial, sans-serif; color:#222;'>
-        <div style='margin-bottom:12px; font-size:12pt;'>
-            <b style='color:#000;'>Total Cells:</b> {total_cells}
-            <span style='color:#ccc; margin:0 10px;'>|</span>
-            <b style='color:#000;'>Density:</b> {metrics['cellularity_percent']:.0f} / mm²
+    <div style='background-color:#ffffff; color:#222222; padding:10px;
+                font-family:"Segoe UI", Arial, sans-serif;'>
+        <div style='margin-bottom:12px; font-size:12pt; color:#222222;'>
+            <b style='color:#000000;'>Total Cells:</b>
+            <span style='color:#222222;'>{total_cells}</span>
+            <span style='color:#cccccc; margin:0 10px;'>|</span>
+            <b style='color:#000000;'>Density:</b>
+            <span style='color:#222222;'>{metrics['cellularity_percent']:.0f} / mm²</span>
         </div>
 
         <table width='100%' cellspacing='0' cellpadding='8'
-               style='font-size:11pt; text-align:left; border-collapse:collapse; border-top:2px solid #333; border-bottom:2px solid #333;'>
-            <tr style='border-bottom:1px solid #333;'>
-                <th style='padding-left:10px;'>Class</th>
-                <th>Count</th>
-                <th>Area <span style='font-size:9pt; font-weight:normal; color:#666;'>(μm²)</span></th>
-                <th>Eccen.</th>
-                <th>Intensity <span style='font-size:9pt; font-weight:normal; color:#666;'>(Mean)</span></th>
+               style='font-size:11pt; text-align:left; border-collapse:collapse;
+                      background-color:#ffffff; color:#222222;
+                      border-top:2px solid #333333; border-bottom:2px solid #333333;'>
+            <tr style='background-color:#ffffff; border-bottom:1px solid #333333;'>
+                <th style='padding-left:10px; color:#000000; background-color:#ffffff;'>Class</th>
+                <th style='color:#000000; background-color:#ffffff;'>Count</th>
+                <th style='color:#000000; background-color:#ffffff;'>Area
+                    <span style='font-size:9pt; font-weight:normal; color:#666666;'>(μm²)</span></th>
+                <th style='color:#000000; background-color:#ffffff;'>Eccen.</th>
+                <th style='color:#000000; background-color:#ffffff;'>Intensity
+                    <span style='font-size:9pt; font-weight:normal; color:#666666;'>(Mean)</span></th>
             </tr>
     """
 
@@ -511,10 +521,10 @@ def build_stats_html_and_metrics(
 
         color_hex = HEX_TABLE.get(t_id, "#999999")
 
-        row_str = "<tr style='border-bottom:1px solid #f0f0f0;'>"
-        row_str += "<td style='padding-left:10px;'>"
+        row_str = "<tr style='background-color:#ffffff; border-bottom:1px solid #f0f0f0;'>"
+        row_str += "<td style='padding-left:10px; background-color:#ffffff; color:#222222;'>"
         row_str += f"<span style='color:{color_hex}; font-size:14pt; vertical-align:middle; margin-right:6px;'>■</span>"
-        row_str += f"<span style='vertical-align:middle;'>{t_name}</span></td>"
+        row_str += f"<span style='color:#222222; vertical-align:middle;'>{t_name}</span></td>"
 
         if t_id in class_stats.index:
             stats = class_stats.loc[t_id]
@@ -529,13 +539,18 @@ def build_stats_html_and_metrics(
             metrics[f"{t_name}_Eccen_mean"] = float(e_m)
             metrics[f"{t_name}_Intensity_mean"] = float(i_m)
 
-            row_str += f"<td>{count}</td>"
-            row_str += f"<td>{a_m:.1f} <span style='color:#888; font-size:9pt;'>±{a_s:.1f}</span></td>"
-            row_str += f"<td>{e_m:.2f} <span style='color:#888; font-size:9pt;'>±{e_s:.2f}</span></td>"
-            row_str += f"<td>{i_m:.1f} <span style='color:#888; font-size:9pt;'>±{i_s:.1f}</span></td>"
+            row_str += f"<td style='background-color:#ffffff; color:#222222;'>{count}</td>"
+            row_str += (f"<td style='background-color:#ffffff; color:#222222;'>"
+                        f"{a_m:.1f} <span style='color:#888888; font-size:9pt;'>±{a_s:.1f}</span></td>")
+            row_str += (f"<td style='background-color:#ffffff; color:#222222;'>"
+                        f"{e_m:.2f} <span style='color:#888888; font-size:9pt;'>±{e_s:.2f}</span></td>")
+            row_str += (f"<td style='background-color:#ffffff; color:#222222;'>"
+                        f"{i_m:.1f} <span style='color:#888888; font-size:9pt;'>±{i_s:.1f}</span></td>")
         else:
-            row_str += "<td style='color:#ccc;'>0</td>"
-            row_str += "<td style='color:#ccc;'>-</td><td style='color:#ccc;'>-</td><td style='color:#ccc;'>-</td>"
+            row_str += "<td style='background-color:#ffffff; color:#cccccc;'>0</td>"
+            row_str += "<td style='background-color:#ffffff; color:#cccccc;'>-</td>"
+            row_str += "<td style='background-color:#ffffff; color:#cccccc;'>-</td>"
+            row_str += "<td style='background-color:#ffffff; color:#cccccc;'>-</td>"
 
         row_str += "</tr>"
         html += row_str
@@ -543,7 +558,6 @@ def build_stats_html_and_metrics(
     html += "</table></div>"
 
     return html, metrics
-
 
 # ============================================================
 # Main realtime process_region

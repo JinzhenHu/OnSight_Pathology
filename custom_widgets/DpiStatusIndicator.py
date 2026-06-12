@@ -215,14 +215,20 @@ class DpiDetailDialog(QDialog):
             self._restart_app()
 
     def _restart_app(self):
-        import subprocess
-        try:
-            subprocess.Popen([sys.executable] + sys.argv)
-            self.accept()
-            QApplication.quit()
-        except Exception:
-            QMessageBox.warning(
-                self, "Restart failed",
-                "Could not restart OnSight automatically. "
-                "Please close and reopen the app manually."
-            )
+            import subprocess
+            try:
+                env = os.environ.copy()
+                if sys.platform == "darwin" and ".app/" in sys.executable:
+                    app_path = sys.executable.split(".app/")[0] + ".app"
+                    subprocess.Popen(["open", "-n", app_path], env=env)
+                else:
+                    cwd = os.path.dirname(os.path.abspath(sys.executable))
+                    subprocess.Popen([sys.executable] + sys.argv, cwd=cwd, env=env)
+                self.accept()
+                QApplication.quit()
+            except Exception:
+                QMessageBox.warning(
+                    self, "Restart failed",
+                    "Could not restart OnSight automatically. "
+                    "Please close and reopen the app manually."
+                )
