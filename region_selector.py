@@ -34,23 +34,19 @@ class _MacClickCapture(QObject):
     def start(self):
         try:
             from AppKit import NSEvent, NSEventMaskLeftMouseDown
-            from Quartz import CGEventGetLocation
         except ImportError as e:
-            raise RuntimeError(
-                f"pyobjc not available — required for macOS region selection: {e}"
-            )
+            raise RuntimeError(f"pyobjc not available: {e}")
+        
+        self._global_handler_ref = self._handle_event
+        self._local_handler_ref = self._handle_event_local
 
-        # Global monitor: clicks OUTSIDE our app (microscope, slide viewer, etc.)
         self._monitor_global = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSEventMaskLeftMouseDown,
-            self._handle_event,
+            self._global_handler_ref,   
         )
-        # Local monitor: clicks ON our own window (NSEvent global monitor doesn't
-        # see these, so we need a separate one). Local monitor handler must
-        # return the event (to let it propagate) or nil (to swallow it).
         self._monitor_local = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
             NSEventMaskLeftMouseDown,
-            self._handle_event_local,
+            self._local_handler_ref,
         )
 
     def _handle_event_local(self, ns_event):
@@ -87,6 +83,8 @@ class _MacClickCapture(QObject):
         if self._monitor_local is not None:
             NSEvent.removeMonitor_(self._monitor_local)
             self._monitor_local = None
+        self._global_handler_ref = None
+        self._local_handler_ref = None
 
 
 # ============================================================================
