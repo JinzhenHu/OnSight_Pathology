@@ -2660,60 +2660,61 @@ class ImageClassificationApp(QMainWindow):
     def _check_vlm_hardware_or_warn(self, llm_name: str) -> bool:
         """Return True if the user wants to proceed with chat loading.
         
-        Warns once (silenceable) when bnb 4-bit quantization isn't supported,
-        either because there's no CUDA, or because the GPU is too old (Pascal
-        and earlier — CC < 7.5). On those machines the chat will still work,
-        but will run on CPU and be very slow.
+        Blocks loading when the hardware genuinely can't run the chat model.
+        Better to refuse up front than waste minutes loading a model that
+        will crash or be unusable.
         """
         try:
             import torch
         except Exception:
-            return True  # torch missing is a much bigger problem; let it bubble up
-
-        if not torch.cuda.is_available():
-            # No CUDA at all — handled fine on Mac (MPS) and on CPU-only builds
-            # already; user has seen the disclaimer elsewhere. No extra warning.
             return True
+
+        # Mac MPS — fine, Apple Silicon handles 16-bit on the GPU.
+        if (getattr(torch.backends, "mps", None) is not None
+                and torch.backends.mps.is_available()):
+            return True
+
+        # No CUDA at all on Windows/Linux — block.
+        if not torch.cuda.is_available():
+            QMessageBox.warning(
+                self,
+                "GPU required for chat",
+                "OnSight's chat feature requires a CUDA-capable NVIDIA GPU "
+                "(RTX 20-series or newer recommended).<br><br>"
+                "This machine doesn't have a usable GPU, so the chat dialog "
+                "won't work here.<br><br>"
+                "All other OnSight features will continue to work normally."
+            )
+            return False
 
         try:
             cc = torch.cuda.get_device_capability(0)
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
             gpu_name = torch.cuda.get_device_name(0)
         except Exception:
-            return True  # if we can't query the GPU, just let the load proceed
+            return True
 
-        # CC >= 7.5 means Turing (RTX 20xx) or newer — bnb works fine.
+        # Modern card — bnb 4-bit works.
         if cc >= (7, 5):
             return True
 
-        # Older card. Check if user already silenced this warning.
-        if self.settings.get("suppress_old_gpu_warning", False):
+        # Old card with enough VRAM for 16-bit fallback — proceed.
+        if vram_gb >= 14.0:
             return True
 
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setWindowTitle("GPU compatibility note")
-        msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText(
-            f"<b>{gpu_name}</b> doesn't support 4-bit GPU acceleration "
-            f"(it needs an RTX 20-series or newer card).<br><br>"
-            f"OnSight will run the chat model on <b>CPU</b> instead. "
-            f"Responses will work, but will be <b>noticeably slow</b> "
-            f"(several seconds per word).<br><br>"
-            f"Continue?"
+        # Old card AND not enough VRAM. Hard block.
+        QMessageBox.warning(
+            self,
+            "GPU not supported for chat",
+            f"<b>{gpu_name}</b> can't run the chat feature.<br><br>"
+            f"4-bit GPU acceleration requires an NVIDIA RTX 20-series or "
+            f"newer card. Your card ({vram_gb:.1f} GB VRAM) also doesn't "
+            f"have enough memory for the non-quantized fallback "
+            f"(~14 GB needed).<br><br>"
+            f"All other OnSight features will continue to work normally.<br>"
+            f"Only the chat dialog is unavailable on this hardware."
         )
-        chk = QCheckBox("Don't show this again")
-        msg.setCheckBox(chk)
-        btn_yes = msg.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_yes)
-        msg.exec()
-
-        if chk.isChecked():
-            self.settings["suppress_old_gpu_warning"] = True
-            self._save_settings()
-
-        return msg.clickedButton() is btn_yes
+        return False
     
     def _open_chat(self, llm_name, llm_precision):
             if self.latest_frame is None:

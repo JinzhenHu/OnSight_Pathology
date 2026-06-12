@@ -224,52 +224,56 @@ class AgentMemoryBot:
         print(f"[System] Loading model: {model_id} on {_DEVICE}", file=sys.stderr)
 
 
+        # bitsandbytes (4/8-bit) needs CUDA + compute capability >= 7.5.
+        # If unsupported, decide whether the machine can still run the model
+        # in 16-bit, or whether we should refuse outright. We never fall
+        # back to CPU because 7B VLM inference on CPU is too slow to be
+        # usable (several minutes per response).
         if precision in ("4bit", "8bit") and not _BNB_SUPPORTED:
-            if _DEVICE == "cuda":
-                # Old CUDA card (e.g. GTX 1080 Ti, CC 6.1).
-                # 16-bit Lingshu-7B needs ~14 GB; if VRAM is below that
-                # threshold, fall back to CPU instead of OOM-crashing.
-                if _GPU_VRAM_GB < 14.0:
-                    # Also check system RAM — Lingshu-7B 16bit needs ~14 GB.
-                    try:
-                        import psutil
-                        sys_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-                    except Exception:
-                        sys_ram_gb = 999  # unknown, assume enough
 
-                    if sys_ram_gb < 16.0:
-                        raise RuntimeError(
-                            f"This machine cannot run the VLM: GPU is too old "
-                            f"for quantization, GPU VRAM is {_GPU_VRAM_GB:.1f} GB "
-                            f"(need 14+), and system RAM is {sys_ram_gb:.1f} GB "
-                            f"(need 16+ for CPU fallback). Please use a newer "
-                            f"machine with an RTX 20-series+ GPU."
-                        )
-
-                    print(
-                        f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}, "
-                        f"{_GPU_VRAM_GB:.1f} GB VRAM) is too old for 4/8-bit "
-                        f"quantization and too small for 16-bit. "
-                        f"Falling back to CPU — responses will be slow.",
-                        file=sys.stderr,
-                    )
-                    self._effective_device = "cpu"
-                    precision = "16bit"
-                else:
-                    print(
-                        f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}) "
-                        f"doesn't support bnb quantization. Using 16-bit on CUDA.",
-                        file=sys.stderr,
-                    )
-                    self._effective_device = "cuda"
-                    precision = "16bit"
-            else:
+            if _DEVICE == "mps":
+                # Apple Silicon's unified-memory GPU handles 7B at 16-bit
+                # acceptably (~5-10 tok/s on M2 Max).
                 print(
                     f"[System] {precision} requires CUDA; "
-                    f"falling back to 16-bit on {_DEVICE}.",
+                    f"falling back to 16-bit on MPS.",
                     file=sys.stderr,
                 )
-                self._effective_device = _DEVICE
+                self._effective_device = "mps"
+                precision = "16bit"
+
+            elif _DEVICE == "cpu":
+                # Pure CPU — refuse. Inference would take minutes per token.
+                raise RuntimeError(
+                    "OnSight's chat feature requires a CUDA-capable NVIDIA "
+                    "GPU (RTX 20-series or newer is recommended).\n\n"
+                    "CPU-only inference is too slow to be usable for the 7B "
+                    "vision-language model."
+                )
+
+            elif _GPU_VRAM_GB < 14.0:
+                # Old CUDA card (e.g. GTX 1080 Ti) — no bnb support AND
+                # not enough VRAM for 16-bit. Refuse rather than crawl on CPU.
+                raise RuntimeError(
+                    f"Your GPU ({_GPU_NAME}, compute capability "
+                    f"{_GPU_CC[0]}.{_GPU_CC[1]}, {_GPU_VRAM_GB:.1f} GB VRAM) "
+                    f"is too old for 4-bit quantization and doesn't have "
+                    f"enough VRAM for 16-bit ({_GPU_VRAM_GB:.1f} GB available, "
+                    f"~14 GB required).\n\n"
+                    f"OnSight's chat feature requires an NVIDIA RTX 20-series "
+                    f"or newer GPU with at least 8 GB VRAM, or any CUDA GPU "
+                    f"with at least 14 GB VRAM."
+                )
+
+            else:
+                # Rare edge case: old CUDA card with enough VRAM for 16-bit
+                # (e.g. Quadro P6000 24 GB, Titan Xp 12 GB stretched).
+                print(
+                    f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}) "
+                    f"doesn't support bnb quantization. Using 16-bit on CUDA.",
+                    file=sys.stderr,
+                )
+                self._effective_device = "cuda"
                 precision = "16bit"
         else:
             self._effective_device = _DEVICE
