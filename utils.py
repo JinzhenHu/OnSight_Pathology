@@ -176,7 +176,8 @@ def load_model(model_info):
             from process_region_VIT_tumor4_kaiko import process_region
             # Create Model
             model = timm.create_model(
-                model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+                #model_name="hf-hub:1aurent/vit_base_patch16_224.kaiko_ai_towards_large_pathology_fms",
+                model_name="vit_base_patch16_224",
                 dynamic_img_size=True,
                 pretrained=False, )
 
@@ -213,9 +214,10 @@ def load_model(model_info):
             from process_region_mag_detector import process_region
             # Create Model
             model = timm.create_model(
-            model_name="hf-hub:1aurent/vit_small_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            #model_name="hf-hub:1aurent/vit_small_patch16_224.kaiko_ai_towards_large_pathology_fms",
+            model_name="vit_small_patch16_224",
                # dynamic_img_size=True,
-                pretrained=False, )
+            pretrained=False, )
 
 
             device = get_device()

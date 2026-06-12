@@ -183,14 +183,30 @@ class _HfProgressHook:
 # Windows builds are expected to ship with CUDA; macOS builds
 # use MPS (Apple Silicon) or CPU fallback.
 # ----------------------------------------------------------
+# ----------------------------------------------------------
+# Platform / device detection (done once at import time).
+# ----------------------------------------------------------
 _IS_MAC = sys.platform == "darwin"
+
+# bitsandbytes 4-bit / 8-bit CUDA kernels require compute capability >= 7.5
+_BNB_SUPPORTED = False
+_GPU_VRAM_GB = 0.0
+_GPU_CC = (0, 0)
+_GPU_NAME = ""
+
 if torch.cuda.is_available():
     _DEVICE = "cuda"
+    try:
+        _GPU_CC = torch.cuda.get_device_capability(0)
+        _GPU_VRAM_GB = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        _GPU_NAME = torch.cuda.get_device_name(0)
+        _BNB_SUPPORTED = _GPU_CC >= (7, 5)
+    except Exception:
+        _BNB_SUPPORTED = False
 elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
     _DEVICE = "mps"
 else:
     _DEVICE = "cpu"
-
 
 class AgentMemoryBot:
     """
@@ -212,12 +228,44 @@ class AgentMemoryBot:
         model_id = self.cfg["repo"]
         print(f"[System] Loading model: {model_id} on {_DEVICE}", file=sys.stderr)
 
-        # bitsandbytes (4bit / 8bit) only works on CUDA. On Mac, transparently
-        # upgrade to 16bit so the app still launches instead of crashing.
-        if _DEVICE != "cuda" and precision in ("4bit", "8bit"):
-            print(f"[System] {precision} requires CUDA; falling back to 16bit on {_DEVICE}.",
-                  file=sys.stderr)
-            precision = "16bit"
+        # bitsandbytes (4/8-bit) needs CUDA + compute capability >= 7.5.
+        # On Mac, on CPU, or on old NVIDIA cards (Pascal/Volta), gracefully
+        # downgrade so we don't crash with "named symbol not found".
+        if precision in ("4bit", "8bit") and not _BNB_SUPPORTED:
+            if _DEVICE == "cuda":
+                # Old CUDA card (e.g. GTX 1080 Ti, CC 6.1).
+                # 16-bit Lingshu-7B needs ~14 GB; if VRAM is below that
+                # threshold, fall back to CPU instead of OOM-crashing.
+                if _GPU_VRAM_GB < 14.0:
+                    print(
+                        f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}, "
+                        f"{_GPU_VRAM_GB:.1f} GB VRAM) is too old for 4/8-bit "
+                        f"quantization and too small for 16-bit. "
+                        f"Falling back to CPU — responses will be slow.",
+                        file=sys.stderr,
+                    )
+                    # Re-route to CPU. Mutate the module-level constant only
+                    # for this load by switching the local one we pass to .to().
+                    self._effective_device = "cpu"
+                    precision = "16bit"
+                else:
+                    print(
+                        f"[System] GPU ({_GPU_NAME}, CC {_GPU_CC[0]}.{_GPU_CC[1]}) "
+                        f"doesn't support bnb quantization. Using 16-bit on CUDA.",
+                        file=sys.stderr,
+                    )
+                    self._effective_device = "cuda"
+                    precision = "16bit"
+            else:
+                print(
+                    f"[System] {precision} requires CUDA; "
+                    f"falling back to 16-bit on {_DEVICE}.",
+                    file=sys.stderr,
+                )
+                self._effective_device = _DEVICE
+                precision = "16bit"
+        else:
+            self._effective_device = _DEVICE
 
         self._pcb(10, "Loading tokenizer / processor...")
 
@@ -233,7 +281,7 @@ class AgentMemoryBot:
             # ------- Build model_kwargs based on platform / precision -------
             model_kwargs: Dict[str, Any] = {"trust_remote_code": True}
 
-            if _DEVICE == "cuda":
+            if self._effective_device == "cuda":
                 # Windows / CUDA path: rely on accelerate to place layers,
                 # use SDPA attention for speed.
                 model_kwargs["device_map"] = "auto"
@@ -241,7 +289,7 @@ class AgentMemoryBot:
             else:
                 # macOS (MPS / CPU): no device_map; we will .to(device) after load.
                 # MPS lacks some SDPA kernels, so use eager attention there.
-                model_kwargs["attn_implementation"] = "eager" if _DEVICE == "mps" else "sdpa"
+                model_kwargs["attn_implementation"] = "eager" if self._effective_device == "mps" else "sdpa"
 
             if precision == "4bit":
                 model_kwargs["quantization_config"] = BitsAndBytesConfig(
@@ -264,9 +312,9 @@ class AgentMemoryBot:
 
         # On Mac we need to manually move 16bit weights to MPS/CPU.
         # On CUDA, accelerate has already placed them via device_map.
-        if precision == "16bit" and _DEVICE != "cuda":
-            self._pcb(90, f"Moving model to {_DEVICE.upper()}...")
-            self.model.to(_DEVICE)
+        if precision == "16bit" and self._effective_device != "cuda":
+            self._pcb(90, f"Moving model to {self._effective_device.upper()}...")
+            self.model.to(self._effective_device)
         else:
             self._pcb(90, "Finalizing model placement...")
 
@@ -492,7 +540,7 @@ class AgentMemoryBot:
         # original behaviour so reproducibility of the published evaluation is
         # unchanged. CUDA path uses light sampling; MPS/CPU prefers greedy
         # decoding (more stable, avoids occasional MPS softmax NaNs).
-        if _DEVICE == "cuda":
+        if self._effective_device == "cuda":
             generation_kwargs = dict(
                 **inputs,
                 streamer=streamer,

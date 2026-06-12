@@ -2657,14 +2657,77 @@ class ImageClassificationApp(QMainWindow):
         self.enlarged_window = None
 
     # ---------------------------- Chat-------------------------------------------------
+    def _check_vlm_hardware_or_warn(self, llm_name: str) -> bool:
+        """Return True if the user wants to proceed with chat loading.
+        
+        Warns once (silenceable) when bnb 4-bit quantization isn't supported,
+        either because there's no CUDA, or because the GPU is too old (Pascal
+        and earlier — CC < 7.5). On those machines the chat will still work,
+        but will run on CPU and be very slow.
+        """
+        try:
+            import torch
+        except Exception:
+            return True  # torch missing is a much bigger problem; let it bubble up
+
+        if not torch.cuda.is_available():
+            # No CUDA at all — handled fine on Mac (MPS) and on CPU-only builds
+            # already; user has seen the disclaimer elsewhere. No extra warning.
+            return True
+
+        try:
+            cc = torch.cuda.get_device_capability(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            gpu_name = torch.cuda.get_device_name(0)
+        except Exception:
+            return True  # if we can't query the GPU, just let the load proceed
+
+        # CC >= 7.5 means Turing (RTX 20xx) or newer — bnb works fine.
+        if cc >= (7, 5):
+            return True
+
+        # Older card. Check if user already silenced this warning.
+        if self.settings.get("suppress_old_gpu_warning", False):
+            return True
+
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setWindowTitle("GPU compatibility note")
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText(
+            f"<b>{gpu_name}</b> doesn't support 4-bit GPU acceleration "
+            f"(it needs an RTX 20-series or newer card).<br><br>"
+            f"OnSight will run the chat model on <b>CPU</b> instead. "
+            f"Responses will work, but will be <b>noticeably slow</b> "
+            f"(several seconds per word).<br><br>"
+            f"Continue?"
+        )
+        chk = QCheckBox("Don't show this again")
+        msg.setCheckBox(chk)
+        btn_yes = msg.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_yes)
+        msg.exec()
+
+        if chk.isChecked():
+            self.settings["suppress_old_gpu_warning"] = True
+            self._save_settings()
+
+        return msg.clickedButton() is btn_yes
+    
     def _open_chat(self, llm_name, llm_precision):
-        if self.latest_frame is None:
-            return
+            if self.latest_frame is None:
+                return
 
-        self.btn_chat.setEnabled(True)
+            # Quick capability check before launching the chat dialog. The check
+            # is fast (no model load) and prevents the user from sitting through
+            # a long load on hardware that will only deliver CPU-speed output.
+            if not self._check_vlm_hardware_or_warn(llm_name):
+                return
 
-        dlg = LLMChatDialog(self.latest_frame, settings.LLM_CATALOG[llm_name], llm_precision, self)
-        dlg.exec()
+            self.btn_chat.setEnabled(True)
+            dlg = LLMChatDialog(self.latest_frame, settings.LLM_CATALOG[llm_name], llm_precision, self)
+            dlg.exec()
 
 
 

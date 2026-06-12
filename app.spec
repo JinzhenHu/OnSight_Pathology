@@ -3,29 +3,38 @@ import os as _os
 import sys as _sys
 
 # ============================================================================
-# BUILD MODE SELECTOR
+# BUILD MODE + FORMAT SELECTORS
 # ----------------------------------------------------------------------------
-# Set environment variable ONSIGHT_BUILD before running pyinstaller:
-#   default / "local"   → bundle weights, onedir (folder with .exe + deps)
-#   "hf"                → no bundled weights, onefile (single .exe)
+# Two independent env vars:
 #
-# Usage:
-#   PowerShell:
-#     $env:ONSIGHT_BUILD="local"; pyinstaller app.spec   # bundled, onedir
-#     $env:ONSIGHT_BUILD="hf";    pyinstaller app.spec   # HF, onefile
+#   ONSIGHT_BUILD:
+#     "local" (default) → bundle weights into the build
+#     "hf"              → no bundled weights, downloads on first use
 #
-#   CMD:
-#     set ONSIGHT_BUILD=local && pyinstaller app.spec
-#     set ONSIGHT_BUILD=hf    && pyinstaller app.spec
+#   ONSIGHT_FORMAT:
+#     "onedir"  → folder of files (default for local; Inno Setup wraps it)
+#     "onefile" → single .exe    (default for hf; easy to share)
+#
+# Usage (PowerShell):
+#   $env:ONSIGHT_BUILD="local"; pyinstaller app.spec                          # local onedir (Inno)
+#   $env:ONSIGHT_BUILD="local"; $env:ONSIGHT_FORMAT="onefile"; pyinstaller app.spec   # local onefile
+#   $env:ONSIGHT_BUILD="hf";    pyinstaller app.spec                          # hf onefile
 # ============================================================================
-_ONSIGHT_BUILD = _os.environ.get("ONSIGHT_BUILD", "local").lower()
+_ONSIGHT_BUILD = _os.environ.get("ONSIGHT_BUILD", "local").strip().lower()
 _BUNDLE_MODELS = (_ONSIGHT_BUILD == "local")
+
+_ONSIGHT_FORMAT = _os.environ.get(
+    "ONSIGHT_FORMAT",
+    "onedir" if _BUNDLE_MODELS else "onefile"
+).strip().lower()
+_ONEFILE = (_ONSIGHT_FORMAT == "onefile")
 
 _banner = "=" * 60
 print(
     f"\n{_banner}\n"
     f"OnSight build mode: "
-    f"{'LOCAL + HF (onedir, bundled weights)' if _BUNDLE_MODELS else 'HF-ONLY (onefile, no bundled weights)'}"
+    f"{'LOCAL + HF (bundled weights)' if _BUNDLE_MODELS else 'HF-ONLY (no bundled weights)'}"
+    f"\n              format: {'onefile (single .exe)' if _ONEFILE else 'onedir (folder)'}"
     f"\n{_banner}\n",
     file=_sys.stderr,
 )
@@ -41,13 +50,6 @@ block_cipher = None
 
 # ============================================================================
 # Recursive metadata collection helper
-# ----------------------------------------------------------------------------
-# pkg_resources.require() does runtime version checks against EVERY transitive
-# dependency's metadata, so missing any one of them crashes the app at runtime
-# (fastai → fastprogress → python-fasthtml → fastlite → apswutils → ...).
-#
-# This helper walks the dependency graph from importlib.metadata and emits
-# copy_metadata() for each unique package, so we get the whole chain in one go.
 # ============================================================================
 def _meta_recursive(pkg, _seen=None):
     if _seen is None:
@@ -55,29 +57,23 @@ def _meta_recursive(pkg, _seen=None):
 
     import importlib.metadata as ilm
 
-    # Normalize 'python-fasthtml' / 'python_fasthtml' / 'Python-FastHTML'
-    # so we don't visit the same package twice via different spellings.
     norm = pkg.lower().replace("_", "-").split(";")[0].split("[")[0].strip()
     if norm in _seen:
         return []
     _seen.add(norm)
 
     out = []
-
-    # Pull this package's metadata (skip silently if not installed locally)
     try:
         out.extend(copy_metadata(pkg))
     except Exception:
         return out
 
-    # Walk its dependencies
     try:
         requires = ilm.distribution(pkg).requires or []
     except Exception:
         return out
 
     for req in requires:
-        # Parse "package_name[extra]>=1.0; python_version >= '3.8'" → "package_name"
         dep = req.split(";")[0].split()[0]
         for op in (">=", "==", "<=", "<", ">", "~=", "!=", "["):
             dep = dep.split(op)[0]
@@ -89,8 +85,7 @@ def _meta_recursive(pkg, _seen=None):
 
 
 # ----------------------------------------------------------------------------
-# Heavy dependencies — collect_all sweeps binaries, data files, and hidden
-# imports in one shot.
+# Heavy dependencies
 # ----------------------------------------------------------------------------
 torch_datas,   torch_binaries,   torch_hiddenimports   = collect_all("torch")
 tv_datas,      tv_binaries,      tv_hiddenimports      = collect_all("torchvision")
@@ -100,11 +95,11 @@ skimage_datas, skimage_binaries, skimage_hiddenimports = collect_all("skimage")
 lazy_datas,    lazy_binaries,    lazy_hiddenimports    = collect_all("lazy_loader")
 tf_datas,      tf_binaries,      tf_hiddenimports      = collect_all("transformers")
 hf_datas,      hf_binaries,      hf_hiddenimports      = collect_all("huggingface_hub")
-cp_datas,         cp_binaries,         cp_hiddenimports         = collect_all("cellpose")
-fr_datas,         fr_binaries,         fr_hiddenimports         = collect_all("fastremap")
-fv_datas,         fv_binaries,         fv_hiddenimports         = collect_all("fill_voids")
-ultra_datas,      ultra_binaries,      ultra_hiddenimports      = collect_all("ultralytics")
-timm_datas,    timm_binaries,    timm_hiddenimports    = collect_all("timm")   
+cp_datas,      cp_binaries,      cp_hiddenimports      = collect_all("cellpose")
+fr_datas,      fr_binaries,      fr_hiddenimports      = collect_all("fastremap")
+fv_datas,      fv_binaries,      fv_hiddenimports      = collect_all("fill_voids")
+ultra_datas,   ultra_binaries,   ultra_hiddenimports   = collect_all("ultralytics")
+timm_datas,    timm_binaries,    timm_hiddenimports    = collect_all("timm")
 accel_datas,   accel_binaries,   accel_hiddenimports   = collect_all("accelerate")
 bnb_datas,     bnb_binaries,     bnb_hiddenimports     = collect_all("bitsandbytes")
 
@@ -121,12 +116,12 @@ a = Analysis(
         + lazy_binaries
         + tf_binaries
         + hf_binaries
-        + cp_binaries        
-        + fr_binaries        
-        + fv_binaries        
-        + ultra_binaries     
-        + timm_binaries       
-        + accel_binaries 
+        + cp_binaries
+        + fr_binaries
+        + fv_binaries
+        + ultra_binaries
+        + timm_binaries
+        + accel_binaries
         + bnb_binaries
     ),
 
@@ -142,11 +137,6 @@ a = Analysis(
             "retinanet",
             includes=["**/*.yaml", "**/*.pickle", "**/*.pth", "**/*.pt"],
         )
-        # ----------------------------------------------------------------
-        # Recursive metadata — gathers each package AND all its transitive
-        # deps. Necessary because fastai's pkg_resources.require() chain
-        # goes 4-5 levels deep through python-fasthtml.
-        # ----------------------------------------------------------------
         + _meta_recursive("fastprogress")
         + _meta_recursive("fastai")
         + _meta_recursive("huggingface_hub")
@@ -158,13 +148,13 @@ a = Analysis(
         + lazy_datas
         + tf_datas
         + hf_datas
-        + cp_datas           
-        + fr_datas           
-        + fv_datas           
-        + ultra_datas        
-        + timm_datas           
-        + accel_datas  
-        + bnb_datas            
+        + cp_datas
+        + fr_datas
+        + fv_datas
+        + ultra_datas
+        + timm_datas
+        + accel_datas
+        + bnb_datas
     ),
 
     hiddenimports=(
@@ -200,9 +190,9 @@ a = Analysis(
             "huggingface_hub.utils",
             "huggingface_hub.utils.tqdm",
             "huggingface_hub.utils._http",
-            "tqdm",                              
-            "tqdm.auto",                       
-            "tqdm.std",    
+            "tqdm",
+            "tqdm.auto",
+            "tqdm.std",
 
             # Project modules — top-level
             "settings",
@@ -229,15 +219,13 @@ a = Analysis(
             "custom_widgets.WelcomeDialog",
             "custom_widgets.SpinnerDialog",
             "custom_widgets.DpiWarningDialog",
-            "custom_widgets.DpiStatusIndicator"
-
-
+            "custom_widgets.DpiStatusIndicator",
         ]
-        + cp_hiddenimports        # 
-        + fr_hiddenimports        # 
-        + fv_hiddenimports        # 
-        + ultra_hiddenimports     # 
-        + timm_hiddenimports   # 
+        + cp_hiddenimports
+        + fr_hiddenimports
+        + fv_hiddenimports
+        + ultra_hiddenimports
+        + timm_hiddenimports
         + accel_hiddenimports
         + bnb_hiddenimports
     ),
@@ -246,9 +234,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
 
-    # ------------------------------------------------------------------
-    # Exclude heavy unused deps that get pulled in transitively.
-    # ------------------------------------------------------------------
     excludes=[
         "tensorboard",
         # Dask / distributed — pulled by histomicstk, unused
@@ -268,9 +253,9 @@ a = Analysis(
         "distributed.shuffle",
         "distributed.protocol",
         # Heavy / unused
-        "torchaudio",   # audio models, not used
-        "pyarrow",      # parquet IO, not used
-        "av",           # PyAV — transformers video models
+        "torchaudio",
+        "pyarrow",
+        "av",
     ],
 
     noarchive=False,
@@ -282,20 +267,46 @@ pyz = PYZ(a.pure, a.zipped_data)
 
 
 # ============================================================================
-# OUTPUT MODE: branch based on _BUNDLE_MODELS
+# OUTPUT — branch on _ONEFILE (independent of _BUNDLE_MODELS)
+# ----------------------------------------------------------------------------
+# Output names keep the build mode in the filename so the two artifacts
+# don't collide. Inno Setup hooks onto the onedir local build by name.
 # ============================================================================
-if _BUNDLE_MODELS:
-    # ------------------------------------------------------------------
-    # LOCAL build → onedir
-    # Output: dist/app_local/  (folder containing app.exe + deps)
-    # Inno Setup will wrap this into the final installer .exe.
-    # ------------------------------------------------------------------
+_OUTPUT_NAME = "app" if _BUNDLE_MODELS else "OnSight_HF"
+_COLL_NAME   = "app_local" if _BUNDLE_MODELS else "OnSight_HF_dir"
+
+if _ONEFILE:
+    # Single self-extracting .exe.
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name=_OUTPUT_NAME,
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon='sample_icon.ico',
+    )
+
+else:
+    # Folder of files. For LOCAL mode, Inno Setup wraps this into an installer.
     exe = EXE(
         pyz,
         a.scripts,
         [],
         exclude_binaries=True,
-        name='app',
+        name=_OUTPUT_NAME,
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
@@ -316,48 +327,22 @@ if _BUNDLE_MODELS:
         strip=False,
         upx=False,
         upx_exclude=[],
-        name='app_local',
-    )
-
-else:
-    # ------------------------------------------------------------------
-    # HF-only build → onefile
-    # Output: dist/OnSight_HF.exe  (single ~1.5 GB executable)
-    # Users get a single file to email/share; models download on first use.
-    # ------------------------------------------------------------------
-    exe = EXE(
-        pyz,
-        a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        [],
-        name='OnSight_HF',
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=False,
-        runtime_tmpdir=None,
-        console=True,
-        disable_windowed_traceback=False,
-        argv_emulation=False,
-        target_arch=None,
-        codesign_identity=None,
-        entitlements_file=None,
-        icon='sample_icon.ico',
+        name=_COLL_NAME,
     )
 
 
 # ============================================================================
-# Build commands cheatsheet
+# Build commands cheatsheet 
 # ----------------------------------------------------------------------------
-# LOCAL + HF (bundled weights, onedir → Inno Setup):
-#   set ONSIGHT_BUILD=local
-#   pyinstaller app.spec
-#   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DBuildMode=local installer.iss
+# LOCAL + HF, onedir (default - for Inno Setup wrapping):
+#   set ONSIGHT_BUILD=local && set ONSIGHT_FORMAT=onedir && pyinstaller app.spec 
 #
-# HF-only (no bundled weights, onefile single exe):
-#   set ONSIGHT_BUILD=hf
-#   pyinstaller app.spec
-#   :: Output: dist/OnSight_HF.exe
+# LOCAL + HF, onefile (single .exe with bundled weights - very large):
+#   set ONSIGHT_BUILD=local && set ONSIGHT_FORMAT=onefile && pyinstaller app.spec
+#
+# HF-only, onefile (default - easy to email/share):
+#   set ONSIGHT_BUILD=hf && set ONSIGHT_FORMAT=onefile && pyinstaller app.spec
+#
+# HF-only, onedir (but supported):
+#   set ONSIGHT_BUILD=hf && set ONSIGHT_FORMAT=onedir && pyinstaller app.spec
 # ============================================================================

@@ -21,15 +21,26 @@
 [Setup]
 AppName={#AppDisplayName}
 AppVersion=1.0
-DefaultDirName={pf}\OnSightPathology
+DefaultDirName={autopf}\OnSightPathology
 DefaultGroupName=OnSightPathology
 
 OutputBaseFilename=OnSightPathologyInstaller_{#InstallerSuffix}
 OutputDir=output
-DiskSpanning=no
+
+; Large-file support — split into ~2 GB chunks for installers over 4 GB.
+DiskSpanning=yes
+DiskSliceSize=2100000000
+SlicesPerDisk=1
+ReserveBytes=0
+
 Compression=lzma2/max
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
+
+; 64-bit installer (needed when total payload exceeds 2 GB).
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
+
 SetupIconFile="sample_icon.ico"
 
 [Tasks]
