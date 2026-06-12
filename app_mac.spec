@@ -206,7 +206,12 @@ a = Analysis(
             "custom_widgets.SpinnerDialog",
             "custom_widgets.DpiWarningDialog",
             "region_selector",
-            "custom_widgets.DpiStatusIndicator"
+            "custom_widgets.DpiStatusIndicator",
+
+            'AppKit',
+            'Quartz',
+            'objc',
+            'PyObjCTools',
 
         ]
     ),
