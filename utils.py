@@ -1,5 +1,6 @@
 import os
 import sys
+#from huggingface_hub import model_info
 import timm
 import torch
 import torch.nn.functional as F
@@ -395,7 +396,19 @@ def load_model(model_info):
             import torch
             from process_region_cellpose import process_region
 
-            res['model'] = models.CellposeModel(gpu=is_gpu_available())
+            # In LOCAL+HF mode, use bundled weights directly to avoid touching
+            # the user's ~/.cellpose/ directory. Falls back to cellpose's own
+            # default download path in HF-only mode.
+            bundled = resource_path(os.path.join("bundled_models", "cpsam"))
+            if BUNDLE_MODE_ENABLED and os.path.exists(bundled):
+                logging.info(f"[cellpose] Using bundled weights: {bundled}")
+                res['model'] = models.CellposeModel(
+                    gpu=is_gpu_available(),
+                    pretrained_model=bundled,
+                )
+            else:
+                res['model'] = models.CellposeModel(gpu=is_gpu_available())
+
             res['process_region_func'] = process_region
             res['using_gpu'] = is_gpu_available()
 
@@ -421,14 +434,23 @@ def load_model(model_info):
     ##############################################################################
     # cellprofiler
     ##############################################################################
-
     if model_info['model'] == 'CPSAM_profiler':
         from cellpose import models
         import torch
         from process_region_cpsam_cellfeatures import process_region
 
         device = str(get_device())
-        model = models.CellposeModel(gpu=is_gpu_available())
+
+        # Same bundled-weights logic as Cellpose-SAM above.
+        bundled = resource_path(os.path.join("bundled_models", "cpsam"))
+        if BUNDLE_MODE_ENABLED and os.path.exists(bundled):
+            logging.info(f"[cellpose] Using bundled weights: {bundled}")
+            model = models.CellposeModel(
+                gpu=is_gpu_available(),
+                pretrained_model=bundled,
+            )
+        else:
+            model = models.CellposeModel(gpu=is_gpu_available())
         
         res['model'] = model
         res['process_region_func'] = process_region

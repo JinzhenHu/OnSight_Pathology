@@ -2898,7 +2898,7 @@ class ImageClassificationApp(QMainWindow):
         self._loader.progress.connect(on_progress)
         self._loader.finished_ok.connect(on_ok)
         self._loader.failed.connect(on_fail)
-        self._loader.finished.connect(on_finished)   # ← Qt 自带 signal
+        self._loader.finished.connect(on_finished) 
         self._progress_dlg.cancelled.connect(on_cancel)
 
         self.btn_start.setEnabled(False)

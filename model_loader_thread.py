@@ -47,9 +47,14 @@ class ModelLoaderThread(QThread):
             if local_rel and os.path.exists(resource_path(local_rel)):
                 return "fast"
 
-            # 2. Cellpose models live in ~/.cellpose/models/cpsam regardless of OS.
+            # 2. Cellpose models: check bundled copy first, then ~/.cellpose cache.
             model_kind = (meta.get("model") or "").lower()
             if "cellpose" in model_kind or "cpsam" in model_kind:
+                # Bundled in LOCAL+HF builds → instant load
+                bundled = resource_path(os.path.join("bundled_models", "cpsam"))
+                if os.path.exists(bundled):
+                    return "fast"
+                # Otherwise check cellpose's own user cache
                 cpsam_glob = os.path.join(
                     os.path.expanduser("~"), ".cellpose", "models", "cpsam*"
                 )

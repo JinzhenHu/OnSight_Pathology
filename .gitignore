@@ -21,6 +21,9 @@ __pycache__/
 data/
 datasets/
 bundled_models/
+dist_local/
+dist_hf/
+
 
 
 *.pth
@@ -40,4 +43,5 @@ github/
 *.bin
 !test_data/*.png
 ###git reset --soft HEAD~2
-###git rm --cached output-gpu/*.bin
+###git rm --cached output-gpu/*.bindist_local/ 
+dist_hf/ 
