@@ -51,7 +51,9 @@ try:
         "OnSightPathology", "Settings", "settings.json",
     )
     with open(_settings_path) as _f:
-        os.environ["QT_SCALE_FACTOR"] = str(json.load(_f).get("ui_scale", 1.0))
+        _val = json.load(_f).get("ui_scale", 1.0)
+        os.environ["QT_SCALE_FACTOR"] = str(_val)
+        print(f"[DEBUG] QT_SCALE_FACTOR set to: {_val}", file=sys.stderr)
 except Exception:
     pass  # First launch or corrupt settings — fall back to Qt default.
 

@@ -317,13 +317,13 @@ app = BUNDLE(
 #
 # Result lives in:
 #   dist/OnSightPathology_App.app
-# Cellpose 模型缓存
+# Cellpose 
 #open ~/.cellpose/models
 
-# HuggingFace 缓存（你的模型大部分在这）
+# HuggingFace 
 #open ~/.cache/huggingface
 
-# OnSight 的 HF 缓存（如果你 spec 设了 HF_HOME）
+# OnSight 的 HF 缓存
 #open ~/Library/Application\ Support/OnSightPathology
 
 # OnSight 的 settings.json
@@ -332,3 +332,5 @@ app = BUNDLE(
 #chmod +x build_mac.sh
 #./build_mac.sh
 #codesign --display --verbose=4 dist/OnSightPathology_App.app 2>&1 | head -20
+
+#open /Users/hujinzhen/OnSightPathology

@@ -346,7 +346,7 @@ class PermissionDialog(QDialog):
         # ---- Animated toggle demo (visual instruction) ----
         demo_caption = QLabel(
             "In System Settings, toggle ON.\n"
-            "Ignore macOS's \"Quit\". Use Restart below instead."
+            "Then come back and click Restart below."
         )
         demo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         demo_caption.setStyleSheet(
