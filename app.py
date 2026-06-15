@@ -44,7 +44,7 @@ if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
     os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
 # Persistent UI scale 
-_default_scale = 0.8 if sys.platform == "darwin" else 0.9
+_default_scale = 0.8 if sys.platform == "darwin" else 0.85
 try:
     _local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
     _settings_path = os.path.join(

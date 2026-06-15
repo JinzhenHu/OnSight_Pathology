@@ -211,6 +211,7 @@ class DpiDetailDialog(QDialog):
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
+        
     # def _prompt_restart(self):
     #     msg = QMessageBox(self)
     #     msg.setWindowTitle("Restart required")

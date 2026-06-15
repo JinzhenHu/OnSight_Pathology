@@ -411,26 +411,42 @@ class DpiWarningDialog(QDialog):
     # Context-specific intro messages
     CONTEXT_MESSAGES = {
         "mag": (
-            "OnSight Pathology works at any display scaling for almost all setups. "
+            "<b>Most users can ignore this.</b><br>"
+            "OnSight Pathology works well at any display scaling for almost all setups. "
             "If the magnification detector ever seems off, "
             "switching to <b>100%</b> can help. "
-            "<b>Please ignore this if it works properly</b>."
+            "<br><br>"
+            "<span style='color:#7d8a99;'>"
+            "<b>Please ignore this if it works properly.</b>"
+            "</span>"
         ),
         "cellvit": (
-            "OnSight Pathology works at any display scaling for almost all setups. "
+            "<b>Most users can ignore this.</b><br>"
+            "OnSight Pathology works well at any display scaling for almost all setups. "
             "If cell measurements seem off, switching to <b>100%</b> can help. "
-            "<b>Please ignore this if it works properly</b>."
+            "<br><br>"
+            "<span style='color:#7d8a99;'>"
+            "<b>Please ignore this if it works properly.</b>"
+            "</span>"
         ),
         "cellpose": (
-            "OnSight Pathology works at any display scaling for almost all setups. "
+            "<b>Most users can ignore this.</b><br>"
+            "OnSight Pathology works well at any display scaling for almost all setups. "
             "If metrics seem off, switching to <b>100%</b> can help. "
-            "<b>Please ignore this if it works properly</b>."
+            "<br><br>"
+            "<span style='color:#7d8a99;'>"
+            "<b>Please ignore this if it works properly.</b>"
+            "</span>"
         ),
         "calibrate": (
-            "OnSight Pathology works at any display scaling for almost all setups. "
+            "<b>Most users can ignore this.</b><br>"
+            "OnSight Pathology works well at any display scaling for almost all setups. "
             "If your calibrated measurements don't match the slide viewer, "
             "try setting Windows display scaling to <b>100%</b> and recalibrate. "
-            "<b>Please ignore this if it works properly</b>."
+            "<br><br>"
+            "<span style='color:#7d8a99;'>"
+            "<b>Please ignore this if it works properly.</b>"
+            "</span>"
         ),
     }
 
@@ -539,19 +555,16 @@ class DpiWarningDialog(QDialog):
         QTimer.singleShot(800, self._prompt_restart)
 
     def _prompt_restart(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Restart required")
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setTextFormat(Qt.TextFormat.RichText)        # ← 必须加，不然 <b> 不生效
-        msg.setText(
-            "After you change the scaling to <b>100%</b> in Windows Settings, "
-            "OnSight needs to <b>restart</b> for the change to take effect."
-        )
-        btn_restart = msg.addButton("Restart now", QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-        msg.exec()
-        if msg.clickedButton() is btn_restart:
-            self._restart_app()
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Restart Required")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setTextFormat(Qt.TextFormat.RichText)
+            msg.setText(
+                "After you change the scaling to <b>100%</b> in Windows Settings, "
+                "please <b>close and reopen OnSight</b> for the change to take effect."
+            )
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
     # def _prompt_restart(self):
     #     msg = QMessageBox(self)
     #     msg.setWindowTitle("After Changing")
