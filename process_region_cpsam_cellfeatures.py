@@ -156,7 +156,8 @@ def process_region(region, **kwargs):
     _overlay_alpha = max(0.0, min(1.0, 1.0 - raw_transparency))
     from custom_widgets.DpiWarningDialog import _current_dpi_scale
     os_scale = _current_dpi_scale() 
-    mpp = _safe_float(configs.get('mpp', metadata.get('mpp', 0.25)))
+    mpp_raw  = _safe_float(configs.get('mpp', metadata.get('mpp', 0.25)))
+    mpp = mpp_raw / os_scale if os_scale > 0 else mpp_raw
     # # === DIAG: figure out what mpp is actually being used ===
     # is_calibrated = configs.get('is_calibrated', False)
     # import logging
@@ -177,13 +178,13 @@ def process_region(region, **kwargs):
 
     frame_orig = np.array(screenshot, dtype=np.uint8)
     frame = cv2.cvtColor(frame_orig, cv2.COLOR_BGRA2RGB)
-    if abs(os_scale - 1.0) > 1e-3:
-        frame = cv2.resize(
-            frame,
-            (max(1, int(round(frame.shape[1] / os_scale))),
-            max(1, int(round(frame.shape[0] / os_scale)))),
-            interpolation=cv2.INTER_AREA
-        )
+    # if abs(os_scale - 1.0) > 1e-3:
+    #     frame = cv2.resize(
+    #         frame,
+    #         (max(1, int(round(frame.shape[1] / os_scale))),
+    #         max(1, int(round(frame.shape[0] / os_scale)))),
+    #         interpolation=cv2.INTER_AREA
+    #     )
 
     h, w = frame.shape[:2]
 

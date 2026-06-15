@@ -267,11 +267,9 @@ class MagDetectorInfoDialog(QDialog):
         layout.setSpacing(14)
 
         # ---------- Header ----------
-        # macOS dialogs render with a dark background in dark mode where the
-        # original #2c3e50 (deep navy) almost disappears.
         import sys
         if sys.platform == "darwin":
-            header_color = "#ffffff"   # white on macOS — works on dark mode
+            header_color = "#ffffff"   # white on macOS 
         else:
             header_color = "#2c3e50"   # navy on Windows (light background)
 

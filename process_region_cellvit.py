@@ -569,7 +569,7 @@ def process_region(region, **kwargs):
     configs = kwargs.get("additional_configs", {})
 
     tile_size = int(metadata.get("tile_size", PATCH_SIZE))
-    mpp = _safe_float(configs.get("mpp", metadata.get("mpp", 0.25)), 0.25)
+    mpp_raw  = _safe_float(configs.get("mpp", metadata.get("mpp", 0.25)), 0.25)
     magnification = int(_safe_float(configs.get("magnification", 40), 40))
     contour_thickness = int(_safe_float(configs.get("contour_thickness", 2), 2))
 
@@ -580,8 +580,8 @@ def process_region(region, **kwargs):
 
     from custom_widgets.DpiWarningDialog import _current_dpi_scale
     os_scale = _current_dpi_scale()
-    #print(f"Using mpp: {mpp}, OS scale: {os_scale}, final mpp used for features: {mpp / os_scale}")
-
+    mpp = mpp_raw / os_scale if os_scale > 0 else mpp_raw
+    
     with mss.mss() as sct:
         region = fix_region(region, tile_size)
         screenshot = sct.grab(region)
