@@ -180,6 +180,15 @@ class MagDetectorWidget(QWidget):
             QMessageBox.warning(self, "Warning", "Please select a screen region first!")
             self.btn_toggle.setChecked(False)
             return
+        # ------------------------------------------------------------------
+        # Show the one-time detector info dialog first — it explains the
+        # two values (bracketed vs continuous) so users know which to trust.
+        # Suppressed after the user dismisses it once (checkbox defaults to
+        # "Don't show again" being ticked).
+        # ------------------------------------------------------------------
+        from custom_widgets.MagDetectorInfoDialog import maybe_show_mag_detector_info
+        maybe_show_mag_detector_info(parent=self.window())
+
 
         # ------------------------------------------------------------------
         # Show DPI warning FIRST and check for restart-in-progress before
