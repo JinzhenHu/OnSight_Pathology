@@ -267,8 +267,18 @@ class MagDetectorInfoDialog(QDialog):
         layout.setSpacing(14)
 
         # ---------- Header ----------
+        # macOS dialogs render with a dark background in dark mode where the
+        # original #2c3e50 (deep navy) almost disappears.
+        import sys
+        if sys.platform == "darwin":
+            header_color = "#ffffff"   # white on macOS — works on dark mode
+        else:
+            header_color = "#2c3e50"   # navy on Windows (light background)
+
         header = QLabel("🔬 About the Magnification Detector")
-        header.setStyleSheet("font-size: 14pt; font-weight: 600; color: #2c3e50;")
+        header.setStyleSheet(
+            f"font-size: 14pt; font-weight: 600; color: {header_color};"
+        )
         layout.addWidget(header)
 
         # ---------- Body (short — animation explains the rest) ----------
