@@ -34,8 +34,29 @@ from PyQt6.QtWidgets import (
 )
 
 import mac_permissions
+# ============================================================================
+# Icon path resolution#
+# ============================================================================
+def _find_onsight_icon() -> str | None:
+    """Return absolute path to OnSight icon, or None if not found."""
+    # Try PyInstaller's bundled resource path first
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(os.path.join(meipass, "sample_icon.png"))
+            candidates.append(os.path.join(meipass, "onsight_icon.icns"))
 
+    # Source-run fallback: 
+    here = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(here)
+    candidates.append(os.path.join(project_root, "sample_icon.png"))
+    candidates.append(os.path.join(project_root, "onsight_icon.icns"))
 
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
 # ============================================================================
 # Apple HIG color palette
 # ============================================================================
@@ -373,8 +394,21 @@ class PermissionDialog(QDialog):
         settings_row_layout.setSpacing(14)
 
         # App icon + name on the left
-        app_icon = QLabel("🔬")
-        app_icon.setStyleSheet("font-size: 18px;")
+        app_icon = QLabel()
+        app_icon.setFixedSize(24, 24)
+        _icon_path = _find_onsight_icon()
+        if _icon_path:
+            from PyQt6.QtGui import QPixmap
+            pixmap = QPixmap(_icon_path).scaled(
+                24, 24,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            app_icon.setPixmap(pixmap)
+        else:
+            # Fallback to emoji if the icon file isn't found at runtime
+            app_icon.setText("🔬")
+            app_icon.setStyleSheet("font-size: 18px;")
         settings_row_layout.addWidget(app_icon)
 
         app_name = QLabel("OnSightPathology_App")

@@ -90,6 +90,7 @@ project_datas = (
         ("retinanet/file/config.yaml",            "retinanet/file"),
         ("retinanet/file/statistics_sdata.pickle", "retinanet/file"),
         ("onsight_icon.icns",                     "."),
+        ("sample_icon.png",                       "."),
     ]
     + collect_data_files(
         "retinanet",
