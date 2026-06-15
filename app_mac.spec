@@ -89,6 +89,7 @@ project_datas = (
     + [
         ("retinanet/file/config.yaml",            "retinanet/file"),
         ("retinanet/file/statistics_sdata.pickle", "retinanet/file"),
+        ("onsight_icon.icns",                     "."),
     ]
     + collect_data_files(
         "retinanet",
@@ -252,7 +253,7 @@ exe = EXE(
                                # or 'universal2' for fat binaries
     codesign_identity='-',    # set this once you have a Developer ID
     entitlements_file='onsight.entitlements',    # add an entitlements.plist for notarization
-    icon=None,   # macOS expects .icns, not .ico
+    icon='onsight_icon.icns',   # macOS expects .icns, not .ico
 )
 
 coll = COLLECT(
@@ -280,6 +281,7 @@ app = BUNDLE(
         'CFBundleDisplayName': 'OnSight Pathology',
         'CFBundleShortVersionString': '1.0.1',
         'CFBundleVersion': '1.0.1',
+        'CFBundleIconFile': 'onsight_icon.icns',
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '12.0',
         # User-facing strings shown in macOS permission prompts.
