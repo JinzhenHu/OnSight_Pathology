@@ -90,8 +90,8 @@ class DpiStatusIndicator(QFrame):
 class DpiDetailDialog(QDialog):
     AFFECTED = [
         ("Magnification detector", "may provide unreliable magnification."),
-        ("Calibration",            "the μm-per-pixel value may need adjusting."),
-        ("PanNuke (CellViT)",      "cell sizes may need adjusting."),
+        ("Calibration",            "the μm-per-pixel value may be slightly off."),
+        ("PanNuke (CellViT)",      "cell sizes may be slightly off."),
     ]
 
     def __init__(self, is_ok: bool, pct: int, parent=None):

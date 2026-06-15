@@ -34,6 +34,7 @@ dist_hf/
 *.h5
 *.dmg
 *.png
+*.bin
 *.pt
 *.DS_Store 
 *.h5ad

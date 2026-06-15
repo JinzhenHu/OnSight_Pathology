@@ -344,7 +344,11 @@ class PermissionDialog(QDialog):
         content.addSpacing(22)
 
         # ---- Animated toggle demo (visual instruction) ----
-        demo_caption = QLabel("In System Settings, toggle it ON")
+        demo_caption = QLabel(
+            "In System Settings, toggle it ON.\n"
+            "Ignore macOS's \"Quit\". Please use the Restart button below instead."
+        )
+        demo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         demo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         demo_caption.setStyleSheet(
             f"font-size: 12px; color: {COLOR_TEXT_SECONDARY};"

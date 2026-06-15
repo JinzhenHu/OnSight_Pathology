@@ -401,9 +401,6 @@ class AnimatedDpiDemo(QWidget):
 # ============================================================================
 # Dialog
 # ============================================================================
-# ============================================================================
-# Dialog
-# ============================================================================
 class DpiWarningDialog(QDialog):
     SUPPRESS_KEY = "suppress_dpi_warning_mag"  # legacy, kept for back-compat
 
@@ -414,30 +411,32 @@ class DpiWarningDialog(QDialog):
     # Context-specific intro messages
     CONTEXT_MESSAGES = {
         "mag": (
-            "Most users see no issues at any scaling. "
-            "If the magnification detector seems unreliable, switching "
-            "Windows display scaling to <b>100%</b> often helps."
+            "OnSight Pathology works at any display scaling for almost all setups. "
+            "If the magnification detector ever seems off, "
+            "switching to <b>100%</b> can help. "
+            "<b>Please ignore this if it works properly</b>."
         ),
         "cellvit": (
-            "Most users see no issues at any scaling. "
-            "If cell sizes look off, try switching "
-            "Windows display scaling to <b>100%</b>."
+            "OnSight Pathology works at any display scaling for almost all setups. "
+            "If cell measurements seem off, switching to <b>100%</b> can help. "
+            "<b>Please ignore this if it works properly</b>."
         ),
         "cellpose": (
-            "Most users see no issues at any scaling. "
-            "If cell metrics look off, try switching Windows display "
-            "scaling to <b>100%</b>."
+            "OnSight Pathology works at any display scaling for almost all setups. "
+            "If metrics seem off, switching to <b>100%</b> can help. "
+            "<b>Please ignore this if it works properly</b>."
         ),
         "calibrate": (
-            "Most users see no issues at any scaling. "
-            "If your calibrated measurements don't match the slide viewer, try "
-            "setting Windows display scaling to <b>100%</b> and recalibrate."
+            "OnSight Pathology works at any display scaling for almost all setups. "
+            "If your calibrated measurements don't match the slide viewer, "
+            "try setting Windows display scaling to <b>100%</b> and recalibrate. "
+            "<b>Please ignore this if it works properly</b>."
         ),
     }
 
     def __init__(self, current_scale: float, parent=None, context: str = "mag"):
         super().__init__(parent)
-        self.setWindowTitle("Display Scaling Notice")
+        self.setWindowTitle("💡 Display Scaling Tip")
         self.setMinimumWidth(480)
         self.setModal(True)
 
@@ -456,19 +455,20 @@ class DpiWarningDialog(QDialog):
         layout.setSpacing(14)
 
         # ---------- Header ----------
-        header = QLabel("Display Scaling Notice")
+        header = QLabel("💡 Display Scaling Tip")
         header.setStyleSheet("font-size: 14pt; font-weight: 600; color: #2c3e50;")
         layout.addWidget(header)
 
         # ---------- Intro (context-specific) ----------
         intro_msg = self.CONTEXT_MESSAGES.get(context, self.CONTEXT_MESSAGES["mag"])
         intro = QLabel(
-            f"<p style='line-height:1.5;'>"
-            f"{intro_msg}<br><br>"
-            f"<span style='color:#7d8a99; font-size:9pt;'>"
-            f"Your display is currently at {current_pct}%. "
-            f"Here's how to change it if you'd like to try 100% 👇</span></p>"
-        )
+                    f"<p style='line-height:1.5;'>"
+                    f"{intro_msg}<br><br>"
+                    f"<span style='color:#7d8a99; font-size:9pt;'>"
+                    f"Your display is currently at {current_pct}%. "
+                    f"<b>If you want to try 100%</b>, here's how 👇"
+                    f"</span></p>"
+                )
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(intro)
@@ -598,9 +598,6 @@ class DpiWarningDialog(QDialog):
     #                 "Please close and reopen the app manually."
     #             )
 
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
