@@ -345,20 +345,50 @@ class PermissionDialog(QDialog):
 
         # ---- Animated toggle demo (visual instruction) ----
         demo_caption = QLabel(
-            "In System Settings, toggle it ON.\n"
-            "Ignore macOS's \"Quit\". Please use the Restart button below instead."
+            "In System Settings, toggle ON.\n"
+            "Ignore macOS's \"Quit\". Use Restart below instead."
         )
         demo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        demo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         demo_caption.setStyleSheet(
-            f"font-size: 12px; color: {COLOR_TEXT_SECONDARY};"
+            f"font-size: 12px; color: {COLOR_TEXT_SECONDARY}; line-height: 1.4;"
         )
         content.addWidget(demo_caption)
         content.addSpacing(10)
 
+# Mock-up of how the toggle row looks in macOS System Settings.
+        # We render the app name on the left and the animated toggle on the
+        # right, mimicking the real Settings UI so users know which row to
+        # interact with.
         toggle_row = QHBoxLayout()
         toggle_row.addStretch()
-        toggle_row.addWidget(_AnimatedToggleDemo())
+
+        # Container mimicking a single Settings row
+        settings_row = QFrame()
+        settings_row.setStyleSheet(
+            f"background-color: {COLOR_BG_ROW};"
+            f"border-radius: 8px;"
+        )
+        settings_row_layout = QHBoxLayout(settings_row)
+        settings_row_layout.setContentsMargins(14, 8, 14, 8)
+        settings_row_layout.setSpacing(14)
+
+        # App icon + name on the left
+        app_icon = QLabel("🔬")
+        app_icon.setStyleSheet("font-size: 18px;")
+        settings_row_layout.addWidget(app_icon)
+
+        app_name = QLabel("OnSightPathology_App")
+        app_name.setStyleSheet(
+            f"font-size: 13px; font-weight: 500; color: {COLOR_TEXT};"
+        )
+        settings_row_layout.addWidget(app_name)
+
+        settings_row_layout.addStretch()
+
+        # The animated toggle on the right
+        settings_row_layout.addWidget(_AnimatedToggleDemo())
+
+        toggle_row.addWidget(settings_row)
         toggle_row.addStretch()
         content.addLayout(toggle_row)
         content.addSpacing(22)
