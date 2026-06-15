@@ -43,20 +43,24 @@ if os.environ.get("BUILD_TYPE", "").upper() == "CPU":
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ["TORCH_CUDA_DUMMY_DEVICE"] = "1"
 
-# Persistent UI scale — must be set before QApplication is constructed.
+# Persistent UI scale 
+_default_scale = 0.8 if sys.platform == "darwin" else 0.9
 try:
-    _settings_dir = "Library/Application Support" if sys.platform == "darwin" else "AppData/Local"
+    _local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
     _settings_path = os.path.join(
-        os.path.expanduser("~"), _settings_dir,
-        "OnSightPathology", "Settings", "settings.json",
+        _local_appdata, "OnSightPathology", "Settings", "settings.json"
     )
     with open(_settings_path) as _f:
-        _val = json.load(_f).get("ui_scale", 1.0)
-        os.environ["QT_SCALE_FACTOR"] = str(_val)
-        print(f"[DEBUG] QT_SCALE_FACTOR set to: {_val}", file=sys.stderr)
+        _val = json.load(_f).get("ui_scale", _default_scale)
 except Exception:
-    pass  # First launch or corrupt settings — fall back to Qt default.
+    _val = _default_scale
 
+os.environ["QT_SCALE_FACTOR"] = str(_val)
+if sys.platform == "darwin":
+    # macOS sometimes ignores QT_SCALE_FACTOR alone — also set the
+    # per-screen factor for reliability.
+    os.environ["QT_SCREEN_SCALE_FACTORS"] = str(_val)
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
 # Windows: enable per-monitor DPI awareness BEFORE any Qt import.
 _dpi_init_error = None
 if sys.platform == "win32":
