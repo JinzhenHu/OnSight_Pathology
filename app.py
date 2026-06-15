@@ -2934,10 +2934,10 @@ class ImageClassificationApp(QMainWindow):
         # Show DPI guidance for models whose accuracy depends on pixel scale
         # (cell classification, segmentation). Different contexts have independent
         # "don't show again" flags.
-        model_type = (meta.get("model") or "").lower()
-        if "cellvit" in model_type:
-            from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
-            QTimer.singleShot(100, lambda: maybe_show_dpi_warning(self, context="cellvit"))
+        # model_type = (meta.get("model") or "").lower()
+        # if "cellvit" in model_type:
+        #     from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
+        #     QTimer.singleShot(100, lambda: maybe_show_dpi_warning(self, context="cellvit"))
         # elif "cellpose" in model_type or "cpsam" in model_type:
         #     from custom_widgets.DpiWarningDialog import maybe_show_dpi_warning
         #     QTimer.singleShot(100, lambda: maybe_show_dpi_warning(self, context="cellpose"))
