@@ -300,7 +300,7 @@ class MagDetectorInfoDialog(QDialog):
         # ---------- Footer ----------
         footer = QHBoxLayout()
         self.chk_suppress = QCheckBox("Don't show this again")
-        self.chk_suppress.setChecked(True)
+        self.chk_suppress.setChecked(False)
         self.chk_suppress.setStyleSheet("color:#555;")
         footer.addWidget(self.chk_suppress)
         footer.addStretch()

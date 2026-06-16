@@ -13,7 +13,7 @@
 ;   iscc installer_hf.iss
 ; ============================================================================
 
-#define AppDisplayName "OnSight Pathology (Online)"
+#define AppDisplayName "OnSight Pathology (HF)"
 #define ExeName "OnSight_HF.exe"
 #define DistDir "dist"
 
