@@ -4,8 +4,10 @@ No progress bar — just a clean, polished animation that says
 'something is happening, please wait a moment'.
 """
 import math
+import sys
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QWidget, QGraphicsDropShadowEffect
+    QDialog, QVBoxLayout, QLabel, QWidget, QGraphicsDropShadowEffect,
+    QPushButton
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QConicalGradient, QPainterPath
@@ -114,10 +116,14 @@ class _AnimatedSpinner(QWidget):
 class SpinnerDialog(QDialog):
     """
     Lightweight 'loading' dialog used when the model is already cached
-    locally — no progress bar, just an animation. Cannot be cancelled
-    because the load is fast (1-3 seconds).
+    locally — no progress bar, just an animation. On Windows/Linux it
+    cannot be cancelled because the load is normally fast (1-3 seconds).
+    On macOS a small close (×) button is shown in the top-right of the
+    card so the user can dismiss the dialog if a large model takes
+    longer than expected; the underlying loader keeps running and is
+    cleaned up by the caller (see `cancelled` signal).
     """
-    cancelled = pyqtSignal()   # never fired, exists for API parity with LoadingDialog
+    cancelled = pyqtSignal()   # fired only on macOS, when the × is clicked
 
     def __init__(self, title: str = "Loading Model",
                  model_name: str = "", parent=None):
@@ -196,6 +202,46 @@ class SpinnerDialog(QDialog):
         self._dot_timer.timeout.connect(self._tick_dots)
         self._dot_timer.start(450)
 
+        # macOS-only close (×) button. Frameless dialogs have no window
+        # chrome, so on Mac we render a small inline × in the top-right
+        # corner of the card. The button emits `cancelled` and dismisses
+        # the dialog immediately; the caller is responsible for handling
+        # the still-running loader thread (see app.py).
+        self._card = card
+        self.btn_close = None
+        if sys.platform == "darwin":
+            self.btn_close = QPushButton("×", card)
+            self.btn_close.setObjectName("SpinnerClose")
+            self.btn_close.setFixedSize(26, 26)
+            self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_close.setToolTip("Close (the model will keep loading in the background)")
+            self.btn_close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.btn_close.setStyleSheet("""
+                QPushButton#SpinnerClose {
+                    background-color: transparent;
+                    color: #adb5bd;
+                    border: none;
+                    border-radius: 13px;
+                    font-size: 18pt;
+                    font-weight: 300;
+                    padding: 0px;
+                    margin: 0px;
+                }
+                QPushButton#SpinnerClose:hover {
+                    background-color: #f1f3f5;
+                    color: #495057;
+                }
+                QPushButton#SpinnerClose:pressed {
+                    background-color: #e9ecef;
+                    color: #212529;
+                }
+                QPushButton#SpinnerClose:disabled {
+                    color: #dee2e6;
+                    background-color: transparent;
+                }
+            """)
+            self.btn_close.clicked.connect(self._on_close_clicked)
+
     # ------------------------------------------------------------------
     # Public API kept compatible with LoadingDialog so callers can swap.
     # ------------------------------------------------------------------
@@ -220,6 +266,37 @@ class SpinnerDialog(QDialog):
     def _tick_dots(self):
         self._dot_count = (self._dot_count + 1) % 4
         self.lbl_status.setText(self._base_status + "." * self._dot_count)
+
+    # ------------------------------------------------------------------
+    # macOS close button — placement + click handling
+    # ------------------------------------------------------------------
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Position the × in the top-right corner of the card, with a
+        # small inset. Done in showEvent so the card has its final size.
+        if self.btn_close is not None and self._card is not None:
+            card_w = self._card.width()
+            inset = 8
+            self.btn_close.move(card_w - self.btn_close.width() - inset, inset)
+            self.btn_close.raise_()
+
+    def _on_close_clicked(self):
+        # Disable immediately so rapid double-clicks don't re-emit.
+        if self.btn_close is not None:
+            self.btn_close.setEnabled(False)
+        # Stop our own animations so the dialog feels instantly responsive.
+        try:
+            self._dot_timer.stop()
+        except Exception:
+            pass
+        try:
+            self.spinner.stop()
+        except Exception:
+            pass
+        self.cancelled.emit()
+        # Close right away — the caller has hooked `cancelled` and will
+        # take ownership of the still-running loader thread.
+        self.reject()
 
     def closeEvent(self, event):
         self._dot_timer.stop()

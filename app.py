@@ -2896,6 +2896,21 @@ class ImageClassificationApp(QMainWindow):
                 loader.deleteLater()
 
         def on_cancel():
+            # macOS-only: if the user clicked the × on the SpinnerDialog,
+            # dismiss the dialog immediately and let the loader finish in
+            # the background. The Start button stays disabled with a
+            # "Still cleaning up previous…" hint until the orphaned
+            # loader exits,
+            if (sys.platform == "darwin"
+                    and isinstance(self._progress_dlg, SpinnerDialog)
+                    and self._loader is not None
+                    and self._loader.isRunning()):
+                self._orphan_current_loader()
+                return
+
+            # Default path: LoadingDialog Cancel button, or any non-mac
+            # case. Dialog stays open showing "Cancelling…" until the
+            # loader thread actually exits.
             self._was_cancelled = True
             if self._loader and self._loader.isRunning():
                 self._loader.request_abort()
@@ -2910,6 +2925,75 @@ class ImageClassificationApp(QMainWindow):
         self.btn_start.setEnabled(False)
         self._loader.start()
         self._progress_dlg.show()
+    def _orphan_current_loader(self):
+        """
+        macOS only — detach the current ModelLoaderThread so the dialog
+        can close immediately while the underlying load (which can't be
+        interrupted mid-flight in torch / HF) finishes silently in the
+        background.
+        """
+        loader = self._loader
+        if loader is None:
+            return
+
+        # Disconnect everything so callbacks bound to *this* load can't
+        # fire from the orphaned thread once it finishes.
+        for sig in (loader.progress, loader.finished_ok, loader.failed,
+                    loader.finished, loader.load_mode_detected):
+            try:
+                sig.disconnect()
+            except TypeError:
+                # No connections — ignore.
+                pass
+
+        # Ask the loader to drop the model when it's done loading.
+        loader.request_abort()
+
+        # Track the orphan so we can re-enable Start only when it exits.
+        if not hasattr(self, "_orphaned_loaders"):
+            self._orphaned_loaders = []
+        self._orphaned_loaders.append(loader)
+
+        def _on_orphan_finished():
+            try:
+                self._orphaned_loaders.remove(loader)
+            except ValueError:
+                pass
+            try:
+                loader.deleteLater()
+            except RuntimeError:
+                pass
+            # If no orphans remain and no active load is running, restore
+            # the Start button so the user can launch the next model.
+            if not self._orphaned_loaders:
+                self.btn_start.setText("Start")
+                self.btn_start.setToolTip("")
+                if getattr(self, "_loader", None) is None:
+                    self.btn_start.setEnabled(True)
+
+        loader.finished.connect(_on_orphan_finished)
+
+        # Detach from app state. Any further reference to the loader
+        # goes through self._orphaned_loaders.
+        self._loader = None
+
+        # Tear down the dialog (it's already calling reject() on its
+        # side, but be defensive in case this path was reached some
+        # other way).
+        if self._progress_dlg is not None:
+            try:
+                self._progress_dlg.accept()
+            except RuntimeError:
+                pass
+            self._progress_dlg = None
+
+        # Lock the Start button until the orphan exits.
+        self.btn_start.setText("Still cleaning up previous…")
+        self.btn_start.setEnabled(False)
+        self.btn_start.setToolTip(
+            "Finishing the previous model load in the background. "
+            "This will unlock automatically."
+        )
     # ------------------------ Helpers-----------------------------------------
     def _show_model_info(self):
         info = settings.MODEL_METADATA[self.cmb_model.currentText()].get("info", "No info.")
