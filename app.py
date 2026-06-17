@@ -2739,6 +2739,9 @@ class ImageClassificationApp(QMainWindow):
 
 
     def _open_llm_popup(self):
+        from custom_widgets.LowMemoryWarningDialog import block_vlm_if_unsupported
+        if block_vlm_if_unsupported(self):
+            return
         dialog = QDialog(self)
         dialog.setWindowTitle("Select GPT Model")
 
@@ -2796,6 +2799,13 @@ class ImageClassificationApp(QMainWindow):
 
         # loading model with progress dialog
     def _start_with_progress(self, model_name: str):
+        meta = settings.MODEL_METADATA.get(model_name, {})
+        if "cellvit" in (meta.get("model") or "").lower():
+            from custom_widgets.LowMemoryWarningDialog import maybe_warn_pannuke
+            if not maybe_warn_pannuke(self, self.settings, self._save_settings):
+                self.btn_start.setEnabled(True)
+                return
+
         from custom_widgets.LoadingDialog import LoadingDialog
         from custom_widgets.SpinnerDialog import SpinnerDialog
 
