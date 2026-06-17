@@ -2739,9 +2739,9 @@ class ImageClassificationApp(QMainWindow):
 
 
     def _open_llm_popup(self):
-        from custom_widgets.LowMemoryWarningDialog import block_vlm_if_unsupported
-        if block_vlm_if_unsupported(self):
-            return
+        # from custom_widgets.LowMemoryWarningDialog import block_vlm_if_unsupported
+        # if block_vlm_if_unsupported(self):
+        #     return
         dialog = QDialog(self)
         dialog.setWindowTitle("Select GPT Model")
 
