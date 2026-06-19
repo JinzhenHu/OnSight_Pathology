@@ -47,7 +47,9 @@ class MyMitosisDetection:
 		# network parameters
 		self.detect_thresh = detect_threshold
 		self.nms_thresh = nms_threshold
-		encoder = create_body(models.resnet18, True, -2)
+		# Requesting torchvision's pretrained ResNet weights here adds an unnecessary network dependency.
+		# Since we load our own huggingface weights.
+		encoder = create_body(models.resnet18, False, -2)
 		scales = [float(s) for s in config["retinanet"]["value"]["scales"].split(",")]
 		ratios = [config["retinanet"]["value"]["ratios"]]
 		sizes = [(config["retinanet"]["value"]["sizes"], config["retinanet"]["value"]["sizes"])]
