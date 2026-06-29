@@ -63,7 +63,7 @@ Two dependency files are provided:
 | File | Description |
 |------|-------------|
 | `requirements.txt`     | GPU version (CUDA 12.8 PyTorch wheels) |
-| `requirements_cpu.txt` | CPU-only version (also used for Apple Silicon / Intel Mac builds) |
+| `requirements_cpu.txt` | CPU-only version|
 
 GPU:
 
@@ -105,7 +105,7 @@ On Windows, you can also choose the output format:
 | Format | Env var | Notes |
 |--------|---------|-------|
 | **onedir** (default for `local`) | `ONSIGHT_FORMAT=onedir`  | Folder of files. Wrapped by Inno Setup into an installer. |
-| **onefile** (default for `hf`)   | `ONSIGHT_FORMAT=onefile` | Single self-extracting `.exe`. Easy to share. |
+| **onefile** (default for `hf`)   | `ONSIGHT_FORMAT=onefile` | Single self-extracting `.exe`. |
 
 Ensure PyInstaller is installed:
 
@@ -117,7 +117,7 @@ pip install pyinstaller
 
 ## Windows Build
 
-### Local + HF build (bundled weights, recommended)
+### Local + HF build (bundled weights)
 
 PowerShell:
 
@@ -146,7 +146,7 @@ Output: `dist\OnSight_HF.exe`
 
 ### CPU-only build
 
-For machines without an NVIDIA GPU, set `BUILD_TYPE=CPU` before building. This prevents PyTorch from probing for CUDA at startup, which otherwise causes DLL discovery crashes on CPU-only systems (including older GPUs with unsupported compute capabilities, e.g. GTX 1050 Ti / sm_61).
+For machines without an NVIDIA GPU, set `BUILD_TYPE=CPU` before building.
 
 ```powershell
 $env:BUILD_TYPE="CPU"
@@ -171,13 +171,11 @@ This script performs:
 2. Run PyInstaller with `app_mac.spec` (defaults to `ONSIGHT_BUILD=local`).
 3. Sign every inner `.dylib` / `.so` with the ad-hoc identity.
 4. Ad-hoc sign the full `.app` bundle with `onsight.entitlements`.
-5. Sign the DMG itself.
 
 Outputs:
 
 ```
 dist/OnSightPathology_App.app
-dist/OnSight-<version>.dmg
 ```
 
 For an HF-only Mac build, set `ONSIGHT_BUILD=hf` before invoking the script (or run PyInstaller directly with `app_mac.spec`).
