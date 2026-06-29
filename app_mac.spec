@@ -30,14 +30,9 @@ print(
 # ----------------------------------------------------------------------------
 # macOS runtime workarounds
 # ----------------------------------------------------------------------------
-# OpenMP / MKL ship multiple copies via numpy + torch on Apple Silicon — letting
-# both load avoids the "OMP: Error #15" abort on app startup.
 _os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-# Match what the app's runtime sets so HF downloads land in the same cache
-# whether the user launched the .app or ran from source.
 _os.environ.setdefault("HF_HOME", _os.path.expanduser("~/.cache/huggingface"))
 
-# Capture PyInstaller's own stdout/stderr to a desktop log when running headless.
 if _sys.stdout is None or not hasattr(_sys.stdout, "fileno"):
     _log_file = _os.path.expanduser("~/Desktop/onsight_debug.log")
     _sys.stdout = open(_log_file, "w", buffering=1)
@@ -317,23 +312,3 @@ app = BUNDLE(
 #
 # HF-only build (no bundled weights):
 #   ONSIGHT_BUILD=hf    pyinstaller --noconfirm app_mac.spec
-#
-# Result lives in:
-#   dist/OnSightPathology_App.app
-# Cellpose 
-#open ~/.cellpose/models
-
-# HuggingFace 
-#open ~/.cache/huggingface
-
-# OnSight 的 HF 缓存
-#open ~/Library/Application\ Support/OnSightPathology
-
-# OnSight 的 settings.json
-#open ~/Library/Application\ Support/OnSightPathology/Settings
-
-#chmod +x build_mac.sh
-#./build_mac.sh
-#codesign --display --verbose=4 dist/OnSightPathology_App.app 2>&1 | head -20
-
-#open /Users/hujinzhen/OnSightPathology
