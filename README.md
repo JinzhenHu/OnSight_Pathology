@@ -162,7 +162,7 @@ pyinstaller app.spec --noconfirm
 
 ## macOS Build
 
-The full Mac build pipeline — PyInstaller → ad-hoc codesign → DMG packaging — is automated in `build_mac.sh`:
+The full Mac build pipeline is automated in `build_mac.sh`:
 
 ```bash
 chmod +x build_mac.sh
@@ -175,8 +175,7 @@ This script performs:
 2. Run PyInstaller with `app_mac.spec` (defaults to `ONSIGHT_BUILD=local`).
 3. Sign every inner `.dylib` / `.so` with the ad-hoc identity.
 4. Ad-hoc sign the full `.app` bundle with `onsight.entitlements`.
-5. Build a distributable DMG via `create-dmg`.
-6. Sign the DMG itself.
+5. Sign the DMG itself.
 
 Outputs:
 
@@ -186,8 +185,6 @@ dist/OnSight-<version>.dmg
 ```
 
 For an HF-only Mac build, set `ONSIGHT_BUILD=hf` before invoking the script (or run PyInstaller directly with `app_mac.spec`).
-
-> **Note on Gatekeeper:** Because the app is ad-hoc signed (not Apple-notarized), downloaded DMGs carry the `com.apple.quarantine` attribute, which triggers per-dylib validation on recent macOS versions and can prevent launch. Distribute an `install_onsight.command` helper alongside the DMG that strips quarantine and copies the app into `/Applications`.
 
 macOS-specific runtime permission handling (Screen Recording, Accessibility, Input Monitoring) is centralized in `mac_permissions.py` and surfaced through `MacPermissionDialog.py`.
 
