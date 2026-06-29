@@ -1,8 +1,5 @@
 """
 First-time info dialog explaining how the magnification detector works.
-Shown the first time a user starts the Real-time Mag detector — explains
-the difference between the integer (standard objective) value and the
-continuous estimate, so users know which one to trust.
 """
 import os
 import sys

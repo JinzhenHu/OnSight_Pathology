@@ -2,22 +2,6 @@
 MacPermissionDialog.py — Premium permission dialog with per-row actions,
 an animated toggle demonstration, and a restart button so users can
 relaunch OnSight after granting access without finding the .app manually.
-
-Behavior:
-  - One unified dialog lists every missing permission as its own row.
-  - Each row has its own "Open →" button — clicking it opens the matching
-    System Settings pane and the button transforms into "Opened ✓".
-  - A looping toggle animation at the bottom shows users what to do once
-    they reach the Settings page.
-  - Two footer buttons:
-      • Restart OnSight  (primary, blue) — relaunches the app cleanly
-      • Later            (secondary)     — closes; user can grant later
-  - On Windows/Linux this entire module is a no-op.
-
-Usage in app.py:
-    from custom_widgets.MacPermissionDialog import check_and_prompt_permissions
-    # Call AFTER WelcomeDialog has closed:
-    check_and_prompt_permissions(self)
 """
 
 import os

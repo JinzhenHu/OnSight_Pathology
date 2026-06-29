@@ -1,7 +1,5 @@
 """
 Spinner dialog for fast model loads (bundled / cached).
-No progress bar — just a clean, polished animation that says
-'something is happening, please wait a moment'.
 """
 import math
 import sys

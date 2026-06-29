@@ -18,7 +18,6 @@ if getattr(sys, "frozen", False):
 # ------------------------------------------------------------
 # 1. Environment setup. 
 # ------------------------------------------------------------
-
 # macOS (Apple Silicon + PyInstaller): pin BLAS to single thread
 # to avoid OpenMP duplicate-init crashes; bypass SSL verify; stub
 # pkg_resources for frozen .app bundles.
@@ -57,8 +56,6 @@ except Exception:
 
 os.environ["QT_SCALE_FACTOR"] = str(_val)
 if sys.platform == "darwin":
-    # macOS sometimes ignores QT_SCALE_FACTOR alone — also set the
-    # per-screen factor for reliability.
     os.environ["QT_SCREEN_SCALE_FACTORS"] = str(_val)
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
 # Windows: enable per-monitor DPI awareness BEFORE any Qt import.
