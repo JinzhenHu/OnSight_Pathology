@@ -30,7 +30,7 @@ Pre-built packages and additional resources are available through the following 
 OnSight Pathology is designed to be cross-platform.
 
 - **Windows:** Supported for both GPU and CPU builds.
-- **macOS:** Supported for both Intel and Apple Silicon (please see the `mac` branch).
+- **macOS:** Supported for both Intel and Apple Silicon.
 - **Linux:** Beta support available for the GPU version (please see the `linux` branch).
 - **Hardware (optional):** NVIDIA GPU with CUDA 12.8 support for the GPU build. Apple Silicon GPUs are used via the MPS backend when available.
 
