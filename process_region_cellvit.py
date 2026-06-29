@@ -608,7 +608,7 @@ def process_region(region, **kwargs):
     metrics = {
         "orig_img": frame_rgb.copy(),
         "area_px": h * w,
-        "mpp": mpp,
+        "mpp": mpp_raw,
         "cell_count": 0,
         "cellularity_percent": 0.0,
     }

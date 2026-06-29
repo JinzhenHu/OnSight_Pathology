@@ -23,6 +23,7 @@ datasets/
 bundled_models/
 dist_local/
 dist_hf/
+output_local/
 
 
 

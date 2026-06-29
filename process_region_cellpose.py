@@ -100,6 +100,7 @@ def classify_ki67_labb_approach(img, masks, min_area=10, threshold=0):
                 scores.append(999)
             else:
                 scores.append(float(b_channel[region].mean()))
+            #scores.append(float(b_channel[region].mean()))
             valid_labels.append(lab_id)
 
         return np.array(valid_labels), np.array(scores)

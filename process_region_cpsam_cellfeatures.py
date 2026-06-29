@@ -632,7 +632,7 @@ def process_region(region, **kwargs):
         "cellularity_percent": cellularity_score,
         "area_px": frame.shape[0] * frame.shape[1],
         "orig_img": cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB),
-        "mpp": mpp
+        "mpp": mpp_raw
     }
 
     for col in existing_cols:

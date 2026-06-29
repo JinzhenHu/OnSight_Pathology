@@ -70,7 +70,7 @@ class DpiStatusIndicator(QFrame):
             )
             self.setToolTip("Display scaling is 100%. Click for details.")
         else:
-            self._dot.setStyleSheet("color: #8a8a8a; background: transparent;")  # ← 灰色，不是橙
+            self._dot.setStyleSheet("color: #8a8a8a; background: transparent;")  
             self._lbl.setText(f"Display scaling: {pct}%")
             self._lbl.setStyleSheet("color: #6a6a6a; background: transparent;")
             self.setStyleSheet(
