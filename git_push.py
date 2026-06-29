@@ -3,18 +3,15 @@
 git_push.py — One-command git add + commit + push.
 
 Usage:
-    python git_push.py "your commit message"
-    python git_push.py                          # opens prompt for message
+    python git_push.py "commit message"
+    python git_push.py                         
 
 Behavior:
     1. git add .                  (stages everything)
     2. git commit -m "message"    (skips if nothing to commit)
     3. git push origin main       (pushes to GitHub)
 
-Notes:
-    - Run this from your repo root.
-    - If you have nothing to commit, it still tries to push (in case you
-      have unpushed commits from before).
+
 """
 
 import subprocess
@@ -35,7 +32,6 @@ def run(cmd, check=True):
 def main():
     # ----- Get commit message -----
     if len(sys.argv) >= 2:
-        # Joined with spaces in case user didn't quote: python git_push.py fix the bug
         msg = " ".join(sys.argv[1:])
     else:
         msg = input("Commit message: ").strip()
@@ -43,7 +39,7 @@ def main():
             print("❌ Empty commit message — aborted.")
             sys.exit(1)
 
-    # ----- Sanity check: are we in a git repo? -----
+    # ----- Sanity check-----
     if not os.path.isdir(".git"):
         print("❌ Not a git repo (no .git folder here). cd into your repo first.")
         sys.exit(1)
@@ -51,8 +47,7 @@ def main():
     # ----- 1. git add . -----
     run(["git", "add", "."])
 
-    # ----- 2. git commit (allow empty so push still works if nothing changed) -----
-    # First check if there's anything staged
+    # ----- 2. git commit -----
     status = subprocess.run(
         ["git", "status", "--porcelain"],
         capture_output=True, text=True,
