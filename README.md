@@ -230,22 +230,6 @@ Compiled installers are written to `output/`.
 
 ---
 
-# Validation & Research Tools
-
-In addition to the main application, the repository ships standalone scripts used during clinical validation. These are **independent of the OnSight runtime** and can be run on their own:
-
-| Script           | Purpose |
-|------------------|---------|
-| `wsi_match.py`   | Locate a microscope screenshot (or a folder of screenshots) inside an Aperio `.svs` whole-slide image. Uses SIFT → ORB → AKAZE multi-detector fallback, a 4-DOF similarity transform (rotation + uniform scale + translation), and RANSAC. Emits QuPath-importable GeoJSON for downstream analysis. |
-
-Edit the `USER SETTINGS` block at the top of the file, then run:
-
-```bash
-python wsi_match.py
-```
-
----
-
 # Training Pipelines
 
 The repository includes a:
