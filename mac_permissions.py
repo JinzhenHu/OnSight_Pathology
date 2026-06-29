@@ -9,7 +9,6 @@ On macOS, unsigned apps need explicit user authorization to:
 #import os
 
 # Set ONSIGHT_FAKE_NO_PERMS=1 to force-trigger the permission dialog
-# for testing. Remove env var to use real permission state.
 #_FORCE_MISSING = os.environ.get("ONSIGHT_FAKE_NO_PERMS") == "1"
 import sys
 import subprocess
@@ -54,10 +53,6 @@ def check_screen_recording_permission() -> bool:
     queries permission state WITHOUT triggering the system prompt.
     This is critical: we want OnSight's own dialog to appear first,
     not macOS's generic "OnSight wants to record screen" alert.
-
-    On macOS < 10.15, Screen Recording permission didn't exist as a
-    concept — assume granted. (Our app's LSMinimumSystemVersion is 12.0
-    so this branch is mostly defensive.)
     """
     if not is_macos():
         return True
