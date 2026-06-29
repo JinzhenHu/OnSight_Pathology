@@ -15,13 +15,13 @@
 > 📚 **Documentation & Downloads**  
 > For full documentation, publication details, and pre-built executables, please visit our official website: **[onsightpathology.github.io](https://onsightpathology.github.io/)**
 
-This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
+This document describes how to run OnSight Pathology locally, how to build the application from source on Windows and macOS, and where to find model training pipelines.
 
 ## 📦 Downloads
 
 Pre-built packages and additional resources are available through the following platforms:
 
-- **Zenodo:**  
+- **Zenodo (primary, DOI-versioned):**  
   https://zenodo.org/records/20402050
 
 - **Google Drive:**  
@@ -31,16 +31,14 @@ Pre-built packages and additional resources are available through the following 
 
 ## 💻 System Requirements
 
-OnSight Pathology is designed to be cross-platform. 
+OnSight Pathology is designed to be cross-platform.
 
--  **Windows:** Supported for both GPU and CPU setups.
--  **macOS:** Supported for both Intel and Apple Silicon (Please see the `mac` branch).
--  **Linux:** Beta support available for the GPU version (Please see the `linux` branch).
--  **Hardware (Optional):** NVIDIA GPU with CUDA support (for GPU build).
+- **Windows:** Supported for both GPU and CPU builds.
+- **macOS:** Supported for both Intel and Apple Silicon (please see the `mac` branch).
+- **Linux:** Beta support available for the GPU version (please see the `linux` branch).
+- **Hardware (optional):** NVIDIA GPU with CUDA 12.8 support for the GPU build. Apple Silicon GPUs are used via the MPS backend when available.
+
 ---
-
-This document describes how to run OnSight Pathology locally, how to build the application from source, and where to find model training pipelines.
-
 
 # Running Locally (Development Mode)
 
@@ -48,7 +46,8 @@ This document describes how to run OnSight Pathology locally, how to build the a
 
 ```bash
 python -m venv onsight_env
-onsight_env\Scripts\activate
+onsight_env\Scripts\activate          # Windows
+source onsight_env/bin/activate       # macOS / Linux
 ```
 
 Confirm Python version:
@@ -66,11 +65,9 @@ Recommended: Python 3.11.9
 Two dependency files are provided:
 
 | File | Description |
-|------|------------|
-| `requirements.txt` | GPU version (includes CUDA-enabled PyTorch) |
-| `requirements_cpu.txt` | CPU-only version |
-
-Install the appropriate version:
+|------|-------------|
+| `requirements.txt`     | GPU version (CUDA 12.8 PyTorch wheels) |
+| `requirements_cpu.txt` | CPU-only version (also used for Apple Silicon / Intel Mac builds) |
 
 GPU:
 
@@ -84,6 +81,8 @@ CPU:
 pip install -r requirements_cpu.txt
 ```
 
+Device selection at runtime is handled by `device_compat.py`, which transparently picks **CUDA → MPS → CPU** in that order. No code changes are needed when switching machines.
+
 ---
 
 ## 3. Launch the Application
@@ -92,13 +91,25 @@ pip install -r requirements_cpu.txt
 python app.py
 ```
 
-This launches the PyQt6 desktop application.
-
-No special configuration is required when running directly via Python.
+This launches the PyQt6 desktop application. No additional configuration is required when running directly from source.
 
 ---
 
 # Building the Executable (PyInstaller)
+
+Two build modes are supported and shared between Windows (`app.spec`) and macOS (`app_mac.spec`):
+
+| Mode | Env var | What it does |
+|------|---------|--------------|
+| **Local + HF** (default)  | `ONSIGHT_BUILD=local` | Bundles model weights directly into the build. Larger, but works fully offline. |
+| **HF-only**               | `ONSIGHT_BUILD=hf`    | No bundled weights. Models are downloaded from HuggingFace Hub on first launch. |
+
+On Windows, you can also choose the output format:
+
+| Format | Env var | Notes |
+|--------|---------|-------|
+| **onedir** (default for `local`) | `ONSIGHT_FORMAT=onedir`  | Folder of files. Wrapped by Inno Setup into an installer. |
+| **onefile** (default for `hf`)   | `ONSIGHT_FORMAT=onefile` | Single self-extracting `.exe`. Easy to share. |
 
 Ensure PyInstaller is installed:
 
@@ -106,124 +117,132 @@ Ensure PyInstaller is installed:
 pip install pyinstaller
 ```
 
-Two executables must be built:
-
-- Main application (`app.exe`)
-- Worker process (`llm_worker_process.exe`)
-
 ---
 
-## GPU Build (Default)
+## Windows Build
 
-```bash
+### Local + HF build (bundled weights, recommended)
+
+PowerShell:
+
+```powershell
+$env:ONSIGHT_BUILD="local"
 pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
 ```
 
----
+Command Prompt:
 
-## CPU Build
+```cmd
+set ONSIGHT_BUILD=local
+pyinstaller app.spec --noconfirm
+```
 
-For CPU-only builds, set the `BUILD_TYPE` environment variable to `CPU` before running PyInstaller.
+Output: `dist\app_local\`
 
-This prevents PyTorch from initializing or probing CUDA devices, avoiding CUDA DLL discovery behavior that can cause crashes on systems without GPU drivers.
+### HF-only build (online download, single exe)
 
-### PowerShell
+```powershell
+$env:ONSIGHT_BUILD="hf"
+pyinstaller app.spec --noconfirm
+```
+
+Output: `dist\OnSight_HF.exe`
+
+### CPU-only build
+
+For machines without an NVIDIA GPU, set `BUILD_TYPE=CPU` before building. This prevents PyTorch from probing for CUDA at startup, which otherwise causes DLL discovery crashes on CPU-only systems (including older GPUs with unsupported compute capabilities, e.g. GTX 1050 Ti / sm_61).
 
 ```powershell
 $env:BUILD_TYPE="CPU"
+$env:ONSIGHT_BUILD="local"
 pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
-```
-
-### Command Prompt (cmd)
-
-```cmd
-set BUILD_TYPE=CPU
-pyinstaller app.spec --noconfirm
-pyinstaller llm_worker_process.spec --noconfirm
 ```
 
 ---
 
-## Post-Build Directory Structure
+## macOS Build
 
-After building:
+The full Mac build pipeline — PyInstaller → ad-hoc codesign → DMG packaging — is automated in `build_mac.sh`:
 
-```
-dist/
-    app/
-    llm_worker_process/
-```
-
-Before running `app.exe`, move only:
-
-```
-dist/llm_worker_process/llm_worker_process.exe
+```bash
+chmod +x build_mac.sh
+./build_mac.sh
 ```
 
-into:
+This script performs:
+
+1. Clean previous `build/` and `dist/`.
+2. Run PyInstaller with `app_mac.spec` (defaults to `ONSIGHT_BUILD=local`).
+3. Sign every inner `.dylib` / `.so` with the ad-hoc identity.
+4. Ad-hoc sign the full `.app` bundle with `onsight.entitlements`.
+5. Build a distributable DMG via `create-dmg`.
+6. Sign the DMG itself.
+
+Outputs:
 
 ```
-dist/app/
+dist/OnSightPathology_App.app
+dist/OnSight-<version>.dmg
 ```
 
-Do **not** move the `_internal` folder from `llm_worker_process/`.
+For an HF-only Mac build, set `ONSIGHT_BUILD=hf` before invoking the script (or run PyInstaller directly with `app_mac.spec`).
 
-All required libraries and dependencies are already bundled within:
+> **Note on Gatekeeper:** Because the app is ad-hoc signed (not Apple-notarized), downloaded DMGs carry the `com.apple.quarantine` attribute, which triggers per-dylib validation on recent macOS versions and can prevent launch. Distribute an `install_onsight.command` helper alongside the DMG that strips quarantine and copies the app into `/Applications`.
 
-```
-dist/app/_internal/
-```
-
-Final structure:
-
-```
-dist/
-    app/
-        app.exe
-        llm_worker_process.exe
-        _internal/
-```
-
-The main application expects the worker executable to reside in the same directory.
+macOS-specific runtime permission handling (Screen Recording, Accessibility, Input Monitoring) is centralized in `mac_permissions.py` and surfaced through `MacPermissionDialog.py`.
 
 ---
 
 # Creating a Windows Installer (Inno Setup)
 
-OnSight Pathology can be packaged using Inno Setup version 6.5 or newer.
+OnSight Pathology can be packaged using Inno Setup 6.5 or newer.
 
-Download:
+Download: https://jrsoftware.org/isdl.php
 
-https://jrsoftware.org/isdl.php
+Two installer scripts are provided:
 
-As of Inno Setup 6.5, the maximum installer size is 4GB. Disk spanning is not required.
+| Script              | Purpose                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| `installer.iss`     | Wraps the onedir build (`dist\app_local\` or `dist\app_hf\`). Supports a `BuildMode` define to switch between the two. Includes 2 GB disk-spanning for large local builds. |
+| `installer_hf.iss`  | Wraps the single-file `OnSight_HF.exe`. Smaller, no disk spanning.       |
+
+### Building from the onedir build
+
+Default (local with bundled weights):
+
+```cmd
+iscc installer.iss
+```
+
+HF-only onedir mode:
+
+```cmd
+iscc installer.iss /DBuildMode=hf
+```
+
+### Building from the single-exe HF build
+
+```cmd
+iscc installer_hf.iss
+```
+
+Compiled installers are written to `output/`.
 
 ---
 
-## Building the Installer
+# Validation & Research Tools
 
-A single installer script is provided:
+In addition to the main application, the repository ships standalone scripts used during clinical validation. These are **independent of the OnSight runtime** and can be run on their own:
 
+| Script           | Purpose |
+|------------------|---------|
+| `wsi_match.py`   | Locate a microscope screenshot (or a folder of screenshots) inside an Aperio `.svs` whole-slide image. Uses SIFT → ORB → AKAZE multi-detector fallback, a 4-DOF similarity transform (rotation + uniform scale + translation), and RANSAC. Emits QuPath-importable GeoJSON for downstream analysis. |
+
+Edit the `USER SETTINGS` block at the top of the file, then run:
+
+```bash
+python wsi_match.py
 ```
-installer.iss
-```
-
-The script expects the `dist/` directory to exist.
-
-To generate the installer:
-
-1. Open `installer.iss` in Inno Setup.
-2. Click **Run**.
-
-The compiled installer will be generated in:
-
-```
-Output/
-```
-
-No modification to the `.iss` file is required.
 
 ---
 
@@ -245,9 +264,7 @@ Each model has its own subdirectory within `training/` that contains:
 - Training scripts
 - Model-specific documentation
 
-Detailed instructions for reproducing model training can be found in the respective `README.md` files within each model’s training directory.
-
-These materials are provided for transparency and reproducibility.
+Detailed instructions for reproducing model training can be found in the respective `README.md` files within each model's training directory. These materials are provided for transparency and reproducibility.
 
 ---
 
@@ -255,22 +272,18 @@ These materials are provided for transparency and reproducibility.
 
 To integrate additional models into OnSight Pathology:
 
-1. Add a metadata JSON file to: `metadata/`
-
+1. Add a metadata JSON file to: `metadata/` (see existing files such as `cell_vit.json`, `mib_yolo_1024.json`, `lingshu.json` for reference).
 2. Update `settings.py` to add a dropdown entry referencing the metadata file.
-
 3. Modify `utils.py` to define how the model is initialized and loaded when selected.
+4. Create a `process_region_*.py` file to define how the model performs inference on captured screen frames and how outputs are structured.
 
-4. Create a `process_region.py` file to define how the model performs inference on captured screen frames and how outputs are structured.
-
-Existing model implementations may be used as references.
+Existing implementations (`process_region_cellpose.py`, `process_region_cellvit.py`, `process_region_YOLO.py`, etc.) may be used as references.
 
 ---
 
 # Acknowledgements
 
-The project was built on top of amazing repositories such as MIDOGpp and CellViT. We thank the authors and developers for their contribution.
-
+The project was built on top of excellent open-source repositories including MIDOG++, CellViT, Cellpose, and the Lingshu medical VLM. We thank the authors and developers for their contributions.
 
 ---
 
