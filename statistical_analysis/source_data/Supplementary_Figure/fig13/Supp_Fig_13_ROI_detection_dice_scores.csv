@@ -1,0 +1,7 @@
+Case,Tumor_type,Cohort,Deconvolution_based_hotspot_detection_Dice,Image_feature_based_patch_clustering_Dice
+Case_1,Brain metastasis,Local UHN,0.86,0.754
+Case_2,Brain metastasis,Local UHN,0.847,0.711
+Case_3,Brain metastasis,Local UHN,0.959,0.93
+Case_4,Glioma,Local UHN,0.802,0.712
+Case_5,Oligodendroglioma,TCGA-LGG,0.805,0.878
+Case_6,Meningioma,Local UHN,0.863,0.806

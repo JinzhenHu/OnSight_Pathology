@@ -15,6 +15,7 @@ app_one_dir.spec
 .vscode/
 installer-gpu.iss
 .venv_backup_2026_06_10/
+statistical_analysis/source_data
 
 __pycache__/
 .vscode/
@@ -47,3 +48,10 @@ github/
 ###git reset --soft HEAD~2
 ###git rm --cached output-gpu/*.bindist_local/ 
 dist_hf/ 
+
+# statistical analysis: keep Source Data and figure assets, ignore generated outputs
+!statistical_analysis/source_data/**/*.csv
+!statistical_analysis/figure_assets/*.png
+statistical_analysis/outputs/
+statistical_analysis/survival/survival_output/
+.Rhistory

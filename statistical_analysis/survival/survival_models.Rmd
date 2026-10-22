@@ -20,8 +20,8 @@ library(grid)
 library(survival)
 library(survminer)
 
-FONT_FAMILY       <- "sans"  # avoids Windows Arial database warnings
-FONT_SCALE        <- 1.00    # e.g. 1.10 makes every font 10% larger
+FONT_FAMILY       <- "sans"
+FONT_SCALE        <- 1.00
 FIG_WIDTH         <- 8
 FIG_HEIGHT        <- 8
 OUTPUT_DPI        <- 600
@@ -29,7 +29,7 @@ OUTPUT_DPI        <- 600
 FORCE_RERUN_MODELS   <- FALSE
 FORCE_REFRESH_CLINICAL <- FALSE
 
-OUTPUT_ROOT <- "survival_output"   # deposited copy: was a local absolute path
+OUTPUT_ROOT <- "survival_output"
 SOURCE_DATA <- "../source_data/Main_Figure/fig5"
 CACHE_DIR   <- file.path(OUTPUT_ROOT, "cache")
 FIGURE_DIR  <- file.path(OUTPUT_ROOT, "figures")
@@ -497,7 +497,7 @@ print(lgg_grade$medians)
 lgg_grade <- readRDS(file.path(CACHE_DIR, "lgg_grade2_vs_grade3.rds"))
 
 lgg_labels <- sprintf(
-  c("G2 IDmut-codel (n=%d)", "G3 IDmut-codel (n=%d)"),
+  c("G2 IDHmut-codel (n=%d)", "G3 IDHmut-codel (n=%d)"),
   as.integer(table(lgg_grade$data$subtype.grade))
 )
 
@@ -700,7 +700,7 @@ kirc_grades <- load_or_compute(
   "kirc_grade2_grade3_grade4",
   compute_fun = function() {
     data <- read.csv(
-      file.path(SOURCE_DATA, "5e_TCGA_G2G3G4_KIRC_survival.csv"),  # deposited copy (was 6e_..., same table)
+      file.path(SOURCE_DATA, "5e_TCGA_G2G3G4_KIRC_survival.csv"),
       check.names = FALSE
     )
 

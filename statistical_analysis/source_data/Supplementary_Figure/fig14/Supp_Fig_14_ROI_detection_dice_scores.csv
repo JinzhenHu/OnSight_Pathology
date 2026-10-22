@@ -1,0 +1,5 @@
+Case,Tumor_type,Deconvolution_based_hotspot_detection_Dice,Image_feature_based_patch_clustering_Dice
+Case_1,Clear cell renal cell carcinoma,0.431,0.913
+Case_2,Clear cell renal cell carcinoma,0.583,0.942
+Case_3,Skin melanoma,0.420,0.966
+Case_4,Glioma,0.541,0.922

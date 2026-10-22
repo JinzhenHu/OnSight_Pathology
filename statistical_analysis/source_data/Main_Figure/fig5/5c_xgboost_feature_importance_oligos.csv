@@ -1,0 +1,16 @@
+Feature,AverageGain
+Nucleus.Intensity.Mean_median,0.5031039871
+Shape.Solidity_median,0.2946537009
+Nucleus.Intensity.Std_median,0.046966054
+Nucleus.Intensity.HistEntropy_median,0.0402196791
+Shape.Eccentricity_median,0.0349818493
+Nucleus.Intensity.IQR_median,0.0190382487
+Shape.Extent_median,0.0153256698
+Shape.Circularity_median,0.0140683473
+cellularity_density,0.011564714
+Size.Area_median,0.0103008423
+Size.MinorAxisLength_median,0.0072888231
+Nucleus.Intensity.HistEnergy_median,0.0018883897
+Size.Perimeter_median,0.0009960219
+Size.MajorAxisLength_median,0.0007486656
+Shape.EquivalentDiameter_median,0.0001444753

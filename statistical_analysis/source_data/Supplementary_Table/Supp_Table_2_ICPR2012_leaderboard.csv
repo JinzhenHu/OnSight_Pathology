@@ -1,0 +1,6 @@
+Method,Precision,Recall,F1,Source
+OnSight,0.766,0.7423,0.7539,This study; Source Data Fig 3c 
+SUTECH,0.8243,0.61,0.7011,"Roux et al. 2013, J Pathol Inform 4:8, Table 5"
+IPAL,0.5591,0.71,0.6256,"Roux et al. 2013, J Pathol Inform 4:8, Table 5"
+NEC,0.7586,0.44,0.557,"Roux et al. 2013, J Pathol Inform 4:8, Table 5"
+DEFINIENS,0.4615,0.3,0.3636,"Roux et al. 2013, J Pathol Inform 4:8, Table 5"
