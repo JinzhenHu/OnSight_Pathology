@@ -1,0 +1,854 @@
+---
+title: "Fig 5 and Supplementary Fig 17"
+output: html_document
+date: "2026-08-22"
+---
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(dplyr)
+library(ggplot2)
+library(grid)
+library(survival)
+library(survminer)
+
+FONT_FAMILY       <- "sans"  # avoids Windows Arial database warnings
+FONT_SCALE        <- 1.00    # e.g. 1.10 makes every font 10% larger
+FIG_WIDTH         <- 8
+FIG_HEIGHT        <- 8
+OUTPUT_DPI        <- 600
+
+FORCE_RERUN_MODELS   <- FALSE
+FORCE_REFRESH_CLINICAL <- FALSE
+
+OUTPUT_ROOT <- "survival_output"   # deposited copy: was a local absolute path
+SOURCE_DATA <- "../source_data/Main_Figure/fig5"
+CACHE_DIR   <- file.path(OUTPUT_ROOT, "cache")
+FIGURE_DIR  <- file.path(OUTPUT_ROOT, "figures")
+DATA_DIR    <- file.path(OUTPUT_ROOT, "data")
+
+dir.create(CACHE_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(FIGURE_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(DATA_DIR, recursive = TRUE, showWarnings = FALSE)
+
+fs <- function(size) size * FONT_SCALE
+
+load_or_compute <- function(cache_name, compute_fun, force = FALSE) {
+  cache_path <- file.path(CACHE_DIR, paste0(cache_name, ".rds"))
+
+  if (!force && file.exists(cache_path)) {
+    message("Loaded cache: ", cache_path)
+    return(readRDS(cache_path))
+  }
+
+  message("Computing: ", cache_name)
+  result <- compute_fun()
+  saveRDS(result, cache_path)
+  message("Saved cache: ", cache_path)
+  result
+}
+
+save_plot_pair <- function(plot_object, file_stem,
+                           width = FIG_WIDTH, height = FIG_HEIGHT) {
+  plot_to_save <- if (inherits(plot_object, "ggsurvplot")) {
+    plot_object$plot
+  } else {
+    plot_object
+  }
+
+  pdf_path <- file.path(FIGURE_DIR, paste0(file_stem, ".pdf"))
+  png_path <- file.path(FIGURE_DIR, paste0(file_stem, ".png"))
+
+  tryCatch(
+    ggsave(
+      pdf_path, plot = plot_to_save, device = cairo_pdf,
+      width = width, height = height, units = "in", bg = "white"
+    ),
+    error = function(e) {
+      ggsave(
+        pdf_path, plot = plot_to_save, device = "pdf",
+        width = width, height = height, units = "in", bg = "white"
+      )
+    }
+  )
+
+  ggsave(
+    png_path, plot = plot_to_save,
+    width = width, height = height, units = "in",
+    dpi = OUTPUT_DPI, bg = "white"
+  )
+
+  message("Saved: ", pdf_path)
+  message("Saved: ", png_path)
+}
+
+risk_group_labels <- function(data) {
+  c(
+    sprintf("High Risk Group (n=%d)", sum(data$group == "high")),
+    sprintf("Low Risk Group (n=%d)", sum(data$group == "low"))
+  )
+}
+
+draw_two_group_km <- function(
+    fit,
+    data,
+    legend_labels,
+    palette,
+    pval_size,
+    overall_size,
+    axis_title_size,
+    axis_text_size,
+    legend_text_size,
+    legend_key_width_cm = 1,
+    legend_spacing_cm = 0.5,
+    pval_coord = c(10, 0.10),
+    curve_size = 2,
+    censor_size = 6) {
+
+  p <- ggsurvplot(
+    fit,
+    data = data,
+    pval = TRUE,
+    pval.size = fs(pval_size),
+    pval.coord = pval_coord,
+    conf.int = TRUE,
+    linetype = "strata",
+    surv.median.line = "hv",
+    size = curve_size,
+    censor.size = censor_size,
+    ggtheme = theme_classic(base_family = FONT_FAMILY),
+    palette = palette,
+    legend.labs = legend_labels,
+    xlab = "Time (Months)",
+    ylab = "Survival Probability"
+  )
+
+  p$plot <- p$plot + theme(
+    text = element_text(size = fs(overall_size), family = FONT_FAMILY),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.text = element_text(size = fs(legend_text_size), face = "bold"),
+    axis.title = element_text(face = "bold", size = fs(axis_title_size)),
+    axis.text = element_text(size = fs(axis_text_size), color = "black"),
+    axis.line = element_line(colour = "black", linewidth = 1),
+    axis.ticks = element_line(colour = "black", linewidth = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key = element_rect(fill = "transparent", colour = "transparent"),
+    legend.key.width = unit(legend_key_width_cm, "cm"),
+    legend.spacing.x = unit(legend_spacing_cm, "cm"),
+    plot.margin = margin(10, 30, 20, 10)
+  )
+
+  p
+}
+
+print_cox_metrics <- function(cox_model) {
+  cox_sum <- summary(cox_model)
+  hr_value <- round(cox_sum$conf.int[1, "exp(coef)"], 2)
+  hr_lower <- round(cox_sum$conf.int[1, "lower .95"], 2)
+  hr_upper <- round(cox_sum$conf.int[1, "upper .95"], 2)
+  p_value <- signif(cox_sum$sctest["pvalue"], 3)
+  c_index <- round(cox_sum$concordance["C"], 3)
+
+  cat("\n========= Model metrics =========\n")
+  cat("C-index      :", c_index, "\n")
+  cat("Hazard ratio :", hr_value,
+      "(95% CI:", hr_lower, "-", hr_upper, ")\n")
+  cat("Cox P-value  :", p_value, "\n")
+  cat("=================================\n")
+}
+```
+
+## Functions
+
+```{r shared-functions}
+get_kirc_clinical <- function() {
+  load_or_compute(
+    "tcga_kirc_clinical",
+    force = FORCE_REFRESH_CLINICAL,
+    compute_fun = function() {
+      if (!requireNamespace("TCGAbiolinks", quietly = TRUE)) {
+        stop("TCGAbiolinks is required only when the clinical cache is absent.")
+      }
+
+      query <- TCGAbiolinks::GDCquery(
+        project = "TCGA-KIRC",
+        data.category = "Clinical",
+        data.type = "Clinical Supplement",
+        data.format = "BCR Biotab"
+      )
+
+      TCGAbiolinks::GDCdownload(query)
+      clinical_raw <- TCGAbiolinks::GDCprepare(query)
+      clinical <- clinical_raw$clinical_patient_kirc
+
+      clinical %>%
+        transmute(
+          patient_id = bcr_patient_barcode,
+          days_to_death = death_days_to,
+          days_to_last_followup = last_contact_days_to,
+          vital_status = vital_status,
+          os_days = ifelse(
+            vital_status == "Dead",
+            as.numeric(days_to_death),
+            as.numeric(days_to_last_followup)
+          ),
+          os_months = os_days / 30.44,
+          os_event = ifelse(vital_status == "Dead", 1, 0)
+        ) %>%
+        filter(!is.na(os_months), os_months > 0)
+    }
+  )
+}
+
+prepare_kirc_features <- function(feature_path, survival_data) {
+  feature_df <- read.csv(feature_path)
+  feature_df$patient_id <- substr(feature_df$patient_id, 1, 12)
+  feature_df <- feature_df[feature_df$patient_id != "average", ]
+
+  feature_df$count_divided_by_tissue <-
+    feature_df$cell_count / feature_df$Tissue.area..mm2.
+  feature_df$area_px <- NULL
+  feature_df$mpp <- NULL
+  feature_df$cell_count <- NULL
+  feature_df$Tissue.area..mm2. <- NULL
+  feature_df$file_orig <- NULL
+  feature_df$file_annotated <- NULL
+  feature_df$count_divided_by_tissue <- NULL
+
+  feature_df <- feature_df[, vapply(
+    feature_df,
+    function(column) length(unique(column)) > 1,
+    logical(1)
+  )]
+  feature_df <- feature_df[, !grepl("_mean$|_std$", colnames(feature_df))]
+
+  feature_df %>%
+    left_join(
+      survival_data %>% select(patient_id, os_months, os_event),
+      by = "patient_id"
+    ) %>%
+    filter(!is.na(os_months), !is.na(os_event), os_months > 0)
+}
+
+run_strict_loocv <- function(data, exclude_cols,
+                             eta, max_depth, subsample,
+                             nrounds = 100, seed = 1) {
+  if (!requireNamespace("xgboost", quietly = TRUE)) {
+    stop("xgboost is required only when the model cache is absent.")
+  }
+
+  final_df <- data
+  final_df$patient_id <- NULL
+  label <- ifelse(
+    final_df$os_event == 1,
+    final_df$os_months,
+    -final_df$os_months
+  )
+
+  risk_scores <- numeric(nrow(final_df))
+  patient_groups <- character(nrow(final_df))
+  feature_importances <- vector("list", nrow(final_df))
+
+  set.seed(seed)
+
+  for (i in seq_len(nrow(final_df))) {
+    is_train <- seq_len(nrow(final_df)) != i
+    predictor_columns <- !colnames(final_df) %in% exclude_cols
+
+    x_train <- as.matrix(final_df[is_train, predictor_columns])
+    x_test <- as.matrix(final_df[i, predictor_columns, drop = FALSE])
+
+    dtrain <- xgboost::xgb.DMatrix(x_train, label = label[is_train])
+    dtest <- xgboost::xgb.DMatrix(x_test)
+
+    model <- xgboost::xgb.train(
+      params = list(
+        objective = "survival:cox",
+        eval_metric = "cox-nloglik",
+        eta = eta,
+        max_depth = max_depth,
+        subsample = subsample
+      ),
+      data = dtrain,
+      nrounds = nrounds,
+      verbose = 0
+    )
+
+    train_risk <- predict(model, dtrain)
+    inner_cutoff <- median(train_risk)
+    test_risk <- predict(model, dtest)
+
+    risk_scores[i] <- test_risk
+    patient_groups[i] <- ifelse(test_risk >= inner_cutoff, "high", "low")
+    feature_importances[[i]] <- xgboost::xgb.importance(model = model)
+  }
+
+  importance_avg <- bind_rows(feature_importances, .id = "fold") %>%
+    group_by(Feature) %>%
+    summarise(
+      mean_Gain = mean(Gain, na.rm = TRUE),
+      mean_Cover = mean(Cover, na.rm = TRUE),
+      mean_Frequency = mean(Frequency, na.rm = TRUE),
+      n_folds_used = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_Gain))
+
+  list(
+    risk_scores = risk_scores,
+    patient_groups = patient_groups,
+    importance_avg = importance_avg
+  )
+}
+
+assemble_model_bundle <- function(data, model_result) {
+  data$risk_scores <- model_result$risk_scores
+  data$group <- factor(
+    model_result$patient_groups,
+    levels = c("high", "low")
+  )
+
+  fit <- survfit(Surv(os_months, os_event) ~ group, data = data)
+  cox_check <- coxph(Surv(os_months, os_event) ~ group, data = data)
+
+  list(
+    data = data,
+    fit = fit,
+    cox_check = cox_check,
+    medians = surv_median(fit),
+    importance_avg = model_result$importance_avg
+  )
+}
+```
+
+## Fig 5f
+
+```{r kirc-g3-analysis}
+kirc_g3 <- load_or_compute(
+  "kirc_g3_xgb_loocv",
+  force = FORCE_RERUN_MODELS,
+  compute_fun = function() {
+    inter_df <- read.csv(file.path(SOURCE_DATA, "5f_KIRC_G3_survival_with_LOOCV_predictions.csv"))
+    inter_df$risk_scores <- NULL
+    inter_df$group <- NULL
+
+    model_result <- run_strict_loocv(
+      inter_df,
+      exclude_cols = c("os_months", "os_event"),
+      eta = 0.1,
+      max_depth = 6,
+      subsample = 0.9,
+      nrounds = 100,
+      seed = 1
+    )
+
+    assemble_model_bundle(inter_df, model_result)
+  }
+)
+
+write.csv(
+  kirc_g3$data,
+  file.path(DATA_DIR, "KIRC_G3_survival_with_LOOCV_predictions.csv"),
+  row.names = FALSE
+)
+write.csv(
+  kirc_g3$importance_avg,
+  file.path(DATA_DIR, "KIRC_G3_feature_importance.csv"),
+  row.names = FALSE
+)
+
+print(table(kirc_g3$data$group))
+print(kirc_g3$medians)
+print(head(kirc_g3$importance_avg, 15))
+print_cox_metrics(kirc_g3$cox_check)
+```
+
+```{r kirc-g3-draw, fig.width=8, fig.height=8}
+kirc_g3 <- readRDS(file.path(CACHE_DIR, "kirc_g3_xgb_loocv.rds"))
+
+p_kirc_g3 <- draw_two_group_km(
+  fit = kirc_g3$fit,
+  data = kirc_g3$data,
+  legend_labels = risk_group_labels(kirc_g3$data),
+  palette = c("#E69F00", "#2F6DB3"),
+  pval_size = 10,
+  overall_size = 25,
+  axis_title_size = 25,
+  axis_text_size = 20,
+  legend_text_size = 19
+)
+
+print(p_kirc_g3$plot)
+save_plot_pair(p_kirc_g3, "KIRC_G3_XGBoost_KM", width = 8, height = 8)
+```
+
+## Fig 5g
+
+```{r kirc-g2-analysis}
+kirc_g2 <- load_or_compute(
+  "kirc_g2_xgb_loocv",
+  force = FORCE_RERUN_MODELS,
+  compute_fun = function() {
+    inter_df <- read.csv(file.path(SOURCE_DATA, "5g_KIRC_G2_survival_with_LOOCV_predictions.csv"))
+    inter_df$risk_scores <- NULL
+    inter_df$group <- NULL
+
+    model_result <- run_strict_loocv(
+      inter_df,
+      exclude_cols = c("os_months", "os_event"),
+      eta = 0.05,
+      max_depth = 5,
+      subsample = 0.9,
+      nrounds = 100,
+      seed = 1
+    )
+
+    assemble_model_bundle(inter_df, model_result)
+  }
+)
+
+write.csv(
+  kirc_g2$data,
+  file.path(DATA_DIR, "KIRC_G2_survival_with_LOOCV_predictions.csv"),
+  row.names = FALSE
+)
+write.csv(
+  kirc_g2$importance_avg,
+  file.path(DATA_DIR, "KIRC_G2_feature_importance.csv"),
+  row.names = FALSE
+)
+
+print(table(kirc_g2$data$group))
+print(kirc_g2$medians)
+print(head(kirc_g2$importance_avg, 15))
+print_cox_metrics(kirc_g2$cox_check)
+```
+
+```{r kirc-g2-draw, fig.width=8, fig.height=8}
+kirc_g2 <- readRDS(file.path(CACHE_DIR, "kirc_g2_xgb_loocv.rds"))
+
+p_kirc_g2 <- draw_two_group_km(
+  fit = kirc_g2$fit,
+  data = kirc_g2$data,
+  legend_labels = risk_group_labels(kirc_g2$data),
+  palette = c("#E69F00", "#2F6DB3"),
+  pval_size = 10,
+  overall_size = 25,
+  axis_title_size = 25,
+  axis_text_size = 20,
+  legend_text_size = 19
+)
+
+print(p_kirc_g2$plot)
+save_plot_pair(p_kirc_g2, "KIRC_G2_XGBoost_KM", width = 8, height = 7)
+```
+
+## Fig 5a
+
+```{r lgg-analysis}
+lgg_grade <- load_or_compute(
+  "lgg_grade2_vs_grade3",
+  compute_fun = function() {
+    data <- read.csv(
+      file.path(SOURCE_DATA, "5a_TCGA_G2G3_LGG_Survival.csv")
+    ) %>%
+      filter(
+        GRADE %in% c("G2", "G3"),
+        SUBTYPE == "IDHmut-codel",
+        OS_MONTHS > 0
+      )
+
+    data$subtype.grade <- factor(
+      paste(data$GRADE, data$SUBTYPE),
+      levels = c("G2 IDHmut-codel", "G3 IDHmut-codel")
+    )
+
+    fit <- survfit(
+      Surv(OS_MONTHS, os.status) ~ subtype.grade,
+      data = data
+    )
+
+    list(data = data, fit = fit, medians = surv_median(fit))
+  }
+)
+
+write.csv(
+  lgg_grade$data,
+  file.path(DATA_DIR, "LGG_G2_vs_G3_survival_data.csv"),
+  row.names = FALSE
+)
+print(table(lgg_grade$data$subtype.grade))
+print(lgg_grade$medians)
+```
+
+```{r lgg-draw, fig.width=8, fig.height=8}
+lgg_grade <- readRDS(file.path(CACHE_DIR, "lgg_grade2_vs_grade3.rds"))
+
+lgg_labels <- sprintf(
+  c("G2 IDmut-codel (n=%d)", "G3 IDmut-codel (n=%d)"),
+  as.integer(table(lgg_grade$data$subtype.grade))
+)
+
+p_lgg <- draw_two_group_km(
+  fit = lgg_grade$fit,
+  data = lgg_grade$data,
+  legend_labels = lgg_labels,
+  palette = c("#0072B2", "#D55E00"),
+  pval_size = 10,
+  overall_size = 25,
+  axis_title_size = 25,
+  axis_text_size = 20,
+  legend_text_size = 19,
+  legend_key_width_cm = 2,
+  legend_spacing_cm = 0.8
+)
+
+print(p_lgg$plot)
+save_plot_pair(p_lgg, "LGG_G2_vs_G3_KM", width = 8, height = 8)
+```
+
+## Fig 5b
+
+```{r oligos-g3-analysis}
+oligos_g3 <- load_or_compute(
+  "oligos_g3_xgb_loocv",
+  force = FORCE_RERUN_MODELS,
+  compute_fun = function() {
+    feature_df <- read.csv(
+      file.path(SOURCE_DATA, "5b_Oligos_G3_survival_with_LOOCV_predictions.csv")
+    ) %>%
+      select(-risk_scores, -group) %>%
+      filter(!is.na(os_months), !is.na(os_event), os_months > 0)
+
+    feature_df$patient_id <- substr(feature_df$patient_id, 1, 12)
+    feature_df <- feature_df[feature_df$patient_id != "average", ]
+    feature_df$file_orig <- NULL
+    feature_df$file_annotated <- NULL
+
+    feature_df <- feature_df[, vapply(
+      feature_df,
+      function(column) length(unique(column)) > 1,
+      logical(1)
+    )]
+    feature_df <- feature_df[, !grepl("_mean$|_std$", colnames(feature_df))]
+
+    model_result <- run_strict_loocv(
+      feature_df,
+      exclude_cols = c(
+        "os_months", "os_event",
+        "HISTOPATHOLOGY_GRADE", "time_yrs"
+      ),
+      eta = 0.05,
+      max_depth = 5,
+      subsample = 0.9,
+      nrounds = 100,
+      seed = 1
+    )
+
+    bundle <- assemble_model_bundle(feature_df, model_result)
+    bundle$c_index <- concordance(
+      Surv(os_months, os_event) ~ risk_scores,
+      data = bundle$data
+    )
+    bundle$continuous_cox <- coxph(
+      Surv(os_months, os_event) ~ risk_scores,
+      data = bundle$data
+    )
+    bundle
+  }
+)
+
+write.csv(
+  oligos_g3$data,
+  file.path(DATA_DIR, "Oligos_G3_survival_with_LOOCV_predictions.csv"),
+  row.names = FALSE
+)
+write.csv(
+  oligos_g3$importance_avg,
+  file.path(DATA_DIR, "Oligos_G3_feature_importance.csv"),
+  row.names = FALSE
+)
+
+print(table(oligos_g3$data$group))
+print(oligos_g3$medians)
+print(head(oligos_g3$importance_avg, 15))
+print(oligos_g3$c_index)
+print(summary(oligos_g3$continuous_cox))
+print_cox_metrics(oligos_g3$cox_check)
+```
+
+```{r oligos-g3-draw, fig.width=8, fig.height=8}
+oligos_g3 <- readRDS(file.path(CACHE_DIR, "oligos_g3_xgb_loocv.rds"))
+
+p_oligos_g3 <- draw_two_group_km(
+  fit = oligos_g3$fit,
+  data = oligos_g3$data,
+  legend_labels = risk_group_labels(oligos_g3$data),
+  palette = c("#D55E00", "#0072B2"),
+  pval_size = 10,
+  overall_size = 25,
+  axis_title_size = 25,
+  axis_text_size = 20,
+  legend_text_size = 19
+)
+
+print(p_oligos_g3$plot)
+save_plot_pair(p_oligos_g3, "Oligos_G3_XGBoost_KM", width = 8, height = 8)
+```
+
+## Supplementary Fig 17
+
+```{r oligos-top-feature-analysis}
+oligos_top_feature <- load_or_compute(
+  "oligos_g3_top_single_feature",
+  compute_fun = function() {
+    target_feature <- "Nucleus.Intensity.Mean_median"
+
+    data <- read.csv(
+      file.path(SOURCE_DATA, "5b_Oligos_G3_survival_with_LOOCV_predictions.csv")
+    ) %>%
+      select(-risk_scores, -group) %>%
+      filter(!is.na(os_months), !is.na(os_event), os_months > 0)
+
+    data$patient_id <- substr(data$patient_id, 1, 12)
+
+    if (!target_feature %in% colnames(data)) {
+      stop("Target feature is absent: ", target_feature)
+    }
+
+    data <- data[, c("patient_id", "os_months", "os_event", target_feature)]
+    formula <- as.formula(
+      paste("Surv(os_months, os_event) ~", target_feature)
+    )
+    cox_univ <- coxph(formula, data = data)
+    coefficient <- coef(cox_univ)[1]
+    cutoff <- median(data[[target_feature]], na.rm = TRUE)
+
+    if (coefficient > 0) {
+      data$group <- ifelse(data[[target_feature]] >= cutoff, "high", "low")
+    } else {
+      data$group <- ifelse(data[[target_feature]] < cutoff, "high", "low")
+    }
+    data$group <- factor(data$group, levels = c("high", "low"))
+
+    fit <- survfit(Surv(os_months, os_event) ~ group, data = data)
+    group_cox <- coxph(Surv(os_months, os_event) ~ group, data = data)
+
+    list(
+      data = data,
+      fit = fit,
+      cox_univ = cox_univ,
+      group_cox = group_cox,
+      cutoff = cutoff,
+      medians = surv_median(fit),
+      target_feature = target_feature
+    )
+  }
+)
+
+write.csv(
+  oligos_top_feature$data,
+  file.path(DATA_DIR, "Oligos_G3_top_feature_survival_data.csv"),
+  row.names = FALSE
+)
+
+cat("Feature:", oligos_top_feature$target_feature, "\n")
+cat("Median cutoff:", oligos_top_feature$cutoff, "\n")
+print(table(oligos_top_feature$data$group))
+print(oligos_top_feature$medians)
+print(summary(oligos_top_feature$cox_univ))
+print_cox_metrics(oligos_top_feature$group_cox)
+```
+
+```{r oligos-top-feature-draw, fig.width=8, fig.height=7}
+oligos_top_feature <- readRDS(
+  file.path(CACHE_DIR, "oligos_g3_top_single_feature.rds")
+)
+
+p_oligos_top <- draw_two_group_km(
+  fit = oligos_top_feature$fit,
+  data = oligos_top_feature$data,
+  legend_labels = risk_group_labels(oligos_top_feature$data),
+  palette = c("#D55E00", "#0072B2"),
+  pval_size = 7,
+  overall_size = 20,
+  axis_title_size = 20,
+  axis_text_size = 18,
+  legend_text_size = 18
+)
+
+print(p_oligos_top$plot)
+save_plot_pair(p_oligos_top, "Oligos_G3_top_single_feature_KM", width = 8, height = 7)
+```
+
+## Fig 5e
+
+```{r kirc-grades-analysis}
+kirc_grades <- load_or_compute(
+  "kirc_grade2_grade3_grade4",
+  compute_fun = function() {
+    data <- read.csv(
+      file.path(SOURCE_DATA, "5e_TCGA_G2G3G4_KIRC_survival.csv"),  # deposited copy (was 6e_..., same table)
+      check.names = FALSE
+    )
+
+    data <- data[
+      !is.na(data$os_months) &
+        !is.na(data$os_event) &
+        !is.na(data$grade) &
+        data$os_months > 0,
+    ]
+    data$grade <- factor(
+      data$grade,
+      levels = c("Grade 2", "Grade 3", "Grade 4")
+    )
+    data <- droplevels(data)
+
+    fit <- survfit(Surv(os_months, os_event) ~ grade, data = data)
+    logrank <- survdiff(Surv(os_months, os_event) ~ grade, data = data)
+    df_logrank <- length(logrank$n) - 1
+    exact_p <- pchisq(logrank$chisq, df = df_logrank, lower.tail = FALSE)
+
+    list(
+      data = data,
+      fit = fit,
+      medians = surv_median(fit),
+      logrank = logrank,
+      df_logrank = df_logrank,
+      exact_p = exact_p
+    )
+  }
+)
+
+write.csv(
+  kirc_grades$data,
+  file.path(DATA_DIR, "KIRC_Grade2_Grade3_Grade4_survival_data.csv"),
+  row.names = FALSE
+)
+
+print(table(kirc_grades$data$grade))
+print(kirc_grades$medians)
+cat(sprintf(
+  "Overall log-rank: chi-square(%d) = %.8f; exact P = %.12g\n",
+  kirc_grades$df_logrank,
+  unname(kirc_grades$logrank$chisq),
+  kirc_grades$exact_p
+))
+```
+
+```{r kirc-grades-draw, fig.width=8, fig.height=8}
+plot_p_label <- ifelse(
+  kirc_grades$exact_p < 1e-4,
+  "p < 0.0001",
+  paste("p =", signif(kirc_grades$exact_p, 2))
+)
+
+p_kirc_grades <- ggsurvplot(
+  kirc_grades$fit,
+  data = kirc_grades$data,
+
+  pval = plot_p_label,
+  pval.coord = c(1, 0.10),
+  pval.size = fs(9),
+
+  conf.int = TRUE,
+  conf.int.alpha = 0.28,
+  conf.int.style = "ribbon",
+
+  surv.median.line = "hv",
+
+  size = 2,
+  censor = TRUE,
+  censor.shape = 3,
+  censor.size = 2, 
+
+  palette = c("#2E7131", "#FF5A0A", "#5145C6"),
+
+  legend.title = "",
+  legend.labs = c("Grade 2", "Grade 3", "Grade 4"),
+
+  xlab = "Time (Months)",
+  ylab = "Survival Probability",
+
+  risk.table = FALSE,
+  ggtheme = theme_classic(base_family = FONT_FAMILY)
+)
+
+p_kirc_grades$plot <- p_kirc_grades$plot +
+  theme(
+    text = element_text(
+      family = FONT_FAMILY,
+      size = fs(25),
+      color = "black"
+    ),
+
+    axis.title = element_text(
+      size = fs(25),
+      face = "bold"
+    ),
+
+    axis.title.x = element_text(
+      margin = margin(t = 8)
+    ),
+
+    axis.title.y = element_text(
+      margin = margin(r = 8)
+    ),
+
+    axis.text = element_text(
+      size = fs(20),
+      color = "black"
+    ),
+
+    axis.line = element_line(
+      color = "black",
+      linewidth = 1
+    ),
+
+    axis.ticks = element_line(
+      color = "black",
+      linewidth = 1
+    ),
+
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+
+    legend.text = element_text(
+      size = fs(20),
+      face = "bold",
+      color = "black"
+    ),
+
+    legend.key.width = unit(1, "cm"),
+    legend.spacing.x = unit(0.5, "cm"),
+    legend.background = element_blank(),
+    legend.box.background = element_blank(),
+
+    plot.margin = margin(10, 30, 20, 10)
+  )
+
+print(p_kirc_grades$plot)
+
+save_plot_pair(
+  p_kirc_grades,
+  "Figure_5e_KIRC_grade_survival",
+  width = 8,
+  height = 8
+)
+```
